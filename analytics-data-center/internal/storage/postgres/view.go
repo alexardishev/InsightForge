@@ -20,7 +20,7 @@ func (s *Storage) GetView(ctx context.Context, idView int64) (models.View, error
 	)
 
 	log.Info("Operation starting")
-	query := "SELECT schema_view FROM schems WHERE schema_id = ($1)"
+	query := "SELECT schema_view FROM schems WHERE id = ($1)"
 	err := s.db.QueryRowContext(ctx, query, idView).Scan(&rowSchema)
 	if errors.Is(err, sql.ErrNoRows) {
 		log.Warn("конфигурация представления не найдена")

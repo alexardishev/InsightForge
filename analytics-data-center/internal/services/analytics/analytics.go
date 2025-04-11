@@ -97,6 +97,8 @@ func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView
 		return "", fmt.Errorf("%s:%s", op, err)
 	}
 	if a.OLTPDbName == DbPostgres {
+
+		// TO DO добавить функцию на проверку существования таблиц внутри генератора
 		queries, duplicates, err := sqlgenerator.GenerateQueryCreateTempTablePostgres(&viewSchema, log)
 		if err != nil {
 			log.Error("не удалось сгенерировать запросы генератором SQL", slog.String("error", err.Error()))
@@ -129,7 +131,7 @@ func (a *AnalyticsDataCenterService) createTempTables(ctx context.Context, qurie
 	log := a.log.With(
 		slog.String("op", op),
 	)
-
+	//TO DO добавить условие в зависимости от типа БД
 	for _, query := range quries.Queries {
 		err := a.TableProvider.CreateTempTablePostgres(ctx, query.Query)
 		if err != nil {
