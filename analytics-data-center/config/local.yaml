@@ -1,0 +1,10 @@
+env: "local"
+storage_path: "postgresql://postgres:postgres@localhost:5434/postgres?sslmode=disable"
+dwh_db: "postgres"
+dwh_db_path: "postgresql://postgres:postgres@localhost:5434/postgres?sslmode=disable"
+oltp_db: "postgres"
+oltp_db_path: "postgresql://postgres:postgres@localhost:5434/postgres?sslmode=disable"
+token_ttl: 1h
+grpc:
+  port: 13890
+  timeout: 10h
