@@ -1,20 +1,16 @@
-package postgres
+package postgresoltp
 
 import (
 	"database/sql"
 	"log/slog"
-
-	_ "github.com/golang-migrate/migrate/database/postgres"
-	_ "github.com/golang-migrate/migrate/source/file"
-	_ "github.com/lib/pq"
 )
 
-type PostgresSys struct {
+type PostgresOLTP struct {
 	Db  *sql.DB
 	Log *slog.Logger
 }
 
-func New(connectionString string, log *slog.Logger) (*PostgresSys, error) {
+func New(connectionString string, log *slog.Logger) (*PostgresOLTP, error) {
 	const op = "storage.Postgres.New"
 	log = log.With(
 		slog.String("op", op),
@@ -26,7 +22,7 @@ func New(connectionString string, log *slog.Logger) (*PostgresSys, error) {
 		return nil, err
 	}
 
-	return &PostgresSys{
+	return &PostgresOLTP{
 		Db:  db,
 		Log: log,
 	}, nil

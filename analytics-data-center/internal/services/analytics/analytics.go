@@ -8,12 +8,18 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 )
 
 var (
 	ErrInvalidSchemID = errors.New("invalid schemaID")
+)
+
+const (
+	DbPostgres   = "postgres"
+	DbClickhouse = "clickhouse"
 )
 
 const (
@@ -26,27 +32,13 @@ const (
 	ErrorCreateTemplateTable = "Не удалось создать временные таблицы"
 )
 
-const (
-	DbPostgres   = "postgres"
-	DbClickhouse = "clickhouse"
-)
-
 type AnalyticsDataCenterService struct {
 	log            *slog.Logger
-	SchemaProvider SchemaProvider
+	SchemaProvider storage.SysDB
 	TaskService    TaskService
-	TableProvider  TableProvider
+	TableProvider  storage.DWHDB
 	DWHDbName      string
 	OLTPDbName     string
-}
-
-type SchemaProvider interface {
-	GetView(ctx context.Context, idView int64) (models.View, error)
-}
-
-type TableProvider interface {
-	CreateTempTablePostgres(ctx context.Context, query string) error
-	DeleteTempTablePostgres(ctx context.Context, tableName string) error
 }
 
 type TaskService interface {
@@ -57,9 +49,9 @@ type TaskService interface {
 
 func New(
 	log *slog.Logger,
-	schemaProvider SchemaProvider,
+	schemaProvider storage.SysDB,
 	taskService TaskService,
-	tableProvider TableProvider,
+	tableProvider storage.DWHDB,
 	DWHDbName string,
 	OLTPDbName string,
 
@@ -98,7 +90,6 @@ func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView
 	}
 	if a.OLTPDbName == DbPostgres {
 
-		// TO DO добавить функцию на проверку существования таблиц внутри генератора
 		queries, duplicates, err := sqlgenerator.GenerateQueryCreateTempTablePostgres(&viewSchema, log)
 		if err != nil {
 			log.Error("не удалось сгенерировать запросы генератором SQL", slog.String("error", err.Error()))
@@ -108,7 +99,7 @@ func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView
 		queriesInit = queries
 
 		if len(duplicates) > 0 {
-			// TO DO записать в комментарий к задачи, что были найдены дубликаты.
+			log.Warn("duplicates", slog.String("duplicates", strings.Join(duplicates, ",")))
 
 		}
 
@@ -133,7 +124,7 @@ func (a *AnalyticsDataCenterService) createTempTables(ctx context.Context, qurie
 	)
 	//TO DO добавить условие в зависимости от типа БД
 	for _, query := range quries.Queries {
-		err := a.TableProvider.CreateTempTablePostgres(ctx, query.Query)
+		err := a.TableProvider.CreateTempTablePostgres(ctx, query.Query, query.TableName)
 		if err != nil {
 			errorCreate = err
 			log.Error("не удалось создать временные таблицы", slog.String("error", err.Error()))
@@ -160,3 +151,15 @@ func (a *AnalyticsDataCenterService) createTempTables(ctx context.Context, qurie
 	return nil
 
 }
+
+// func (a *AnalyticsDataCenterService) getCountInsertData(ctx context.Context, viewSchema models.View) (int64, error) {
+// 	const op = "analytics.getCountInsertData"
+// 	log := a.log.With(
+// 		slog.String("op", op),
+// 	)
+// 	if a.OLTPDbName == DbPostgres {
+// 		a.getCountInsertData
+
+// 	}
+
+// }

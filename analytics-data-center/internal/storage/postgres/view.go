@@ -10,18 +10,18 @@ import (
 	"log/slog"
 )
 
-func (s *Storage) GetView(ctx context.Context, idView int64) (models.View, error) {
+func (p *PostgresSys) GetView(ctx context.Context, idView int64) (models.View, error) {
 	var rowSchema []byte
 
 	const op = "Storage.PostgreSQL.GetSchema"
-	log := s.log.With(
+	log := p.Log.With(
 		slog.String("op", op),
 		slog.Int64("appID", idView),
 	)
 
 	log.Info("Operation starting")
 	query := "SELECT schema_view FROM schems WHERE id = ($1)"
-	err := s.db.QueryRowContext(ctx, query, idView).Scan(&rowSchema)
+	err := p.Db.QueryRowContext(ctx, query, idView).Scan(&rowSchema)
 	if errors.Is(err, sql.ErrNoRows) {
 		log.Warn("конфигурация представления не найдена")
 		return models.View{}, storage.ErrSessionNotFound
