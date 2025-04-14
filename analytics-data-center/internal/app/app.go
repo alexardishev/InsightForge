@@ -54,6 +54,10 @@ func New(log *slog.Logger, grpcPort int,
 		storageDWH = storageDWHPostgres
 	}
 
+	if DWHName == DbClickhouse {
+		//TO DO дописать когда появится адаптер для Clickhouse
+	}
+
 	storage, err := storage.New(storageSys, log, storageDWH)
 	if err != nil {
 		panic("Не удалось создать Storage")

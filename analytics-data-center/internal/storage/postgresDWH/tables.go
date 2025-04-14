@@ -6,7 +6,7 @@ import (
 	"log/slog"
 )
 
-func (p *PostgresDWH) CreateTempTablePostgres(ctx context.Context, query string, tempTableName string) error {
+func (p *PostgresDWH) CreateTempTable(ctx context.Context, query string, tempTableName string) error {
 	const op = "Storage.PostgreSQL.CreateTempTablePostgres"
 	log := p.Log.With(
 		slog.String("op", op),
@@ -38,7 +38,7 @@ func (p *PostgresDWH) CreateTempTablePostgres(ctx context.Context, query string,
 	return nil
 }
 
-func (p *PostgresDWH) DeleteTempTablePostgres(ctx context.Context, tableName string) error {
+func (p *PostgresDWH) DeleteTempTable(ctx context.Context, tableName string) error {
 	const op = "Storage.PostgreSQL.DeleteTempTablePostgres"
 	log := p.Log.With(
 		slog.String("op", op),

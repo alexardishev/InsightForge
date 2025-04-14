@@ -104,12 +104,10 @@ func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView
 		}
 
 	}
-	if a.DWHDbName == DbPostgres {
-		err = a.createTempTables(ctx, queriesInit)
-		if err != nil {
-			log.Error("не удалось создать временные таблицы", slog.String("error", err.Error()))
-			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorCreateTemplateTable)
-		}
+	err = a.createTempTables(ctx, queriesInit)
+	if err != nil {
+		log.Error("не удалось создать временные таблицы", slog.String("error", err.Error()))
+		a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorCreateTemplateTable)
 	}
 
 	return taskID, nil
@@ -122,9 +120,9 @@ func (a *AnalyticsDataCenterService) createTempTables(ctx context.Context, qurie
 	log := a.log.With(
 		slog.String("op", op),
 	)
-	//TO DO добавить условие в зависимости от типа БД
+
 	for _, query := range quries.Queries {
-		err := a.TableProvider.CreateTempTablePostgres(ctx, query.Query, query.TableName)
+		err := a.TableProvider.CreateTempTable(ctx, query.Query, query.TableName)
 		if err != nil {
 			errorCreate = err
 			log.Error("не удалось создать временные таблицы", slog.String("error", err.Error()))
@@ -135,7 +133,7 @@ func (a *AnalyticsDataCenterService) createTempTables(ctx context.Context, qurie
 	}
 	if errorCreate != nil {
 		for _, tableQuery := range quries.Queries {
-			err := a.TableProvider.DeleteTempTablePostgres(ctx, tableQuery.TableName)
+			err := a.TableProvider.DeleteTempTable(ctx, tableQuery.TableName)
 			if err != nil {
 				//TO DO сделать worker , который раз в какое-то время запускается и чистит темп таблицы на такие случаи.
 				log.Error("не удалось удалить временную таблицу",

@@ -7,8 +7,6 @@ import (
 	"context"
 )
 
-// // DB — общий интерфейс для низкоуровневых операций, если нужно
-//
 //	type DB interface {
 //		ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 //		QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
@@ -31,6 +29,6 @@ type TaskProvider interface {
 }
 
 type TableProvider interface {
-	CreateTempTablePostgres(ctx context.Context, query string, tempTableName string) error
-	DeleteTempTablePostgres(ctx context.Context, tableName string) error
+	CreateTempTable(ctx context.Context, query string, tempTableName string) error
+	DeleteTempTable(ctx context.Context, tableName string) error
 }
