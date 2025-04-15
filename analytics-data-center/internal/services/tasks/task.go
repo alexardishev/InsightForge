@@ -2,6 +2,7 @@ package tasksserivce
 
 import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
+	"analyticDataCenter/analytics-data-center/internal/storage"
 	"context"
 	"errors"
 	"log/slog"
@@ -10,13 +11,13 @@ import (
 
 type TasksService struct {
 	log          *slog.Logger
-	TaskProvider TaskProvider
+	TaskProvider storage.SysDB
 	StatusEnum   []string
 }
 
 func New(
 	log *slog.Logger,
-	taskProvider TaskProvider,
+	taskProvider storage.SysDB,
 	statusEnum []string,
 
 ) *TasksService {
@@ -25,12 +26,6 @@ func New(
 		TaskProvider: taskProvider,
 		StatusEnum:   statusEnum,
 	}
-}
-
-type TaskProvider interface {
-	CreateTask(ctx context.Context, taskID string, status string) error
-	GetTask(ctx context.Context, taskID string) (models.Task, error)
-	ChangeStatusTask(ctx context.Context, taskID string, newStatus string, comment string) error
 }
 
 func (s *TasksService) CreateTask(ctx context.Context, taskID string, status string) error {
