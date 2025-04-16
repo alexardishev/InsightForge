@@ -18,6 +18,10 @@ type SysDB interface {
 type DWHDB interface {
 	TableProvider
 }
+
+type OLTPDB interface {
+	DataProviderOLTP
+}
 type SchemaProvider interface {
 	GetView(ctx context.Context, idView int64) (models.View, error)
 }
@@ -31,4 +35,8 @@ type TaskProvider interface {
 type TableProvider interface {
 	CreateTempTable(ctx context.Context, query string, tempTableName string) error
 	DeleteTempTable(ctx context.Context, tableName string) error
+}
+
+type DataProviderOLTP interface {
+	GetCountInsertData(ctx context.Context, query string) (int64, error) // count of insert datas
 }

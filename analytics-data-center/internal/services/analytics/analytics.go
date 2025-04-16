@@ -37,6 +37,7 @@ type AnalyticsDataCenterService struct {
 	SchemaProvider storage.SysDB
 	TaskService    TaskService
 	TableProvider  storage.DWHDB
+	DataProvider   storage.DataProviderOLTP
 	DWHDbName      string
 	OLTPDbName     string
 }
@@ -52,6 +53,7 @@ func New(
 	schemaProvider storage.SysDB,
 	taskService TaskService,
 	tableProvider storage.DWHDB,
+	dataProviderOLTP storage.DataProviderOLTP,
 	DWHDbName string,
 	OLTPDbName string,
 
@@ -61,6 +63,7 @@ func New(
 		SchemaProvider: schemaProvider,
 		TaskService:    taskService,
 		TableProvider:  tableProvider,
+		DataProvider:   dataProviderOLTP,
 		DWHDbName:      DWHDbName,
 		OLTPDbName:     OLTPDbName,
 	}
@@ -110,54 +113,11 @@ func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView
 		a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorCreateTemplateTable)
 	}
 
+	countInsertData, err := a.getCountInsertData(ctx, viewSchema)
+	if err != nil {
+		log.Error("")
+	}
+	log.Info("количество записей в таблице -", slog.Any("slice", countInsertData))
 	return taskID, nil
 
 }
-
-func (a *AnalyticsDataCenterService) createTempTables(ctx context.Context, quries models.Queries) error {
-	const op = "analytics.createTempTables"
-	var errorCreate error
-	log := a.log.With(
-		slog.String("op", op),
-	)
-
-	for _, query := range quries.Queries {
-		err := a.TableProvider.CreateTempTable(ctx, query.Query, query.TableName)
-		if err != nil {
-			errorCreate = err
-			log.Error("не удалось создать временные таблицы", slog.String("error", err.Error()))
-			break
-
-		}
-
-	}
-	if errorCreate != nil {
-		for _, tableQuery := range quries.Queries {
-			err := a.TableProvider.DeleteTempTable(ctx, tableQuery.TableName)
-			if err != nil {
-				//TO DO сделать worker , который раз в какое-то время запускается и чистит темп таблицы на такие случаи.
-				log.Error("не удалось удалить временную таблицу",
-					slog.String("table", tableQuery.TableName),
-					slog.String("error", err.Error()),
-				)
-			}
-		}
-		return errorCreate
-
-	}
-
-	return nil
-
-}
-
-// func (a *AnalyticsDataCenterService) getCountInsertData(ctx context.Context, viewSchema models.View) (int64, error) {
-// 	const op = "analytics.getCountInsertData"
-// 	log := a.log.With(
-// 		slog.String("op", op),
-// 	)
-// 	if a.OLTPDbName == DbPostgres {
-// 		a.getCountInsertData
-
-// 	}
-
-// }
