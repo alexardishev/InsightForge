@@ -35,15 +35,6 @@ func New(log *slog.Logger, grpcPort int,
 		panic("Не удалось создать Storage SYS")
 	}
 
-	// if OLTPName == DbPostgres {
-	// 	var storageOLTPPostgres *postgresoltp.PostgresOLTP
-	// 	storageOLTPPostgres, err = postgresoltp.New(connectionStringOLTP, log)
-	// 	if err != nil {
-	// 		panic("Не удалось создать Storage OLTP")
-	// 	}
-	// 	storageOLTP = storageOLTPPostgres
-	// }
-
 	if DWHName == DbPostgres {
 		var storageDWHPostgres *postgresdwh.PostgresDWH
 		storageDWHPostgres, err = postgresdwh.New(connectionStringDWH, log)

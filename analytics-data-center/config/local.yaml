@@ -12,4 +12,4 @@ oltp_connections:
 token_ttl: 1h
 grpc:
   port: 13890
-  timeout: 10h
+  timeout: 11h
