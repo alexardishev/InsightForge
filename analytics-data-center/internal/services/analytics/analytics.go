@@ -37,7 +37,7 @@ type AnalyticsDataCenterService struct {
 	SchemaProvider storage.SysDB
 	TaskService    TaskService
 	TableProvider  storage.DWHDB
-	DataProvider   storage.DataProviderOLTP
+	OLTPFactory    storage.OLTPFactory
 	DWHDbName      string
 	OLTPDbName     string
 }
@@ -53,7 +53,7 @@ func New(
 	schemaProvider storage.SysDB,
 	taskService TaskService,
 	tableProvider storage.DWHDB,
-	dataProviderOLTP storage.DataProviderOLTP,
+	OLTPFactory storage.OLTPFactory,
 	DWHDbName string,
 	OLTPDbName string,
 
@@ -63,7 +63,7 @@ func New(
 		SchemaProvider: schemaProvider,
 		TaskService:    taskService,
 		TableProvider:  tableProvider,
-		DataProvider:   dataProviderOLTP,
+		OLTPFactory:    OLTPFactory,
 		DWHDbName:      DWHDbName,
 		OLTPDbName:     OLTPDbName,
 	}
@@ -92,7 +92,7 @@ func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView
 		return "", fmt.Errorf("%s:%s", op, err)
 	}
 	if a.OLTPDbName == DbPostgres {
-
+		// Переделать на вызов вспомогательной функции, здесь должен быть чистый код без условий
 		queries, duplicates, err := sqlgenerator.GenerateQueryCreateTempTablePostgres(&viewSchema, log)
 		if err != nil {
 			log.Error("не удалось сгенерировать запросы генератором SQL", slog.String("error", err.Error()))
@@ -117,6 +117,14 @@ func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView
 	if err != nil {
 		log.Error("")
 	}
+
+	go func() {
+		// Запускаем горутины по переливу данных чанками.
+		// 1. Считаем количество чанков для каждой таблицы
+		// 2. Берем каждый чанк и запускаем его в отдельной горутине
+		// 3. Делаем SELECT и INSERT во временную таблицу каждого чанка пока не разберемся с таблицей
+		// 4. Если упали, то удаляем таблицы и возвращаем ошибку
+	}()
 	log.Info("количество записей в таблице -", slog.Any("slice", countInsertData))
 	return taskID, nil
 

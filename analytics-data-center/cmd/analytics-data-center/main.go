@@ -30,7 +30,7 @@ func main() {
 	logger := setupLogger(cfg.Env)
 	logger.Info("Starting Analytics server")
 
-	application := app.New(logger, cfg.GRPC.Port, cfg.StoragePath, cfg.OLTPStoragePath, cfg.DWHStoragePath, cfg.OLTPDataBase, cfg.DWHDataBase, cfg.TokenTTL)
+	application := app.New(logger, cfg.GRPC.Port, cfg.StoragePath, cfg.OLTPStoragePath, cfg.DWHStoragePath, cfg.OLTPDataBase, cfg.DWHDataBase, cfg.TokenTTL, cfg.OLTPstorages)
 
 	go application.GRPCSrv.Run()
 

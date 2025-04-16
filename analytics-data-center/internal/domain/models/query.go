@@ -5,6 +5,7 @@ type Queries struct {
 }
 
 type Query struct {
-	TableName string
-	Query     string
+	SourceName string
+	TableName  string
+	Query      string
 }

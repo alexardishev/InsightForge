@@ -15,6 +15,7 @@ type Config struct {
 	OLTPStoragePath string        `yaml:"oltp_db_path" json:"oltp_db_path,omitempty"`
 	DWHDataBase     string        `yaml:"dwh_db" json:"dwh_db,omitempty"`
 	DWHStoragePath  string        `yaml:"dwh_db_path" json:"dwh_db_path,omitempty"`
+	OLTPstorages    []OLTPstorage `yaml:"oltp_connections"`
 	TokenTTL        time.Duration `yaml:"token_ttl,omitempty"`
 	GRPC            GRPCSetting   `yaml:"grpc" json:"grpc,omitempty"`
 }
@@ -22,6 +23,11 @@ type Config struct {
 type GRPCSetting struct {
 	Port    int           `yaml:"port"`
 	Timeout time.Duration `yaml:"timeout"`
+}
+
+type OLTPstorage struct {
+	Name string `yaml:"name"`
+	Path string `yaml:"connection_string"`
 }
 
 func MustLoad() *Config {

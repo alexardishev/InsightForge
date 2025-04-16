@@ -56,14 +56,19 @@ func (a *AnalyticsDataCenterService) getCountInsertData(ctx context.Context, vie
 	}
 
 	for _, query := range queries.Queries {
-		count, err := a.DataProvider.GetCountInsertData(ctx, query.Query)
+		oltpStorage, err := a.OLTPFactory.GetOLTPStorage(ctx, query.SourceName)
+		if err != nil {
+			log.Error("Невозможно подключиться к OLTP хранилищу", slog.String("error", err.Error()))
+			return []models.CountInsertData{}, err
+		}
+		count, err := oltpStorage.GetCountInsertData(ctx, query.Query)
 		if err != nil {
 			log.Error("неудачная попытка посчитать количество данных", slog.String("error", err.Error()))
 			return []models.CountInsertData{}, err
 		}
 
 		if count <= 0 {
-			log.Info("нет данных для переноса")
+			log.Info("нет данных для переноса", slog.String("table", query.TableName))
 			continue
 		}
 
