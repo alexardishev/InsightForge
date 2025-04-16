@@ -8,7 +8,7 @@ oltp_connections:
   - name: postgres
     connection_string: "postgresql://postgres:password@localhost:5432/postgres?sslmode=disable"
   - name: postgres1
-    connection_string: "postgresql://postgres:ohb5uvub3quaThah@10.0.30.7:5432/postgres?sslmode=disable"
+    connection_string: "postgresql://postgres:11111111111@00000000/postgres?sslmode=disable"
 token_ttl: 1h
 grpc:
   port: 13890
