@@ -4,8 +4,10 @@ import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
 	sqlgenerator "analyticDataCenter/analytics-data-center/internal/lib/SQLGenerator"
 	"context"
+	"fmt"
 	"log/slog"
 	"runtime"
+	"sync"
 )
 
 func (a *AnalyticsDataCenterService) createTempTables(ctx context.Context, quries models.Queries) error {
@@ -86,13 +88,15 @@ func (a *AnalyticsDataCenterService) getCountInsertData(ctx context.Context, vie
 	return sliceCountInsertData, nil
 }
 
-func (a *AnalyticsDataCenterService) prepareDataForInsert(ctx context.Context, countData *[]models.CountInsertData, viewSchema *models.View) (bool, error) {
+func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, countData *[]models.CountInsertData, viewSchema *models.View) (bool, error) {
 	const op = "analytics.prepareDataForInsert"
 	log := a.log.With(
 		slog.String("op", op),
 	)
-	log.Info("запуск вставки данных")
-
+	log.Info("запуск вставки и подготовки данных")
+	var wg sync.WaitGroup
+	var hasError bool
+	var mu sync.Mutex
 	for _, tempTableInsert := range *countData {
 		oltpStorage, err := a.OLTPFactory.GetOLTPStorage(ctx, tempTableInsert.DataBaseName)
 		if err != nil {
@@ -101,20 +105,47 @@ func (a *AnalyticsDataCenterService) prepareDataForInsert(ctx context.Context, c
 		}
 
 		procCount := int64(runtime.GOMAXPROCS(2))
-		chunkNum := tempTableInsert.Count/int64(procCount) + 1
-
-		go func() { // ← Открыта анонимная функция
-
-			for i := int64(0); i < chunkNum; i++ {
-				start := i * tempTableInsert.Count / procCount
-				end := (i + 1) * tempTableInsert.Count / procCount
-
-				query, err := sqlgenerator.GenerateSelectInsertDataQuery(*viewSchema, start, end, tempTableInsert.TableName, log)
-				insertData, err := oltpStorage.SelectDataToInsert(ctx, "") // <- query не используется
-
+		if runtime.NumCPU() <= 1 {
+			procCount = 1
+		}
+		chunkSize := (tempTableInsert.Count + procCount - 1) / procCount // Округление вверх
+		for i := int64(0); i < procCount; i++ {
+			start := i * chunkSize
+			end := (i + 1) * chunkSize
+			if end > tempTableInsert.Count {
+				end = tempTableInsert.Count
 			}
-		}()
-	}
+			tableName := tempTableInsert.TableName
+			sourceName := tempTableInsert.DataBaseName
 
+			wg.Add(1)
+			go func(start, end int64, tableName, sourceName string) {
+				defer wg.Done()
+				query, err := sqlgenerator.GenerateSelectInsertDataQuery(*viewSchema, start, end, tableName, log)
+				if err != nil {
+					log.Error("ошибка генерации SQL", slog.String("error", err.Error()))
+					mu.Lock()
+					hasError = true
+					mu.Unlock()
+					return
+				}
+				insertData, err := oltpStorage.SelectDataToInsert(ctx, query.Query)
+				if err != nil {
+					log.Error("ошибка при SELECT из OLTP", slog.String("error", err.Error()))
+					mu.Lock()
+					hasError = true
+					mu.Unlock()
+					return
+				}
+				log.Info("получены данные", slog.Any("rows", insertData))
+			}(start, end, tableName, sourceName)
+		}
+
+	}
+	wg.Wait()
+
+	if hasError {
+		return false, fmt.Errorf("одна или несколько горутин завершились с ошибкой")
+	}
 	return true, nil
 }
