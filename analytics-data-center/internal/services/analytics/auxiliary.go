@@ -5,6 +5,7 @@ import (
 	sqlgenerator "analyticDataCenter/analytics-data-center/internal/lib/SQLGenerator"
 	"context"
 	"log/slog"
+	"runtime"
 )
 
 func (a *AnalyticsDataCenterService) createTempTables(ctx context.Context, quries models.Queries) error {
@@ -73,8 +74,9 @@ func (a *AnalyticsDataCenterService) getCountInsertData(ctx context.Context, vie
 		}
 
 		item := models.CountInsertData{
-			TableName: query.TableName,
-			Count:     count,
+			TableName:    query.TableName,
+			Count:        count,
+			DataBaseName: query.SourceName,
 		}
 
 		sliceCountInsertData = append(sliceCountInsertData, item)
@@ -82,4 +84,37 @@ func (a *AnalyticsDataCenterService) getCountInsertData(ctx context.Context, vie
 	}
 	log.Info("готово", slog.Int("tablesWithData", len(sliceCountInsertData)))
 	return sliceCountInsertData, nil
+}
+
+func (a *AnalyticsDataCenterService) prepareDataForInsert(ctx context.Context, countData *[]models.CountInsertData, viewSchema *models.View) (bool, error) {
+	const op = "analytics.prepareDataForInsert"
+	log := a.log.With(
+		slog.String("op", op),
+	)
+	log.Info("запуск вставки данных")
+
+	for _, tempTableInsert := range *countData {
+		oltpStorage, err := a.OLTPFactory.GetOLTPStorage(ctx, tempTableInsert.DataBaseName)
+		if err != nil {
+			log.Error("Невозможно подключиться к OLTP хранилищу", slog.String("error", err.Error()))
+			return false, err
+		}
+
+		procCount := int64(runtime.GOMAXPROCS(2))
+		chunkNum := tempTableInsert.Count/int64(procCount) + 1
+
+		go func() { // ← Открыта анонимная функция
+
+			for i := int64(0); i < chunkNum; i++ {
+				start := i * tempTableInsert.Count / procCount
+				end := (i + 1) * tempTableInsert.Count / procCount
+
+				query, err := sqlgenerator.GenerateSelectInsertDataQuery(*viewSchema, start, end, tempTableInsert.TableName, log)
+				insertData, err := oltpStorage.SelectDataToInsert(ctx, "") // <- query не используется
+
+			}
+		}()
+	}
+
+	return true, nil
 }

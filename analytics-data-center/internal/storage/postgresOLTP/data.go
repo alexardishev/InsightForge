@@ -22,3 +22,7 @@ func (p *PostgresOLTP) GetCountInsertData(ctx context.Context, query string) (in
 	return count, nil
 
 }
+
+func (p *PostgresOLTP) InsertDataToTempTable(ctx context.Context, query string) (bool, error) {
+	panic("")
+}
