@@ -30,6 +30,8 @@ const (
 
 const (
 	ErrorCreateTemplateTable = "Не удалось создать временные таблицы"
+	ErrorCountInsertData     = "Не удалось посчитать количество вставляемых данных"
+	ErrorSelectInsertData    = "Не удалось получить данный для вставки"
 )
 
 type AnalyticsDataCenterService struct {
@@ -97,6 +99,7 @@ func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView
 		if err != nil {
 			log.Error("не удалось сгенерировать запросы генератором SQL", slog.String("error", err.Error()))
 			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorCreateTemplateTable)
+			return "", fmt.Errorf("%s:%s", op, err)
 		}
 
 		queriesInit = queries
@@ -111,20 +114,30 @@ func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView
 	if err != nil {
 		log.Error("не удалось создать временные таблицы", slog.String("error", err.Error()))
 		a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorCreateTemplateTable)
+		return "", fmt.Errorf("%s:%s", op, err)
 	}
 
 	countInsertData, err := a.getCountInsertData(ctx, viewSchema)
 	if err != nil {
-		log.Error("")
+		log.Error("не удалось получить количество", slog.String("error", err.Error()))
+		a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorCountInsertData)
+		return "", fmt.Errorf("%s:%s", op, err)
 	}
 
-	go func() {
-		// Запускаем горутины по переливу данных чанками.
-		// 1. Считаем количество чанков для каждой таблицы
-		// 2. Берем каждый чанк и запускаем его в отдельной горутине
-		// 3. Делаем SELECT и INSERT во временную таблицу каждого чанка пока не разберемся с таблицей
-		// 4. Если упали, то удаляем таблицы и возвращаем ошибку
-	}()
+	ok, err := a.prepareAndInsertData(ctx, &countInsertData, &viewSchema)
+	if err != nil {
+		log.Error("не удалось получить данные для вставки", slog.String("error", err.Error()))
+		a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorSelectInsertData)
+		return "", fmt.Errorf("%s:%s", op, err)
+	}
+	fmt.Println(ok)
+	// go func() {
+	// 	// Запускаем горутины по переливу данных чанками.
+	// 	// 1. Считаем количество чанков для каждой таблицы
+	// 	// 2. Берем каждый чанк и запускаем его в отдельной горутине
+	// 	// 3. Делаем SELECT и INSERT во временную таблицу каждого чанка пока не разберемся с таблицей
+	// 	// 4. Если упали, то удаляем таблицы и возвращаем ошибку
+	// }()
 	log.Info("количество записей в таблице -", slog.Any("slice", countInsertData))
 	return taskID, nil
 
