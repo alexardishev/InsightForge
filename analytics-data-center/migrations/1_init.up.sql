@@ -31,9 +31,11 @@ INSERT INTO schems (id, schema_view) VALUES (
                       "name": "id",
                       "alias": "user_id",
                       "is_update_key": true
+                      "type": "int"
                     },
                     {
                       "name": "email"
+                      "type": "text"
                     }
                   ]
                 },
@@ -42,6 +44,7 @@ INSERT INTO schems (id, schema_view) VALUES (
                   "columns": [
                     {
                       "name": "user_id"
+                      "type": "int"
                     },
                     {
                       "name": "age"

@@ -93,20 +93,25 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 	log := a.log.With(
 		slog.String("op", op),
 	)
-	log.Info("запуск вставки и подготовки данных")
 	var wg sync.WaitGroup
 	var hasError bool
 	var mu sync.Mutex
+	runtime.GOMAXPROCS(2)
+
 	for _, tempTableInsert := range *countData {
+		log.Info("запуск вставки и подготовки данных", slog.String("Таблица", tempTableInsert.TableName))
+
 		oltpStorage, err := a.OLTPFactory.GetOLTPStorage(ctx, tempTableInsert.DataBaseName)
 		if err != nil {
 			log.Error("Невозможно подключиться к OLTP хранилищу", slog.String("error", err.Error()))
 			return false, err
 		}
-
-		procCount := int64(runtime.GOMAXPROCS(2))
+		procCount := int64(2)
 		if runtime.NumCPU() <= 1 {
 			procCount = 1
+		}
+		if tempTableInsert.Count <= 0 {
+			continue
 		}
 		chunkSize := (tempTableInsert.Count + procCount - 1) / procCount // Округление вверх
 		for i := int64(0); i < procCount; i++ {
@@ -120,6 +125,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 
 			wg.Add(1)
 			go func(start, end int64, tableName, sourceName string) {
+				log.Info("Горутина запущена", slog.String("Для таблицы", tableName))
 				defer wg.Done()
 				query, err := sqlgenerator.GenerateSelectInsertDataQuery(*viewSchema, start, end, tableName, log)
 				if err != nil {
@@ -137,7 +143,12 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 					mu.Unlock()
 					return
 				}
-				log.Info("получены данные", slog.Any("rows", insertData))
+				log.Info("получены данные", slog.Any("rows", len(insertData)))
+				if len(insertData) >= 10 {
+					log.Info("получены данные первые 10 строк", slog.Any("rows", insertData[0]))
+
+				}
+
 			}(start, end, tableName, sourceName)
 		}
 

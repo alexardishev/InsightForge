@@ -21,12 +21,14 @@ type Table struct {
 }
 
 type Column struct {
-	Name        string     `json:"name"`
+	Name        string     `json:"name,omitempty"`
 	Alias       string     `json:"alias,omitempty"`
 	IsUpdateKey bool       `json:"is_update_key,omitempty"`
 	Transform   *Transform `json:"transform,omitempty"`
 	Reference   *Reference `json:"reference,omitempty"`
-	Type        string     `json:"type"`
+	Type        string     `json:"type,omitempty"`
+	IsDeleted   bool       `json:"is_deleted,omitempty"`
+	IsNullable  bool       `json:"is_nullable,omitempty"`
 }
 
 type Transform struct {

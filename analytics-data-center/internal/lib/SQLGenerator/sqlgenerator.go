@@ -45,15 +45,22 @@ func GenerateQueryCreateTempTablePostgres(schema *models.View, logger *slog.Logg
 						colName = col.Name
 					}
 					colType := col.Type
+					isNotNull := "NOT NULL"
 					if colType == "" {
 						logger.Info("не указан тип по умолчанию text", slog.String("не задан тип для колонки", colName))
 						colType = "TEXT"
 					}
+					var line string
+					if !col.IsNullable {
+						line = fmt.Sprintf("  %s %s %s", colName, colType, isNotNull)
+					} else {
+						line = fmt.Sprintf("  %s %s", colName, colType)
+					}
 
-					line := fmt.Sprintf("  %s %s", colName, colType)
 					if idx < len(tbl.Columns)-1 {
 						line += ","
 					}
+
 					_, err = b.WriteString(line + "\n")
 					if err != nil {
 						logger.Error("ошибка", slog.String("error", err.Error()))

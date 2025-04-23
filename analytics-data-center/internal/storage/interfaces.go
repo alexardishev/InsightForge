@@ -38,9 +38,9 @@ type TableProvider interface {
 	DeleteTempTable(ctx context.Context, tableName string) error
 }
 
-// type DataProviderDWH interface {
-// 	InsertDataToDWH(ctx context.Context, tableName string, data []map[string]interface{}) error
-// }
+type DataProviderDWH interface {
+	InsertDataToDWH(ctx context.Context, tableName string, data []map[string]interface{}) error
+}
 
 type DataProviderOLTP interface {
 	GetCountInsertData(ctx context.Context, query string) (int64, error)                    // count of insert datas
