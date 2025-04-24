@@ -20,7 +20,8 @@ const (
 )
 
 type App struct {
-	GRPCSrv *grpcapp.App
+	GRPCSrv     *grpcapp.App
+	OLTPFactory *storage.InstanceOLTPFactory
 }
 
 func New(log *slog.Logger, grpcPort int,
@@ -45,7 +46,6 @@ func New(log *slog.Logger, grpcPort int,
 	}
 
 	oltpFactory := storage.NewOLTPFactory(log, factoryOLTP)
-
 	if DWHName == DbClickhouse {
 		//TO DO дописать когда появится адаптер для Clickhouse
 	}
@@ -58,6 +58,7 @@ func New(log *slog.Logger, grpcPort int,
 	analyticsService := serviceanalytics.New(log, storage.DbSys, tasksserivce, storageDWH, oltpFactory, DWHName, OLTPName)
 	grpcServer := grpcapp.New(log, grpcPort, analyticsService)
 	return &App{
-		GRPCSrv: grpcServer,
+		GRPCSrv:     grpcServer,
+		OLTPFactory: oltpFactory,
 	}
 }

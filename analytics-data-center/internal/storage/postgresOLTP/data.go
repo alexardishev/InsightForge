@@ -18,7 +18,6 @@ func (p *PostgresOLTP) GetCountInsertData(ctx context.Context, query string) (in
 		log.Error("ошибка получения количества записей", slog.String("ошибка", err.Error()))
 		return 0, err
 	}
-
 	return count, nil
 
 }

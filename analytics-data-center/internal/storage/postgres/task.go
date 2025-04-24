@@ -19,13 +19,11 @@ func (p *PostgresSys) CreateTask(ctx context.Context, taskID string, status stri
 
 	query := "INSERT INTO tasks (id, create_at, status) VALUES ($1, $2, $3)"
 
-	rows, err := p.Db.QueryContext(ctx, query, taskID, createDate, status)
+	_, err := p.Db.ExecContext(ctx, query, taskID, createDate, status)
 	if err != nil {
 		log.Error("Запросвыполнен с ошибкой", slog.String("error", err.Error()))
 		return err
 	}
-	rows.Close()
-
 	return nil
 
 }

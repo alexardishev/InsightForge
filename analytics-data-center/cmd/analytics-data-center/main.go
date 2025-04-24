@@ -41,7 +41,7 @@ func main() {
 	logger.Info("stopping application", slog.String("signal", sign.String()))
 
 	application.GRPCSrv.Stop()
-
+	defer application.OLTPFactory.CloseAll()
 	logger.Info("app stoped")
 }
 

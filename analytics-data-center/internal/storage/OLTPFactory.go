@@ -6,32 +6,68 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 )
 
 type OLTPFactory interface {
 	GetOLTPStorage(ctx context.Context, sourceName string) (OLTPDB, error)
+	CloseAll() error // чтобы можно было корректно закрыть соединения при завершении программы
 }
 
-type PostgresOLTPFactory struct {
+type InstanceOLTPFactory struct {
 	logger      *slog.Logger
-	connections map[string]string // sourceName → connection string
+	connections map[string]string                     // sourceName → connection string
+	pool        map[string]*postgresoltp.PostgresOLTP // sourceName → готовое подключение
+	mu          sync.Mutex
 }
 
-func NewOLTPFactory(logger *slog.Logger, connConfigs []config.OLTPstorage) *PostgresOLTPFactory {
+func NewOLTPFactory(logger *slog.Logger, connConfigs []config.OLTPstorage) *InstanceOLTPFactory {
 	connMap := make(map[string]string)
 	for _, c := range connConfigs {
 		connMap[c.Name] = c.Path
 	}
-	return &PostgresOLTPFactory{
+	return &InstanceOLTPFactory{
 		logger:      logger,
 		connections: connMap,
+		pool:        make(map[string]*postgresoltp.PostgresOLTP),
 	}
 }
 
-func (f *PostgresOLTPFactory) GetOLTPStorage(ctx context.Context, sourceName string) (OLTPDB, error) {
+func (f *InstanceOLTPFactory) GetOLTPStorage(ctx context.Context, sourceName string) (OLTPDB, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if conn, ok := f.pool[sourceName]; ok {
+		return conn, nil
+	}
+
+	// Создаём, если нет
 	connStr, ok := f.connections[sourceName]
 	if !ok {
 		return nil, fmt.Errorf("connection string for %s not found", sourceName)
 	}
-	return postgresoltp.New(connStr, f.logger)
+
+	storage, err := postgresoltp.New(connStr, f.logger)
+	if err != nil {
+		return nil, err
+	}
+
+	storage.Db.SetMaxOpenConns(10)
+	storage.Db.SetMaxIdleConns(5)
+
+	f.pool[sourceName] = storage
+	return storage, nil
+}
+
+// Закрыть все соединения при завершении работы
+func (f *InstanceOLTPFactory) CloseAll() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for name, s := range f.pool {
+		f.logger.Info("Закрытие соединения", slog.String("source", name))
+		if err := s.Db.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
