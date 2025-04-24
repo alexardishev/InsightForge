@@ -26,6 +26,8 @@ func GenerateQueryCreateTempTablePostgres(schema *models.View, logger *slog.Logg
 				var b strings.Builder
 
 				// Название таблицы: temp_{source}_{schema}_{table}
+				logger.Info("Tables", slog.String("Tables", tbl.Name))
+
 				tableName := fmt.Sprintf("temp_%s_%s_%s", source.Name, sch.Name, tbl.Name)
 				_, err := b.WriteString(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n", tableName))
 				if err != nil {

@@ -18,7 +18,7 @@ func (a *AnalyticsDataCenterService) createTempTables(ctx context.Context, qurie
 	)
 
 	for _, query := range quries.Queries {
-		err := a.TableProvider.CreateTempTable(ctx, query.Query, query.TableName)
+		err := a.DWHProvider.CreateTempTable(ctx, query.Query, query.TableName)
 		if err != nil {
 			errorCreate = err
 			log.Error("не удалось создать временные таблицы", slog.String("error", err.Error()))
@@ -29,7 +29,7 @@ func (a *AnalyticsDataCenterService) createTempTables(ctx context.Context, qurie
 	}
 	if errorCreate != nil {
 		for _, tableQuery := range quries.Queries {
-			err := a.TableProvider.DeleteTempTable(ctx, tableQuery.TableName)
+			err := a.DWHProvider.DeleteTempTable(ctx, tableQuery.TableName)
 			if err != nil {
 				//TO DO сделать worker , который раз в какое-то время запускается и чистит темп таблицы на такие случаи.
 				log.Error("не удалось удалить временную таблицу",
@@ -149,10 +149,6 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 					return
 				}
 				log.Info("получены данные", slog.Any("rows", len(insertData)))
-				if len(insertData) >= 10 {
-					log.Info("получены данные первые 10 строк", slog.Any("rows", insertData[0]))
-
-				}
 				log.Info("Запрос для таблицы", slog.String("таблица", tempTableName))
 				queryInsert, err := sqlgenerator.GeneratetInsertDataQuery(*viewSchema, insertData, tempTableName, log)
 				if err != nil {
@@ -164,6 +160,15 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 				}
 
 				log.Info("Запрос готов", slog.String("запрос", queryInsert.Query))
+				err = a.DWHProvider.InsertDataToDWH(ctx, queryInsert.Query)
+				if err != nil {
+					log.Error("ошибка при вставки данных в таблицу", slog.String("error", err.Error()))
+					mu.Lock()
+					hasError = true
+					mu.Unlock()
+					return
+				}
+				log.Info("Вставка данных завершена")
 
 			}(start, end, tableName, sourceName, tempTableName)
 

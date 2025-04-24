@@ -5,6 +5,7 @@ go 1.23.3
 require (
 	github.com/alexardishev/proto_auth v0.0.0-20250408074131-13e09e911053
 	github.com/go-playground/validator/v10 v10.26.0
+	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/golang-migrate/migrate v3.5.4+incompatible
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.10.9

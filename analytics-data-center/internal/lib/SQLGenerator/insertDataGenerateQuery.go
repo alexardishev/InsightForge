@@ -48,8 +48,7 @@ func GeneratetInsertDataQuery(view models.View, selectData []map[string]interfac
 		return models.Query{}, errors.New("не найдены подходящие колонки для вставки")
 	}
 
-	testSelectData := selectData[:2]
-	for _, row := range testSelectData {
+	for _, row := range selectData {
 		var valueStrings []string
 		for _, col := range columns {
 			val, ok := row[col]

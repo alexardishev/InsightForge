@@ -17,7 +17,7 @@ type SysDB interface {
 }
 type DWHDB interface {
 	TableProvider
-	// DataProviderDWH
+	DataProviderDWH
 }
 
 type OLTPDB interface {
@@ -39,7 +39,7 @@ type TableProvider interface {
 }
 
 type DataProviderDWH interface {
-	InsertDataToDWH(ctx context.Context, tableName string, data []map[string]interface{}) error
+	InsertDataToDWH(ctx context.Context, query string) error
 }
 
 type DataProviderOLTP interface {

@@ -38,7 +38,7 @@ type AnalyticsDataCenterService struct {
 	log            *slog.Logger
 	SchemaProvider storage.SysDB
 	TaskService    TaskService
-	TableProvider  storage.DWHDB
+	DWHProvider    storage.DWHDB
 	OLTPFactory    storage.OLTPFactory
 	DWHDbName      string
 	OLTPDbName     string
@@ -54,7 +54,7 @@ func New(
 	log *slog.Logger,
 	schemaProvider storage.SysDB,
 	taskService TaskService,
-	tableProvider storage.DWHDB,
+	dwhProvider storage.DWHDB,
 	OLTPFactory storage.OLTPFactory,
 	DWHDbName string,
 	OLTPDbName string,
@@ -64,7 +64,7 @@ func New(
 		log:            log,
 		SchemaProvider: schemaProvider,
 		TaskService:    taskService,
-		TableProvider:  tableProvider,
+		DWHProvider:    dwhProvider,
 		OLTPFactory:    OLTPFactory,
 		DWHDbName:      DWHDbName,
 		OLTPDbName:     OLTPDbName,
