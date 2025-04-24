@@ -46,7 +46,7 @@ func (a *AnalyticsDataCenterService) createTempTables(ctx context.Context, qurie
 
 }
 
-func (a *AnalyticsDataCenterService) getCountInsertData(ctx context.Context, viewSchema models.View) ([]models.CountInsertData, error) {
+func (a *AnalyticsDataCenterService) getCountInsertData(ctx context.Context, viewSchema models.View, tempTables []string) ([]models.CountInsertData, error) {
 	const op = "analytics.getCountInsertData"
 	var sliceCountInsertData []models.CountInsertData
 	log := a.log.With(
@@ -58,7 +58,7 @@ func (a *AnalyticsDataCenterService) getCountInsertData(ctx context.Context, vie
 		return []models.CountInsertData{}, err
 	}
 
-	for _, query := range queries.Queries {
+	for idx, query := range queries.Queries {
 		oltpStorage, err := a.OLTPFactory.GetOLTPStorage(ctx, query.SourceName)
 		if err != nil {
 			log.Error("Невозможно подключиться к OLTP хранилищу", slog.String("error", err.Error()))
@@ -76,15 +76,19 @@ func (a *AnalyticsDataCenterService) getCountInsertData(ctx context.Context, vie
 		}
 
 		item := models.CountInsertData{
-			TableName:    query.TableName,
-			Count:        count,
-			DataBaseName: query.SourceName,
+			TableName:     query.TableName,
+			Count:         count,
+			DataBaseName:  query.SourceName,
+			TempTableName: tempTables[idx],
 		}
+		log.Info("готово", slog.String("TableName", item.TableName))
+		log.Info("готово", slog.String("TempTableName", item.TempTableName))
 
 		sliceCountInsertData = append(sliceCountInsertData, item)
 
 	}
 	log.Info("готово", slog.Int("tablesWithData", len(sliceCountInsertData)))
+
 	return sliceCountInsertData, nil
 }
 
@@ -106,7 +110,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 			log.Error("Невозможно подключиться к OLTP хранилищу", slog.String("error", err.Error()))
 			return false, err
 		}
-		procCount := int64(2)
+		procCount := a.calculateWorkerCount(tempTableInsert.Count)
 		if runtime.NumCPU() <= 1 {
 			procCount = 1
 		}
@@ -122,9 +126,10 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 			}
 			tableName := tempTableInsert.TableName
 			sourceName := tempTableInsert.DataBaseName
+			tempTableName := tempTableInsert.TempTableName
 
 			wg.Add(1)
-			go func(start, end int64, tableName, sourceName string) {
+			go func(start, end int64, tableName, sourceName string, tempTableName string) {
 				log.Info("Горутина запущена", slog.String("Для таблицы", tableName))
 				defer wg.Done()
 				query, err := sqlgenerator.GenerateSelectInsertDataQuery(*viewSchema, start, end, tableName, log)
@@ -148,8 +153,20 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 					log.Info("получены данные первые 10 строк", slog.Any("rows", insertData[0]))
 
 				}
+				log.Info("Запрос для таблицы", slog.String("таблица", tempTableName))
+				queryInsert, err := sqlgenerator.GeneratetInsertDataQuery(*viewSchema, insertData, tempTableName, log)
+				if err != nil {
+					log.Error("ошибка при генерации INSERT запроса", slog.String("error", err.Error()))
+					mu.Lock()
+					hasError = true
+					mu.Unlock()
+					return
+				}
 
-			}(start, end, tableName, sourceName)
+				log.Info("Запрос готов", slog.String("запрос", queryInsert.Query))
+
+			}(start, end, tableName, sourceName, tempTableName)
+
 		}
 
 	}
@@ -159,4 +176,19 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 		return false, fmt.Errorf("одна или несколько горутин завершились с ошибкой")
 	}
 	return true, nil
+}
+
+func (a *AnalyticsDataCenterService) calculateWorkerCount(totalCount int64) int64 {
+	switch {
+	case totalCount > 500_000:
+		return 8
+	case totalCount > 200_000:
+		return 6
+	case totalCount > 100_000:
+		return 4
+	case totalCount > 10_000:
+		return 2
+	default:
+		return 1
+	}
 }

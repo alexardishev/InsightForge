@@ -74,6 +74,7 @@ func New(
 func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView int64) (taskID string, err error) {
 	const op = "analytics.StartETLProcess"
 	var queriesInit models.Queries
+	var tempTables []string
 	log := a.log.With(
 		slog.String("op", op),
 		slog.Int64("idSchema", idView),
@@ -110,6 +111,10 @@ func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView
 		}
 
 	}
+	for _, tempTable := range queriesInit.Queries {
+		tempTables = append(tempTables, tempTable.TableName)
+		log.Info("Временная таблица", slog.String("Таблица", tempTable.TableName))
+	}
 	err = a.createTempTables(ctx, queriesInit)
 	if err != nil {
 		log.Error("не удалось создать временные таблицы", slog.String("error", err.Error()))
@@ -117,27 +122,24 @@ func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView
 		return "", fmt.Errorf("%s:%s", op, err)
 	}
 
-	countInsertData, err := a.getCountInsertData(ctx, viewSchema)
+	countInsertData, err := a.getCountInsertData(ctx, viewSchema, tempTables)
 	if err != nil {
 		log.Error("не удалось получить количество", slog.String("error", err.Error()))
 		a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorCountInsertData)
 		return "", fmt.Errorf("%s:%s", op, err)
 	}
+	backgroundCtx := context.Background() // независимый от вызова клиента
 
-	ok, err := a.prepareAndInsertData(ctx, &countInsertData, &viewSchema)
-	if err != nil {
-		log.Error("не удалось получить данные для вставки", slog.String("error", err.Error()))
-		a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorSelectInsertData)
-		return "", fmt.Errorf("%s:%s", op, err)
-	}
-	fmt.Println(ok)
-	// go func() {
-	// 	// Запускаем горутины по переливу данных чанками.
-	// 	// 1. Считаем количество чанков для каждой таблицы
-	// 	// 2. Берем каждый чанк и запускаем его в отдельной горутине
-	// 	// 3. Делаем SELECT и INSERT во временную таблицу каждого чанка пока не разберемся с таблицей
-	// 	// 4. Если упали, то удаляем таблицы и возвращаем ошибку
-	// }()
+	go func() {
+		ok, err := a.prepareAndInsertData(backgroundCtx, &countInsertData, &viewSchema)
+		if err != nil {
+			log.Error("не удалось получить данные для вставки", slog.String("error", err.Error()))
+			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorSelectInsertData)
+			// return "", fmt.Errorf("%s:%s", op, err)
+		}
+		fmt.Println(ok)
+	}()
+
 	log.Info("количество записей в таблице -", slog.Any("slice", countInsertData))
 	return taskID, nil
 
