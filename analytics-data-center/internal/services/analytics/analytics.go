@@ -34,6 +34,11 @@ const (
 	ErrorSelectInsertData    = "Не удалось получить данный для вставки"
 )
 
+type TaskETL struct {
+	ViewID int64
+	TaskID string
+}
+
 type AnalyticsDataCenterService struct {
 	log            *slog.Logger
 	SchemaProvider storage.SysDB
@@ -42,6 +47,7 @@ type AnalyticsDataCenterService struct {
 	OLTPFactory    storage.OLTPFactory
 	DWHDbName      string
 	OLTPDbName     string
+	jobQueue       chan TaskETL
 }
 
 type TaskService interface {
@@ -60,7 +66,7 @@ func New(
 	OLTPDbName string,
 
 ) *AnalyticsDataCenterService {
-	return &AnalyticsDataCenterService{
+	service := &AnalyticsDataCenterService{
 		log:            log,
 		SchemaProvider: schemaProvider,
 		TaskService:    taskService,
@@ -68,10 +74,46 @@ func New(
 		OLTPFactory:    OLTPFactory,
 		DWHDbName:      DWHDbName,
 		OLTPDbName:     OLTPDbName,
+		jobQueue:       make(chan TaskETL, 100),
 	}
+	go service.etlWorker()
+	return service
 }
 
 func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView int64) (taskID string, err error) {
+	taskID = uuid.NewString()
+
+	err = a.TaskService.CreateTask(ctx, taskID, Progress)
+	if err != nil {
+		return "", err
+	}
+
+	a.jobQueue <- TaskETL{
+		TaskID: taskID,
+		ViewID: idView,
+	}
+	return taskID, nil
+
+}
+
+func (a *AnalyticsDataCenterService) etlWorker() {
+	for job := range a.jobQueue {
+		log := a.log.With(
+			slog.String("task", job.TaskID),
+			slog.String("component", "ETLWorker"),
+		)
+		log.Info("Начало обработки задачи")
+
+		ctx := context.Background()
+		err := a.runETL(ctx, job.ViewID, job.TaskID)
+		if err != nil {
+			log.Error("Ошибка при выполнении ETL", slog.String("error", err.Error()))
+			a.TaskService.ChangeStatusTask(ctx, job.TaskID, Error, err.Error())
+		}
+	}
+}
+
+func (a *AnalyticsDataCenterService) runETL(ctx context.Context, idView int64, taskID string) error {
 	const op = "analytics.StartETLProcess"
 	var queriesInit models.Queries
 	var tempTables []string
@@ -80,19 +122,17 @@ func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView
 		slog.Int64("idSchema", idView),
 	)
 	log.Info("ETL start")
-	taskID = uuid.NewString()
-	a.TaskService.CreateTask(ctx, taskID, Progress)
 	viewSchema, err := a.SchemaProvider.GetView(ctx, idView)
 	if err != nil {
 		if errors.Is(err, storage.ErrSchemaNotFound) {
 			a.log.Warn("view not found", slog.String("error", err.Error()))
 			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorCreateTemplateTable)
-			return "", fmt.Errorf("%s:%s", op, ErrInvalidSchemID)
+			return fmt.Errorf("%s:%s", op, ErrInvalidSchemID)
 
 		}
 		a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorCreateTemplateTable)
 		a.log.Warn("view not found", slog.String("error", err.Error()))
-		return "", fmt.Errorf("%s:%s", op, err)
+		return fmt.Errorf("%s:%s", op, err)
 	}
 	if a.OLTPDbName == DbPostgres {
 		// Переделать на вызов вспомогательной функции, здесь должен быть чистый код без условий
@@ -100,7 +140,7 @@ func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView
 		if err != nil {
 			log.Error("не удалось сгенерировать запросы генератором SQL", slog.String("error", err.Error()))
 			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorCreateTemplateTable)
-			return "", fmt.Errorf("%s:%s", op, err)
+			return fmt.Errorf("%s:%s", op, err)
 		}
 
 		queriesInit = queries
@@ -119,14 +159,14 @@ func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView
 	if err != nil {
 		log.Error("не удалось создать временные таблицы", slog.String("error", err.Error()))
 		a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorCreateTemplateTable)
-		return "", fmt.Errorf("%s:%s", op, err)
+		return fmt.Errorf("%s:%s", op, err)
 	}
 
 	countInsertData, err := a.getCountInsertData(ctx, viewSchema, tempTables)
 	if err != nil {
 		log.Error("не удалось получить количество", slog.String("error", err.Error()))
 		a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorCountInsertData)
-		return "", fmt.Errorf("%s:%s", op, err)
+		return fmt.Errorf("%s:%s", op, err)
 	}
 	backgroundCtx := context.Background() // независимый от вызова клиента
 
@@ -141,6 +181,5 @@ func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView
 	}()
 
 	log.Info("количество записей в таблице -", slog.Any("slice", countInsertData))
-	return taskID, nil
-
+	return nil
 }

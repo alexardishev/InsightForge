@@ -159,7 +159,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 					return
 				}
 
-				log.Info("Запрос готов", slog.String("запрос", queryInsert.Query))
+				log.Info("Запрос готов")
 				err = a.DWHProvider.InsertDataToDWH(ctx, queryInsert.Query)
 				if err != nil {
 					log.Error("ошибка при вставки данных в таблицу", slog.String("error", err.Error()))
