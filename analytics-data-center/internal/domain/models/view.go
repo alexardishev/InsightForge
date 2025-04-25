@@ -21,21 +21,27 @@ type Table struct {
 }
 
 type Column struct {
-	Name        string     `json:"name,omitempty"`
-	Alias       string     `json:"alias,omitempty"`
-	IsUpdateKey bool       `json:"is_update_key,omitempty"`
-	Transform   *Transform `json:"transform,omitempty"`
-	Reference   *Reference `json:"reference,omitempty"`
-	Type        string     `json:"type,omitempty"`
-	IsDeleted   bool       `json:"is_deleted,omitempty"`
-	IsNullable  bool       `json:"is_nullable,omitempty"`
+	Name         string     `json:"name,omitempty"`
+	Alias        string     `json:"alias,omitempty"`
+	IsUpdateKey  bool       `json:"is_update_key,omitempty"`
+	Transform    *Transform `json:"transform,omitempty"`
+	Reference    *Reference `json:"reference,omitempty"`
+	Type         string     `json:"type,omitempty"`
+	IsDeleted    bool       `json:"is_deleted,omitempty"`
+	IsNullable   bool       `json:"is_nullable,omitempty"`
+	IsPrimaryKey bool       `json:"is_primary_key,omitempty"`
 }
 
 type Transform struct {
-	Type         string            `json:"type"`
-	Mode         string            `json:"mode"`
-	OutputColumn string            `json:"output_column"`
-	Mapping      map[string]string `json:"mapping"`
+	Type         string  `json:"type"`
+	Mode         string  `json:"mode"`
+	OutputColumn string  `json:"output_column"`
+	Mapping      Mapping `json:"mapping"`
+}
+
+type Mapping struct {
+	TypeMap string            // либо JSON либо FieldTransform
+	Mapping map[string]string // если тип JSON тогда ключ это Имя поля в JSON, value это наименование колонки во вью и темп таблице
 }
 
 type Reference struct {

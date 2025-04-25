@@ -14,7 +14,7 @@ func GenerateQueryCreateTempTablePostgres(schema *models.View, logger *slog.Logg
 	logger.Info("start operation")
 	var duplicateColumnNames []string
 	var queryObject []models.Query
-
+	var line_primary string
 	for _, source := range schema.Sources {
 		logger.Info("БД", slog.String("database", source.Name))
 		for _, sch := range source.Schemas {
@@ -59,6 +59,10 @@ func GenerateQueryCreateTempTablePostgres(schema *models.View, logger *slog.Logg
 						line = fmt.Sprintf("  %s %s", colName, colType)
 					}
 
+					if col.IsPrimaryKey {
+						line_primary = fmt.Sprintf(" , CONSTRAINT %s_%s_prk PRIMARY KEY (%s)", colName, tableName, colName)
+					}
+
 					if idx < len(tbl.Columns)-1 {
 						line += ","
 					}
@@ -68,13 +72,15 @@ func GenerateQueryCreateTempTablePostgres(schema *models.View, logger *slog.Logg
 						logger.Error("ошибка", slog.String("error", err.Error()))
 						return models.Queries{}, nil, err
 					}
+
 				}
 
-				_, err = b.WriteString(");\n")
+				_, err = b.WriteString(fmt.Sprintf(" %s );\n", line_primary))
 				if err != nil {
 					logger.Error("ошибка", slog.String("error", err.Error()))
 					return models.Queries{}, nil, err
 				}
+				line_primary = ""
 				querySt := &models.Query{
 					TableName: tableName,
 					Query:     b.String(),

@@ -13,7 +13,7 @@ func GenerateSelectInsertDataQuery(view models.View, start int64, end int64, tab
 	logger = logger.With(slog.String("op", op))
 	logger.Info("start operation")
 	var b strings.Builder
-
+	var primaryColumn string
 	for _, source := range view.Sources {
 		for _, sch := range source.Schemas {
 			for _, tbl := range sch.Tables {
@@ -29,18 +29,37 @@ func GenerateSelectInsertDataQuery(view models.View, start int64, end int64, tab
 					}
 					used[column.Name] = true
 					columns = append(columns, column.Name)
+					if column.IsPrimaryKey && primaryColumn == "" {
+						primaryColumn = column.Name
+					}
 
 				}
-				// Generate query string
-				_, err := b.WriteString(fmt.Sprintf("SELECT %s FROM %s OFFSET %d LIMIT %d",
-					strings.Join(columns, ", "),
-					tableName,
-					start,
-					end-start,
-				))
-				if err != nil {
-					logger.Error("ошибка", slog.String("error", err.Error()))
-					return models.Query{}, err
+
+				if primaryColumn != "" {
+					_, err := b.WriteString(fmt.Sprintf("SELECT %s FROM %s ORDER BY %s OFFSET %d LIMIT %d",
+						strings.Join(columns, ", "),
+						tableName,
+						primaryColumn,
+						start,
+						end-start,
+					))
+					if err != nil {
+						logger.Error("ошибка", slog.String("error", err.Error()))
+						return models.Query{}, err
+					}
+
+				} else {
+					// Generate query string
+					_, err := b.WriteString(fmt.Sprintf("SELECT %s FROM %s OFFSET %d LIMIT %d",
+						strings.Join(columns, ", "),
+						tableName,
+						start,
+						end-start,
+					))
+					if err != nil {
+						logger.Error("ошибка", slog.String("error", err.Error()))
+						return models.Query{}, err
+					}
 				}
 
 				return models.Query{
