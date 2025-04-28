@@ -35,12 +35,43 @@ func GenerateQueryCreateTempTablePostgres(schema *models.View, logger *slog.Logg
 					return models.Queries{}, nil, err
 				}
 
+				for _, clmn := range tbl.Columns {
+					if clmn.Transform == nil {
+						continue
+					}
+					if clmn.Transform.Type == "JSON" {
+						logger.Info("Начинаю работу с JSON трансформацией")
+						mapping := clmn.Transform.Mapping.MappingJSON
+						for _, colmnMappingRow := range mapping {
+							for _, value := range colmnMappingRow.Mapping {
+
+								colName := value
+								typeClm := colmnMappingRow.TypeField
+								column := &models.Column{
+									Name:       colName,
+									Type:       typeClm,
+									IsNullable: true,
+								}
+								logger.Info("Колонка найдена для трансформации",
+									slog.String("name", column.Name),
+									slog.String("type", column.Type),
+									slog.Bool("is_nullable", column.IsNullable),
+								)
+
+								tbl.Columns = append(tbl.Columns, *column)
+							}
+
+						}
+
+					}
+				}
+
 				cleanList, duplicateList := duplicate.RemoveDuplicateColumns(tbl.Columns)
 				if len(duplicateList) > 0 {
 					logger.Warn("duplicate", slog.Any("Дублирующие имена колонок", duplicateList), slog.Any("в таблице", tbl.Name))
 					duplicateColumnNames = append(duplicateColumnNames, duplicateList...)
 				}
-
+				logger.Info("Массив Колонок", cleanList)
 				for idx, col := range cleanList {
 					colName := col.Alias
 					if colName == "" {

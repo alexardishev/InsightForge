@@ -33,15 +33,21 @@ type Column struct {
 }
 
 type Transform struct {
-	Type         string  `json:"type"`
-	Mode         string  `json:"mode"`
-	OutputColumn string  `json:"output_column"`
-	Mapping      Mapping `json:"mapping"`
+	Type         string   `json:"type"`
+	Mode         string   `json:"mode"`
+	OutputColumn string   `json:"output_column"`
+	Mapping      *Mapping `json:"mapping"`
 }
 
 type Mapping struct {
-	TypeMap string            // либо JSON либо FieldTransform
-	Mapping map[string]string // если тип JSON тогда ключ это Имя поля в JSON, value это наименование колонки во вью и темп таблице
+	TypeMap     string            `json:"type_map,omitempty"` // либо JSON либо FieldTransform
+	Mapping     map[string]string `json:"mapping,omitempty"`
+	MappingJSON []MappingJSON     `json:"mapping_json,omitempty"`
+}
+
+type MappingJSON struct {
+	Mapping   map[string]string `json:"mapping,omitempty"` // если тип JSON тогда ключ это Имя поля в JSON, value это наименование колонки во вью и темп таблице
+	TypeField string            `json:"type_field,omitempty"`
 }
 
 type Reference struct {

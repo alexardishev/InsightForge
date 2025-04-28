@@ -30,16 +30,35 @@ func GeneratetInsertDataQuery(view models.View, selectData []map[string]interfac
 		availableColumns[col] = struct{}{}
 	}
 
+	logger.Info("ДАТА ДЛЯ ВСТАВКИ", slog.Any("Нулевой элемент", selectData[0]))
+
+	columnNames := make(map[string]string) // имя поля -> тип поля
 	for _, src := range view.Sources {
 		for _, sch := range src.Schemas {
 			for _, tbl := range sch.Tables {
 				for _, clmn := range tbl.Columns {
-					if _, ok := availableColumns[clmn.Name]; ok {
-						logger.Info("Колонка добавлена", slog.String("name", clmn.Name))
-						columns = append(columns, clmn.Name)
+					if clmn.Transform != nil && clmn.Transform.Type == "JSON" && clmn.Transform.Mapping != nil {
+						logger.Info("Начинаю работу с JSON трансформацией")
+						for _, mapping := range clmn.Transform.Mapping.MappingJSON {
+							for _, outputCol := range mapping.Mapping {
+								columnNames[outputCol] = mapping.TypeField
+							}
+						}
+						columnNames[clmn.Name] = clmn.Type
+
+					} else {
+						columnNames[clmn.Name] = clmn.Type
 					}
 				}
 			}
+		}
+	}
+
+	// Теперь только добавляем в список те колонки, которые реально есть в данных
+	for colName := range columnNames {
+		if _, ok := availableColumns[colName]; ok {
+			logger.Info("Колонка добавлена", slog.String("name", colName))
+			columns = append(columns, colName)
 		}
 	}
 
