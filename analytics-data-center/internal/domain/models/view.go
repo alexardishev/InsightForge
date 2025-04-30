@@ -40,9 +40,11 @@ type Transform struct {
 }
 
 type Mapping struct {
-	TypeMap     string            `json:"type_map,omitempty"` // либо JSON либо FieldTransform
-	Mapping     map[string]string `json:"mapping,omitempty"`
-	MappingJSON []MappingJSON     `json:"mapping_json,omitempty"`
+	TypeMap                 string            `json:"type_map,omitempty"` // либо JSON либо FieldTransform
+	Mapping                 map[string]string `json:"mapping,omitempty"`  // ключ это значение в БД, значение это трансформированное значение
+	AliasNewColumnTransform string            `json:"alias_new_column_transform,omitempty"`
+	TypeField               string            `json:"type_field,omitempty"` // тип поля трансформации
+	MappingJSON             []MappingJSON     `json:"mapping_json,omitempty"`
 }
 
 type MappingJSON struct {

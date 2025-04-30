@@ -71,7 +71,7 @@ func GenerateQueryCreateTempTablePostgres(schema *models.View, logger *slog.Logg
 					logger.Warn("duplicate", slog.Any("Дублирующие имена колонок", duplicateList), slog.Any("в таблице", tbl.Name))
 					duplicateColumnNames = append(duplicateColumnNames, duplicateList...)
 				}
-				logger.Info("Массив Колонок", cleanList)
+				logger.Info("Массив Колонок", slog.Any("Колонки", cleanList))
 				for idx, col := range cleanList {
 					colName := col.Alias
 					if colName == "" {

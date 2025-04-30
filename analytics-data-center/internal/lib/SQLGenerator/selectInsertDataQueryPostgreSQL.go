@@ -8,6 +8,11 @@ import (
 	"strings"
 )
 
+const (
+	transformTypeJSON           = "JSON"
+	transformTypeFieldTransform = "FieldTransform"
+)
+
 func GenerateSelectInsertDataQuery(view models.View, start int64, end int64, tableName string, logger *slog.Logger) (query models.Query, err error) {
 	const op = "sqlgenerator.GenerateSelectInsertDataQuery"
 	logger = logger.With(slog.String("op", op))
@@ -34,7 +39,7 @@ func GenerateSelectInsertDataQuery(view models.View, start int64, end int64, tab
 					used[column.Name] = true
 
 					// Если колонка с JSON-трансформацией
-					if column.Transform != nil && column.Transform.Type == "JSON" && column.Transform.Mapping != nil {
+					if column.Transform != nil && column.Transform.Type == transformTypeJSON && column.Transform.Mapping != nil {
 						logger.Info("Обработка трансформации JSON", slog.String("column", column.Name))
 
 						for _, mapping := range column.Transform.Mapping.MappingJSON {
@@ -48,7 +53,27 @@ func GenerateSelectInsertDataQuery(view models.View, start int64, end int64, tab
 						// Просто обычная колонка
 						columns = append(columns, column.Name)
 					}
+					if column.Transform != nil && column.Transform.Type == transformTypeFieldTransform && column.Transform.Mapping != nil {
+						logger.Info("Обработка трансформации transformTypeFieldTransform", slog.String("column", column.Name))
+						mapping := column.Transform.Mapping
+						var a strings.Builder
+						a.WriteString("CASE ")
+						for key, value := range mapping.Mapping {
+							safeKey := strings.ReplaceAll(key, "'", "''")
+							safeValue := strings.ReplaceAll(value, "'", "''")
+							a.WriteString(fmt.Sprintf("WHEN %s = '%s' THEN '%s'", column.Name, safeKey, safeValue))
+							a.WriteString(" ")
+						}
+						alias := mapping.AliasNewColumnTransform
 
+						if alias == "" {
+							alias = column.Name + "_transformed"
+						}
+						a.WriteString(fmt.Sprintf("END as %s", alias))
+						columnsCase := a.String()
+						columns = append(columns, columnsCase)
+
+					}
 					if column.IsPrimaryKey && primaryColumn == "" {
 						primaryColumn = column.Name
 					}

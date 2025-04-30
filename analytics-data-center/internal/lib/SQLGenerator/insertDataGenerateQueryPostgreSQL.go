@@ -32,7 +32,7 @@ func GeneratetInsertDataQuery(view models.View, selectData []map[string]interfac
 
 	logger.Info("ДАТА ДЛЯ ВСТАВКИ", slog.Any("Нулевой элемент", selectData[0]))
 
-	columnNames := make(map[string]string) // имя поля -> тип поля
+	columnNames := make(map[string]struct{}) // имя поля -> тип поля
 	for _, src := range view.Sources {
 		for _, sch := range src.Schemas {
 			for _, tbl := range sch.Tables {
@@ -41,13 +41,13 @@ func GeneratetInsertDataQuery(view models.View, selectData []map[string]interfac
 						logger.Info("Начинаю работу с JSON трансформацией")
 						for _, mapping := range clmn.Transform.Mapping.MappingJSON {
 							for _, outputCol := range mapping.Mapping {
-								columnNames[outputCol] = mapping.TypeField
+								columnNames[outputCol] = struct{}{}
 							}
 						}
-						columnNames[clmn.Name] = clmn.Type
+						columnNames[clmn.Name] = struct{}{}
 
 					} else {
-						columnNames[clmn.Name] = clmn.Type
+						columnNames[clmn.Name] = struct{}{}
 					}
 				}
 			}
