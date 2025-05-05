@@ -37,7 +37,7 @@ func GeneratetInsertDataQuery(view models.View, selectData []map[string]interfac
 		for _, sch := range src.Schemas {
 			for _, tbl := range sch.Tables {
 				for _, clmn := range tbl.Columns {
-					if clmn.Transform != nil && clmn.Transform.Type == "JSON" && clmn.Transform.Mapping != nil {
+					if clmn.Transform != nil && clmn.Transform.Type == transformTypeJSON && clmn.Transform.Mapping != nil {
 						logger.Info("Начинаю работу с JSON трансформацией")
 						for _, mapping := range clmn.Transform.Mapping.MappingJSON {
 							for _, outputCol := range mapping.Mapping {
@@ -49,6 +49,17 @@ func GeneratetInsertDataQuery(view models.View, selectData []map[string]interfac
 					} else {
 						columnNames[clmn.Name] = struct{}{}
 					}
+					if clmn.Transform != nil && clmn.Transform.Type == transformTypeFieldTransform && clmn.Transform.Mapping != nil {
+						logger.Info("Начинаю работу с transformTypeFieldTransform трансформацией")
+						mapping := clmn.Transform.Mapping
+						columnNames[mapping.AliasNewColumnTransform] = struct{}{}
+						columnNames[clmn.Name] = struct{}{}
+
+					} else {
+						columnNames[clmn.Name] = struct{}{}
+
+					}
+
 				}
 			}
 		}

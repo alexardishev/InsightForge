@@ -39,7 +39,7 @@ func GenerateQueryCreateTempTablePostgres(schema *models.View, logger *slog.Logg
 					if clmn.Transform == nil {
 						continue
 					}
-					if clmn.Transform.Type == "JSON" {
+					if clmn.Transform.Type == transformTypeJSON {
 						logger.Info("Начинаю работу с JSON трансформацией")
 						mapping := clmn.Transform.Mapping.MappingJSON
 						for _, colmnMappingRow := range mapping {
@@ -63,6 +63,17 @@ func GenerateQueryCreateTempTablePostgres(schema *models.View, logger *slog.Logg
 
 						}
 
+					}
+
+					if clmn.Transform.Type == transformTypeFieldTransform {
+						logger.Info("Начинаю работу с transformTypeFieldTransform трансформацией")
+						mapping := clmn.Transform.Mapping
+						colName := mapping.AliasNewColumnTransform
+						column := &models.Column{
+							Name:       colName,
+							IsNullable: true,
+						}
+						tbl.Columns = append(tbl.Columns, *column)
 					}
 				}
 
