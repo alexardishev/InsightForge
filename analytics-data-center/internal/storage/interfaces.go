@@ -40,10 +40,10 @@ type TableProvider interface {
 
 type DataProviderDWH interface {
 	InsertDataToDWH(ctx context.Context, query string) error
+	GetColumnsTempTables(ctx context.Context, schemaName string, tempTableName string) ([]string, error)
 }
 
 type DataProviderOLTP interface {
 	GetCountInsertData(ctx context.Context, query string) (int64, error)                    // count of insert datas
 	SelectDataToInsert(ctx context.Context, query string) ([]map[string]interface{}, error) // select data to insert
-	// InsertDataToTempTable(ctx context.Context, query string) (bool, error) // insert data to temp table
 }

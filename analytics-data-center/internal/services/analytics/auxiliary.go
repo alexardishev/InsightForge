@@ -4,6 +4,7 @@ import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
 	sqlgenerator "analyticDataCenter/analytics-data-center/internal/lib/SQLGenerator"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"runtime"
@@ -52,6 +53,7 @@ func (a *AnalyticsDataCenterService) getCountInsertData(ctx context.Context, vie
 	log := a.log.With(
 		slog.String("op", op),
 	)
+
 	queries, err := sqlgenerator.GenerateCountQueries(viewSchema, log)
 	if err != nil {
 		log.Info("ошибка генерации запроса", slog.String("error", err.Error()))
@@ -97,6 +99,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 	log := a.log.With(
 		slog.String("op", op),
 	)
+	var tempTbl []string
 	var wg sync.WaitGroup
 	var hasError bool
 	var mu sync.Mutex
@@ -104,7 +107,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 
 	for _, tempTableInsert := range *countData {
 		log.Info("запуск вставки и подготовки данных", slog.String("Таблица", tempTableInsert.TableName))
-
+		tempTbl = append(tempTbl, tempTableInsert.TempTableName)
 		oltpStorage, err := a.OLTPFactory.GetOLTPStorage(ctx, tempTableInsert.DataBaseName)
 		if err != nil {
 			log.Error("Невозможно подключиться к OLTP хранилищу", slog.String("error", err.Error()))
@@ -180,6 +183,14 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 	if hasError {
 		return false, fmt.Errorf("одна или несколько горутин завершились с ошибкой")
 	}
+	// TO DO сделать возможность указывать схему гибко через YAML
+	viewJoin, err := a.prepareViewJoin(ctx, tempTbl, "public")
+	if err != nil {
+		log.Error("Ошибка", slog.String("error", err.Error()))
+		return false, err
+	}
+	logSt, _ := json.MarshalIndent(viewJoin, "", "  ")
+	log.Info("Вьюха", slog.Any("вьюхи", string(logSt)))
 	return true, nil
 }
 
@@ -196,4 +207,40 @@ func (a *AnalyticsDataCenterService) calculateWorkerCount(totalCount int64) int6
 	default:
 		return 1
 	}
+}
+
+func (a *AnalyticsDataCenterService) prepareViewJoin(ctx context.Context, tempTbl []string, schemaName string) (viewJoins *models.ViewJoinTable, err error) {
+	const op = "analytics.prepareViewJoin"
+	log := a.log.With(
+		slog.String("op", op),
+	)
+
+	var tablesTemp []models.TempTable
+
+	for _, tempTable := range tempTbl {
+		columnsTempTables, err := a.DWHProvider.GetColumnsTempTables(ctx, schemaName, tempTable)
+		if err != nil {
+			log.Error("Невозможно получить колонки для временных таблиц", slog.String("error", err.Error()))
+			return nil, err
+		}
+		var columnsTemp []models.TempColumn
+
+		for _, col := range columnsTempTables {
+			columnsTemp = append(columnsTemp, models.TempColumn{
+				ColumnName: col,
+			})
+		}
+
+		tempTables := &models.TempTable{
+			TempTableName: tempTable,
+			TempColumns:   columnsTemp,
+		}
+		tablesTemp = append(tablesTemp, *tempTables)
+	}
+
+	viewJoin := &models.ViewJoinTable{
+		TempTables: tablesTemp,
+	}
+	return viewJoin, nil
+
 }

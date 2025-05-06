@@ -60,3 +60,35 @@ func (p *PostgresDWH) DeleteTempTable(ctx context.Context, tableName string) err
 	}
 	return nil
 }
+func (p *PostgresDWH) GetColumnsTempTables(ctx context.Context, schemaName string, tempTableName string) ([]string, error) {
+	const op = "Storage.PostgreSQL.GetColumnsTempTables"
+	var columns []string
+	log := p.Log.With(
+		slog.String("op", op),
+	)
+
+	query := "SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 ORDER BY ordinal_position"
+	rows, err := p.Db.QueryContext(ctx, query, schemaName, tempTableName)
+	if err != nil {
+		log.Error("Запросвыполнен с ошибкой", slog.String("error", err.Error()))
+		return columns, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var row string
+		err = rows.Scan(&row)
+		if err != nil {
+			log.Error("Запросвыполнен с ошибкой", slog.String("error", err.Error()))
+			return columns, err
+		}
+		columns = append(columns, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Error("ошибка при проходе по строкам", slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	return columns, nil
+}
