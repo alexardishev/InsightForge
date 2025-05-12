@@ -16,10 +16,7 @@ func GenerateQueryCreateTempTablePostgres(schema *models.View, logger *slog.Logg
 	var queryObject []models.Query
 	var line_primary string
 	for _, source := range schema.Sources {
-		logger.Info("БД", slog.String("database", source.Name))
 		for _, sch := range source.Schemas {
-			logger.Info("Schemas", slog.String("Schemas", sch.Name))
-
 			for _, tbl := range sch.Tables {
 				logger.Info("Tables", slog.String("Tables", tbl.Name))
 

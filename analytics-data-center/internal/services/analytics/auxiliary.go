@@ -4,7 +4,6 @@ import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
 	sqlgenerator "analyticDataCenter/analytics-data-center/internal/lib/SQLGenerator"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"runtime"
@@ -189,8 +188,14 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 		log.Error("Ошибка", slog.String("error", err.Error()))
 		return false, err
 	}
-	logSt, _ := json.MarshalIndent(viewJoin, "", "  ")
-	log.Info("Вьюха", slog.Any("вьюхи", string(logSt)))
+	query, err := sqlgenerator.CreateViewQuery(*viewSchema, *viewJoin, log)
+	if err != nil {
+		log.Error("Ошибка", slog.String("error", err.Error()))
+		return false, err
+	}
+
+	a.DWHProvider.MergeTempTables(ctx, query.Query)
+
 	return true, nil
 }
 

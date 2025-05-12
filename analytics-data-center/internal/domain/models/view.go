@@ -3,7 +3,7 @@ package models
 type View struct {
 	Name    string   `json:"view_name"`
 	Sources []Source `json:"sources"`
-	Joins   []Join   `json:"joins"`
+	Joins   []*Join  `json:"joins"`
 }
 type Source struct {
 	Name    string   `json:"name"`
@@ -60,13 +60,16 @@ type Reference struct {
 }
 
 type Join struct {
-	Left  JoinSide `json:"left"`
-	Right JoinSide `json:"right"`
+	Inner *JoinSide `json:"inner"`
+	// TO DO сделать другие джоины потом
+	// Left  JoinSide `json:"left"`
+	// Right JoinSide `json:"right"`
 }
 
 type JoinSide struct {
-	Source string `json:"source"`
-	Schema string `json:"schema"`
-	Table  string `json:"table"`
-	Column string `json:"column"`
+	Source       string `json:"source,omitempty"`
+	Schema       string `json:"schema,omitempty"`
+	Table        string `json:"table,omitempty"`
+	ColumnFirst  string `json:"column_first,omitempty"`
+	ColumnSecond string `json:"column_second,omitempty"`
 }

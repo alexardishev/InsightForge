@@ -41,6 +41,7 @@ type TableProvider interface {
 type DataProviderDWH interface {
 	InsertDataToDWH(ctx context.Context, query string) error
 	GetColumnsTempTables(ctx context.Context, schemaName string, tempTableName string) ([]string, error)
+	MergeTempTables(ctx context.Context, query string) error
 }
 
 type DataProviderOLTP interface {
