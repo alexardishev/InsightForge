@@ -36,6 +36,7 @@ type TaskProvider interface {
 type TableProvider interface {
 	CreateTempTable(ctx context.Context, query string, tempTableName string) error
 	DeleteTempTable(ctx context.Context, tableName string) error
+	CreateIndex(ctx context.Context, query string) error
 }
 
 type DataProviderDWH interface {
@@ -47,4 +48,6 @@ type DataProviderDWH interface {
 type DataProviderOLTP interface {
 	GetCountInsertData(ctx context.Context, query string) (int64, error)                    // count of insert datas
 	SelectDataToInsert(ctx context.Context, query string) ([]map[string]interface{}, error) // select data to insert
+	GetIndexes(ctx context.Context, tableName string, schemaName string) (models.Indexes, error)
+	// GetConstraint(ctx context.Context, tableName string) (string, error)
 }

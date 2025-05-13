@@ -3,12 +3,22 @@ package serviceanalytics
 import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
 	sqlgenerator "analyticDataCenter/analytics-data-center/internal/lib/SQLGenerator"
+	"analyticDataCenter/analytics-data-center/internal/storage"
 	"context"
 	"fmt"
 	"log/slog"
 	"runtime"
 	"sync"
 )
+
+type IndexTransfer struct {
+	IndexTransfer models.IndexTransferTable
+	storage       storage.OLTPDB
+}
+
+type IndexTransfers struct {
+	IndexTransfers []IndexTransfer
+}
 
 func (a *AnalyticsDataCenterService) createTempTables(ctx context.Context, quries models.Queries) error {
 	const op = "analytics.createTempTables"
@@ -180,22 +190,25 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 	wg.Wait()
 
 	if hasError {
+		a.DeleteTempTables(ctx, tempTbl)
 		return false, fmt.Errorf("одна или несколько горутин завершились с ошибкой")
 	}
 	// TO DO сделать возможность указывать схему гибко через YAML
 	viewJoin, err := a.prepareViewJoin(ctx, tempTbl, "public")
 	if err != nil {
+		a.DeleteTempTables(ctx, tempTbl)
 		log.Error("Ошибка", slog.String("error", err.Error()))
 		return false, err
 	}
 	query, err := sqlgenerator.CreateViewQuery(*viewSchema, *viewJoin, log)
 	if err != nil {
+		a.DeleteTempTables(ctx, tempTbl)
 		log.Error("Ошибка", slog.String("error", err.Error()))
 		return false, err
 	}
 
 	a.DWHProvider.MergeTempTables(ctx, query.Query)
-
+	a.DeleteTempTables(ctx, tempTbl)
 	return true, nil
 }
 
@@ -248,4 +261,76 @@ func (a *AnalyticsDataCenterService) prepareViewJoin(ctx context.Context, tempTb
 	}
 	return viewJoin, nil
 
+}
+
+func (a *AnalyticsDataCenterService) DeleteTempTables(ctx context.Context, tempTbl []string) error {
+	const op = "analytics.DeleteTempTables"
+	log := a.log.With(
+		slog.String("op", op),
+	)
+	for _, temp := range tempTbl {
+		err := a.DWHProvider.DeleteTempTable(ctx, temp)
+		if err != nil {
+			log.Error("Невозможно удалить таблицу", slog.String("error", err.Error()))
+			return err
+		}
+	}
+	return nil
+
+}
+
+func (a *AnalyticsDataCenterService) transferIndixesAndConstraint(ctx context.Context, viewSchema *models.View) error {
+	const op = "analytics.transferIndicesAndConstraint"
+	log := a.log.With(
+		slog.String("op", op),
+	)
+	var OLTPSourceName []string
+	var indexTransfers IndexTransfers
+	for _, src := range viewSchema.Sources {
+		storage, err := a.OLTPFactory.GetOLTPStorage(ctx, src.Name)
+		if err != nil {
+			log.Error("Невозможно получить хранилище OLTP", slog.String("error", err.Error()))
+			return err
+		}
+		OLTPSourceName = append(OLTPSourceName, src.Name)
+		for _, sch := range src.Schemas {
+			for _, tbl := range sch.Tables {
+				indexTransfer := &IndexTransfer{
+					IndexTransfer: models.IndexTransferTable{
+						TableName:  tbl.Name,
+						SourceName: src.Name,
+						SchemaName: sch.Name,
+					},
+					storage: storage,
+				}
+				indexTransfers.IndexTransfers = append(indexTransfers.IndexTransfers, *indexTransfer)
+			}
+
+		}
+	}
+
+	for _, transferTable := range indexTransfers.IndexTransfers {
+		storage := transferTable.storage
+		indexes, err := storage.GetIndexes(ctx, transferTable.IndexTransfer.TableName, transferTable.IndexTransfer.SchemaName)
+		if err != nil {
+			log.Error("Невозможно получить индексы таблиц", slog.String("error", err.Error()))
+			return err
+		}
+		for _, index := range indexes.Indexes {
+			query, err := sqlgenerator.TransformIndexDefToSQLExpression(index, transferTable.IndexTransfer.SchemaName, transferTable.
+				// TO DO инжектировать в сервис DWH схему, если она нужна через config
+				IndexTransfer.TableName, "public", viewSchema.Name, a.log)
+			log.Info("Вот запрос на создание индекса в новой таблице", slog.String("query", query))
+			if err != nil {
+				log.Error("Невозможно сформировать запрос на создание индексов", slog.String("error", err.Error()))
+				return err
+			}
+			err = a.DWHProvider.CreateIndex(ctx, query)
+			if err != nil {
+				return err
+			}
+		}
+
+	}
+	return nil
 }

@@ -177,6 +177,13 @@ func (a *AnalyticsDataCenterService) runETL(ctx context.Context, idView int64, t
 			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorSelectInsertData)
 			// return "", fmt.Errorf("%s:%s", op, err)
 		}
+
+		err = a.transferIndixesAndConstraint(ctx, &viewSchema)
+		if err != nil {
+			log.Error("не удалось перенести индексы", slog.String("error", err.Error()))
+			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorSelectInsertData)
+			// return "", fmt.Errorf("%s:%s", op, err)
+		}
 		fmt.Println(ok)
 	}()
 

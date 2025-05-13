@@ -92,3 +92,17 @@ func (p *PostgresDWH) GetColumnsTempTables(ctx context.Context, schemaName strin
 
 	return columns, nil
 }
+
+func (p *PostgresDWH) CreateIndex(ctx context.Context, query string) error {
+	const op = "Storage.PostgreSQL.CreateIndex"
+	log := p.Log.With(
+		slog.String("op", op),
+	)
+	_, err := p.Db.ExecContext(ctx, query)
+	if err != nil {
+		log.Error("ошибка создания индексов", slog.String("error", err.Error()))
+		return err
+	}
+	return nil
+
+}

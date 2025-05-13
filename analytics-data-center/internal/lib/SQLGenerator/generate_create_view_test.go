@@ -118,7 +118,7 @@ func TestCreateViewQuery_WithJoins(t *testing.T) {
 		},
 	}
 
-	result, err := sqlgenerator.CreateViewQuery1(schema, viewJoin, logger)
+	result, err := sqlgenerator.CreateViewQuery(schema, viewJoin, logger)
 	t.Logf(result.Query)
 	if err != nil {
 		t.Fatalf("error generating view query: %v", err)
