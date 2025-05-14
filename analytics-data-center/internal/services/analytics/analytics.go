@@ -32,6 +32,7 @@ const (
 	ErrorCreateTemplateTable = "Не удалось создать временные таблицы"
 	ErrorCountInsertData     = "Не удалось посчитать количество вставляемых данных"
 	ErrorSelectInsertData    = "Не удалось получить данный для вставки"
+	CompletedTask            = "Задача завершена успешно"
 )
 
 type TaskETL struct {
@@ -188,5 +189,6 @@ func (a *AnalyticsDataCenterService) runETL(ctx context.Context, idView int64, t
 	}()
 
 	log.Info("количество записей в таблице -", slog.Any("slice", countInsertData))
+	a.TaskService.ChangeStatusTask(ctx, taskID, Completed, CompletedTask)
 	return nil
 }

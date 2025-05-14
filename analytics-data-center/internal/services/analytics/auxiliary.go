@@ -316,11 +316,23 @@ func (a *AnalyticsDataCenterService) transferIndixesAndConstraint(ctx context.Co
 			log.Error("Невозможно получить индексы таблиц", slog.String("error", err.Error()))
 			return err
 		}
+		constraints, err := storage.GetConstraint(ctx, transferTable.IndexTransfer.TableName, transferTable.IndexTransfer.SchemaName)
+		if err != nil {
+			log.Error("Невозможно получить ограничения таблиц", slog.String("error", err.Error()))
+			return err
+		}
+
+		for _, constraint := range constraints.Constraints {
+			query := sqlgenerator.TransformConstraintToExpression(constraint, "public", viewSchema.Name, a.log)
+			err = a.DWHProvider.CreateConstraint(ctx, query)
+			if err != nil {
+				return err
+			}
+		}
 		for _, index := range indexes.Indexes {
-			query, err := sqlgenerator.TransformIndexDefToSQLExpression(index, transferTable.IndexTransfer.SchemaName, transferTable.
-				// TO DO инжектировать в сервис DWH схему, если она нужна через config
-				IndexTransfer.TableName, "public", viewSchema.Name, a.log)
-			log.Info("Вот запрос на создание индекса в новой таблице", slog.String("query", query))
+			// TO DO инжектировать в сервис DWH схему, если она нужна через config
+			query, err := sqlgenerator.TransformIndexDefToSQLExpression(index, transferTable.IndexTransfer.SchemaName, transferTable.IndexTransfer.TableName, "public", viewSchema.Name, a.log)
+			// log.Info("Вот запрос на создание индекса в новой таблице", slog.String("query", query))
 			if err != nil {
 				log.Error("Невозможно сформировать запрос на создание индексов", slog.String("error", err.Error()))
 				return err
@@ -330,7 +342,6 @@ func (a *AnalyticsDataCenterService) transferIndixesAndConstraint(ctx context.Co
 				return err
 			}
 		}
-
 	}
 	return nil
 }

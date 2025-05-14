@@ -106,3 +106,17 @@ func (p *PostgresDWH) CreateIndex(ctx context.Context, query string) error {
 	return nil
 
 }
+
+func (p *PostgresDWH) CreateConstraint(ctx context.Context, query string) error {
+	const op = "Storage.PostgreSQL.CreateConstraint"
+	log := p.Log.With(
+		slog.String("op", op),
+	)
+	_, err := p.Db.ExecContext(ctx, query)
+	if err != nil {
+		log.Error("ошибка создания ограничений", slog.String("error", err.Error()))
+		return err
+	}
+	return nil
+
+}

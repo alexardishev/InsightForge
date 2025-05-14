@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func TransformIndexDefToSQLExpression(indexExpression models.Index, schemaFrom, tableFrom, schemaTo, tableTo string, logger *slog.Logger) (string, error) {
+func TransformIndexDefToSQLExpression(indexExpression models.Index, schemaFrom string, tableFrom string, schemaTo string, tableTo string, logger *slog.Logger) (string, error) {
 	const op = "analytics.transformIndexDefToSQLExpression"
 	logger = logger.With(slog.String("op", op))
 	logger.Info("start operation")
