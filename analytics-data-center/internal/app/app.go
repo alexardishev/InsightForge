@@ -3,6 +3,7 @@ package app
 import (
 	grpcapp "analyticDataCenter/analytics-data-center/internal/app/grpc"
 	"analyticDataCenter/analytics-data-center/internal/config"
+	"analyticDataCenter/analytics-data-center/internal/kafkaengine"
 	serviceanalytics "analyticDataCenter/analytics-data-center/internal/services/analytics"
 	tasksserivce "analyticDataCenter/analytics-data-center/internal/services/tasks"
 	"analyticDataCenter/analytics-data-center/internal/storage"
@@ -11,6 +12,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	_ "github.com/lib/pq"
 )
 
@@ -22,11 +24,12 @@ const (
 type App struct {
 	GRPCSrv     *grpcapp.App
 	OLTPFactory *storage.InstanceOLTPFactory
+	Kafka       *kafka.Consumer
 }
 
 func New(log *slog.Logger, grpcPort int,
 	storagePath string, connectionStringOLTP string, connectionStringDWH string, OLTPName string, DWHName string,
-	tokenTTL time.Duration, factoryOLTP []config.OLTPstorage) *App {
+	tokenTTL time.Duration, factoryOLTP []config.OLTPstorage, BootstrapServers string, GroupId string, AutoOffsetReset string, EnableAutoCommit string, SessionTimeoutMs string, ClientId string) *App {
 	// TO DO переделать на cfg
 	statusEnum := []string{"In progress", "Execution error", "Completed"}
 	// var storageOLTP storage.OLTPDB
@@ -34,6 +37,11 @@ func New(log *slog.Logger, grpcPort int,
 	storageSys, err := postgres.New(storagePath, log)
 	if err != nil {
 		panic("Не удалось создать Storage SYS")
+	}
+
+	kafkaConsumer, err := kafkaengine.NewKafkaConsumer(BootstrapServers, GroupId, AutoOffsetReset, EnableAutoCommit, SessionTimeoutMs, ClientId, log)
+	if err != nil {
+		panic("Не удалось подключиться к Kafka")
 	}
 
 	if DWHName == DbPostgres {
@@ -60,5 +68,6 @@ func New(log *slog.Logger, grpcPort int,
 	return &App{
 		GRPCSrv:     grpcServer,
 		OLTPFactory: oltpFactory,
+		Kafka:       kafkaConsumer,
 	}
 }

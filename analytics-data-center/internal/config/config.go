@@ -18,6 +18,7 @@ type Config struct {
 	OLTPstorages    []OLTPstorage `yaml:"oltp_connections"`
 	TokenTTL        time.Duration `yaml:"token_ttl,omitempty"`
 	GRPC            GRPCSetting   `yaml:"grpc" json:"grpc,omitempty"`
+	Kafka           KafkaSetting  `yaml:"kafka" json:"kafka,omitempty"`
 }
 
 type GRPCSetting struct {
@@ -28,6 +29,16 @@ type GRPCSetting struct {
 type OLTPstorage struct {
 	Name string `yaml:"name"`
 	Path string `yaml:"connection_string"`
+}
+
+type KafkaSetting struct {
+	BootstrapServers string `yaml:"bootstrap.servers"`
+	Acks             string `yaml:"acks"`
+	ClientId         string `yaml:"client_id"`
+	EnableAutoCommit string `yaml:"enable.auto.commit"`
+	AutoOffsetReset  string `yaml:"auto.offset.reset"`
+	SessionTimeoutMs string `yaml:"session.timeout.ms"`
+	GroupId          string `yaml:"group.id"`
 }
 
 func MustLoad() *Config {

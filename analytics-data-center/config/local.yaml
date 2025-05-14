@@ -10,6 +10,14 @@ oltp_connections:
   - name: postgres1
     connection_string: "postgresql://postgres:11111111111@00000000/postgres?sslmode=disable"
 token_ttl: 1h
+kafka:
+    bootstrap.servers: "localhost:9092"
+    acks: "all"
+    client_id: "debeziumConsumer"
+    enable.auto.commit: "true"
+    auto.offset.reset: "earliest"
+    session.timeout.ms: "6000"
+    group.id: "cdc-consumer-group"
 grpc:
   port: 13890
   timeout: 11h
