@@ -19,6 +19,7 @@ type Config struct {
 	TokenTTL        time.Duration `yaml:"token_ttl,omitempty"`
 	GRPC            GRPCSetting   `yaml:"grpc" json:"grpc,omitempty"`
 	Kafka           KafkaSetting  `yaml:"kafka" json:"kafka,omitempty"`
+	KafkaConnect    string        `yaml:"kafka_connect" json:"kafka_connect,omitempty"`
 }
 
 type GRPCSetting struct {
@@ -27,8 +28,9 @@ type GRPCSetting struct {
 }
 
 type OLTPstorage struct {
-	Name string `yaml:"name"`
-	Path string `yaml:"connection_string"`
+	Name      string `yaml:"name"`
+	Path      string `yaml:"connection_string"`
+	PathKafka string `yaml:"connection_string_kafka"`
 }
 
 type KafkaSetting struct {

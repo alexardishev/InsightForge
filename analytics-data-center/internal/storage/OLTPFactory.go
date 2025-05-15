@@ -15,21 +15,27 @@ type OLTPFactory interface {
 }
 
 type InstanceOLTPFactory struct {
-	logger      *slog.Logger
-	connections map[string]string                     // sourceName → connection string
-	pool        map[string]*postgresoltp.PostgresOLTP // sourceName → готовое подключение
-	mu          sync.Mutex
+	logger           *slog.Logger
+	connections      map[string]string
+	connectionsKafka map[string]string                     // sourceName → connection string
+	pool             map[string]*postgresoltp.PostgresOLTP // sourceName → готовое подключение
+	mu               sync.Mutex
 }
 
 func NewOLTPFactory(logger *slog.Logger, connConfigs []config.OLTPstorage) *InstanceOLTPFactory {
 	connMap := make(map[string]string)
+	connMapKafka := make(map[string]string)
+
 	for _, c := range connConfigs {
 		connMap[c.Name] = c.Path
+		connMapKafka[c.Name] = c.PathKafka
+		fmt.Println(c.PathKafka)
 	}
 	return &InstanceOLTPFactory{
-		logger:      logger,
-		connections: connMap,
-		pool:        make(map[string]*postgresoltp.PostgresOLTP),
+		logger:           logger,
+		connections:      connMap,
+		connectionsKafka: connMapKafka,
+		pool:             make(map[string]*postgresoltp.PostgresOLTP),
 	}
 }
 
