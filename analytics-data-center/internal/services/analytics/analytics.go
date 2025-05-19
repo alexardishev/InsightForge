@@ -49,6 +49,7 @@ type AnalyticsDataCenterService struct {
 	DWHDbName      string
 	OLTPDbName     string
 	jobQueue       chan TaskETL
+	eventQueue     chan models.CDCEvent
 }
 
 type TaskService interface {
@@ -76,8 +77,10 @@ func New(
 		DWHDbName:      DWHDbName,
 		OLTPDbName:     OLTPDbName,
 		jobQueue:       make(chan TaskETL, 100),
+		eventQueue:     make(chan models.CDCEvent, 100),
 	}
 	go service.etlWorker()
+	go service.eventWorker()
 	return service
 }
 

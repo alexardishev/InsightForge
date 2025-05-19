@@ -27,6 +27,11 @@ func (l *Listener) Start() {
 			case *kafka.Message:
 				l.Log.Info("CDC сообщение получено", slog.String("topic", *e.TopicPartition.Topic))
 				l.Handler(e.Value) // отправляем на обработку
+				// ручной коммит
+				_, err := l.Consumer.CommitMessage(e)
+				if err != nil {
+					l.Log.Error("Ошибка при коммите Kafka offset", slog.String("error", err.Error()))
+				}
 			case kafka.Error:
 				l.Log.Error("Kafka ошибка", slog.String("error", e.Error()))
 			}

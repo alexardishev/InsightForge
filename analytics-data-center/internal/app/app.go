@@ -79,7 +79,7 @@ func New(log *slog.Logger, grpcPort int,
 		panic("Не удалось подключиться к Kafka")
 	}
 	cdcListener := cdc.NewListener(kafkaConsumer, log, func(data []byte) {
-		cdc.Dispatch(data, analyticsService.HandleCDCEvent)
+		cdc.Dispatch(data, analyticsService)
 	})
 	cdcListener.Start()
 	grpcServer := grpcapp.New(log, grpcPort, analyticsService)

@@ -41,7 +41,15 @@ func main() {
 	logger.Info("stopping application", slog.String("signal", sign.String()))
 
 	application.GRPCSrv.Stop()
-	defer application.OLTPFactory.CloseAll()
+	if err := application.Kafka.Close(); err != nil {
+		logger.Error("Kafka close failed", slog.String("error", err.Error()))
+	}
+
+	if err := application.OLTPFactory.CloseAll(); err != nil {
+		logger.Error("OLTPFactory close failed", slog.String("error", err.Error()))
+	}
+
+	logger.Info("Application stopped gracefully")
 	logger.Info("app stoped")
 }
 

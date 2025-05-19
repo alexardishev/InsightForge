@@ -7,7 +7,7 @@ oltp_db: "postgres"
 oltp_connections:
   - name: postgres
     connection_string: "postgresql://postgres:password@localhost:5432/postgres?sslmode=disable"
-    connection_string_kafka: "postgresql://postgres:password@172.22.0.2:5432/postgres?sslmode=disable"
+    connection_string_kafka: "postgresql://postgres:password@172.22.0.6:5432/postgres?sslmode=disable"
   - name: postgres1
     connection_string: "postgresql://postgres:11111111111@00000000/postgres?sslmode=disable"
     connection_string_kafka: "postgresql://postgres:11111111111@00000000/postgres?sslmode=disable"
@@ -17,7 +17,7 @@ kafka:
     bootstrap.servers: "localhost:9092"
     acks: "all"
     client_id: "debeziumConsumer"
-    enable.auto.commit: "true"
+    enable.auto.commit: "false"
     auto.offset.reset: "earliest"
     session.timeout.ms: "6000"
     group.id: "cdc-consumer-group"

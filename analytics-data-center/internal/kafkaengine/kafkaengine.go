@@ -59,34 +59,6 @@ func NewKafkaConsumer(
 	}
 	log.Info("Kafka consumer создан и подписан")
 
-	// Запуск цикла чтения для активации assign и видимости в KafkaDrop
-	go func() {
-		for {
-			ev := c.Poll(1000)
-			if ev == nil {
-				continue
-			}
-			switch e := ev.(type) {
-			case *kafka.Message:
-				log.Info("Received message",
-					slog.String("topic", *e.TopicPartition.Topic),
-					slog.Any("partition", e.TopicPartition.Partition),
-					slog.Int64("offset", int64(e.TopicPartition.Offset)),
-					slog.String("value", string(e.Value)))
-			case kafka.Error:
-				log.Error("Kafka error", slog.String("error", e.Error()))
-			case kafka.AssignedPartitions:
-				log.Info("Assigned partitions", slog.Any("partitions", e.Partitions))
-				c.Assign(e.Partitions)
-			case kafka.RevokedPartitions:
-				log.Info("Revoked partitions", slog.Any("partitions", e.Partitions))
-				c.Unassign()
-			default:
-				log.Info("Kafka event", slog.String("event", e.String()))
-			}
-		}
-	}()
-
 	// Ожидание initial assign
 	time.Sleep(5 * time.Second)
 
