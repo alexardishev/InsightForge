@@ -25,6 +25,7 @@ type OLTPDB interface {
 }
 type SchemaProvider interface {
 	GetView(ctx context.Context, idView int64) (models.View, error)
+	GetSchems(ctx context.Context, source string, schema string, table string) ([]int, error)
 }
 
 type TaskProvider interface {

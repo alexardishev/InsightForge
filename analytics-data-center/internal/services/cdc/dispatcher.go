@@ -11,21 +11,16 @@ type HandlerCDC interface {
 }
 
 func Dispatch(eventBytes []byte, analyticsHandler HandlerCDC) {
-	var raw map[string]interface{}
-	if err := json.Unmarshal(eventBytes, &raw); err != nil {
+	var eventData models.CDCEventData
+	if err := json.Unmarshal(eventBytes, &eventData); err != nil {
 		log.Printf("Ошибка парсинга JSON: %v", err)
 		return
 	}
 
-	event, _ := raw["event"].(string)
-	id, _ := raw["id"].(string)
-	delete(raw, "event")
-	delete(raw, "id")
-
 	evt := models.CDCEvent{
-		Event: event,
-		ID:    id,
-		Data:  raw, // всё остальное — в Data
+		Event: "",
+		ID:    "",
+		Data:  eventData, // всё остальное — в Data
 	}
 
 	analyticsHandler.EventPreprocessing(evt)
