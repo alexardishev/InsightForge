@@ -71,3 +71,25 @@ sources:
                     "1": Создано
                     "2": Согласовано
                     "3": Ошибка
+```
+## 🧩 Настройки PostgreSQL (для CDC)
+Для каждого источника (OLTP PostgreSQL), подключаемого к Debezium, необходимо:
+1. Включить логирование изменений (WAL)
+В postgresql.conf:
+- `wal_level = logical`
+- `max_replication_slots = 4`
+- `max_wal_senders = 4`
+2. Создать пользователя с нужными правами
+```
+```sql
+  CREATE ROLE replication_user WITH REPLICATION LOGIN PASSWORD 'password';
+  GRANT SELECT ON ALL TABLES IN SCHEMA public TO replication_user;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO replication_user;
+  ```
+
+3. Установить REPLICA IDENTITY FULL для всех отслеживаемых таблиц
+```
+```sql
+ALTER TABLE public.users REPLICA IDENTITY FULL;
+ALTER TABLE public.profiles REPLICA IDENTITY FULL;
+```
