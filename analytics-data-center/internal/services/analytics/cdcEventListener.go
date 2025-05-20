@@ -77,11 +77,11 @@ func (a *AnalyticsDataCenterService) eventDispathFunction(ctx context.Context, t
 	log.Info("Определяю тип вызываемой функции", slog.Any("", typeEvt))
 	switch typeEvt {
 	case "c":
-		value, err := a.createRowAfterListenEventInDWH(ctx, eventData)
+		err := a.createRowAfterListenEventInDWH(ctx, eventData)
 		if err != nil {
 			return "", err
 		}
-		return value, nil
+		return "", nil
 	case "u":
 		return "u", nil
 	case "d":

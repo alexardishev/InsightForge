@@ -45,6 +45,9 @@ type DataProviderDWH interface {
 	InsertDataToDWH(ctx context.Context, query string) error
 	GetColumnsTempTables(ctx context.Context, schemaName string, tempTableName string) ([]string, error)
 	MergeTempTables(ctx context.Context, query string) error
+	// Insert(ctx context.Context, schemaName string, row map[string]interface{}) error
+	ReplicaIdentityFull(ctx context.Context, tableDWHName string) error
+	InsertOrUpdateTransactional(ctx context.Context, schemaName string, row map[string]interface{}, conflictColumns []string) error
 }
 
 type DataProviderOLTP interface {

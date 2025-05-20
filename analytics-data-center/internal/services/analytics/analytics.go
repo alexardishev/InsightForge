@@ -32,6 +32,7 @@ const (
 	ErrorCreateTemplateTable = "Не удалось создать временные таблицы"
 	ErrorCountInsertData     = "Не удалось посчитать количество вставляемых данных"
 	ErrorSelectInsertData    = "Не удалось получить данный для вставки"
+	ErrorReplicaFullData     = "Не удалось включиь полную репликацию таблицы"
 	CompletedTask            = "Задача завершена успешно"
 )
 
@@ -175,7 +176,7 @@ func (a *AnalyticsDataCenterService) runETL(ctx context.Context, idView int64, t
 	backgroundCtx := context.Background() // независимый от вызова клиента
 
 	go func() {
-		ok, err := a.prepareAndInsertData(backgroundCtx, &countInsertData, &viewSchema)
+		_, err := a.prepareAndInsertData(backgroundCtx, &countInsertData, &viewSchema)
 		if err != nil {
 			log.Error("не удалось получить данные для вставки", slog.String("error", err.Error()))
 			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorSelectInsertData)
@@ -186,9 +187,14 @@ func (a *AnalyticsDataCenterService) runETL(ctx context.Context, idView int64, t
 		if err != nil {
 			log.Error("не удалось перенести индексы", slog.String("error", err.Error()))
 			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorSelectInsertData)
-			// return "", fmt.Errorf("%s:%s", op, err)
 		}
-		fmt.Println(ok)
+		err = a.DWHProvider.ReplicaIdentityFull(ctx, viewSchema.Name)
+		if err != nil {
+			log.Error("не удалось включить полную репликацию вью", slog.String("error", err.Error()))
+			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorSelectInsertData)
+		}
+		log.Info("Репликация для вью включена")
+
 	}()
 
 	log.Info("количество записей в таблице -", slog.Any("slice", countInsertData))

@@ -30,6 +30,7 @@ type Column struct {
 	IsDeleted    bool       `json:"is_deleted,omitempty"`
 	IsNullable   bool       `json:"is_nullable,omitempty"`
 	IsPrimaryKey bool       `json:"is_primary_key,omitempty"`
+	ViewKey      string     `json:"view_key,omitempty"`
 }
 
 type Transform struct {
