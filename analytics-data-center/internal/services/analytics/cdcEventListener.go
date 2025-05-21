@@ -36,7 +36,7 @@ func (a *AnalyticsDataCenterService) handlerCDCFunc(ctx context.Context, evt mod
 		slog.String("op", op),
 		slog.String("eventId", evt.ID),
 	)
-	log.Info("Пришло событие из кафка", slog.Any("", evt.Data))
+	// log.Info("Пришло событие из кафка", slog.Any("", evt.Data))
 	eventType := a.eventIdentifier(evt.Data.Op)
 	res, err := a.eventDispathFunction(ctx, eventType, evt.Data)
 	if err != nil {

@@ -71,6 +71,7 @@ type JoinSide struct {
 	Source       string `json:"source,omitempty"`
 	Schema       string `json:"schema,omitempty"`
 	Table        string `json:"table,omitempty"`
+	MainTable    string `json:"main_table,omitempty"`
 	ColumnFirst  string `json:"column_first,omitempty"`
 	ColumnSecond string `json:"column_second,omitempty"`
 }

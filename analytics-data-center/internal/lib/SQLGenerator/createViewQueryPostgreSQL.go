@@ -17,6 +17,7 @@ func CreateViewQuery(schema models.View, viewJoin models.ViewJoinTable, logger *
 		return models.Query{}, fmt.Errorf("нет временных таблиц для формирования вью")
 	}
 
+	// SELECT част
 	var selectParts []string
 	for _, tempTable := range viewJoin.TempTables {
 		alias := CleanAndTrim(tempTable.TempTableName, 4)
@@ -25,24 +26,38 @@ func CreateViewQuery(schema models.View, viewJoin models.ViewJoinTable, logger *
 		}
 	}
 
-	// SELECT часть
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("CREATE TABLE %s AS SELECT %s", schema.Name, strings.Join(selectParts, ", ")))
 
-	// FROM часть
-	firstTable := viewJoin.TempTables[0]
-	firstAlias := CleanAndTrim(firstTable.TempTableName, 4)
-	fromClause := fmt.Sprintf(" FROM %s %s", firstTable.TempTableName, firstAlias)
+	// Определяем главную таблицу
+	mainTableName := ""
+	mainAlias := ""
+	mainTableSet := false
+
+	for _, join := range schema.Joins {
+		if join.Inner != nil && join.Inner.MainTable != "" {
+			mainTableName = fmt.Sprintf("temp_%s_%s_%s", join.Inner.Source, join.Inner.Schema, join.Inner.MainTable)
+			mainAlias = CleanAndTrim(mainTableName, 4)
+			mainTableSet = true
+			break
+		}
+	}
+	if !mainTableSet {
+		mainTableName = viewJoin.TempTables[0].TempTableName
+		mainAlias = CleanAndTrim(mainTableName, 4)
+	}
+
+	fromClause := fmt.Sprintf(" FROM %s %s", mainTableName, mainAlias)
 
 	// JOIN части
 	var joinClauses []string
 	for _, join := range schema.Joins {
 		if join.Inner != nil {
-			joinAlias := CleanAndTrim(fmt.Sprintf("temp_%s_%s_%s", join.Inner.Source, join.Inner.Schema, join.Inner.Table), 4)
 			joinTable := fmt.Sprintf("temp_%s_%s_%s", join.Inner.Source, join.Inner.Schema, join.Inner.Table)
+			joinAlias := CleanAndTrim(joinTable, 4)
 			joinClauses = append(joinClauses, fmt.Sprintf("JOIN %s %s ON %s.%s = %s.%s",
 				joinTable, joinAlias,
-				firstAlias, join.Inner.ColumnFirst,
+				mainAlias, join.Inner.ColumnFirst,
 				joinAlias, join.Inner.ColumnSecond,
 			))
 		}
@@ -61,7 +76,7 @@ func CleanAndTrim(input string, maxLen int) string {
 	cleaned = strings.Join(strings.Fields(cleaned), "_")
 	if utf8.RuneCountInString(cleaned) > maxLen {
 		runes := []rune(cleaned)
-		return string(runes[21:])
+		return string(runes[len(runes)-maxLen:])
 	}
 	return cleaned
 }
