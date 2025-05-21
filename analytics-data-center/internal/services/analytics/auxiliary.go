@@ -236,7 +236,7 @@ func (a *AnalyticsDataCenterService) prepareViewJoin(ctx context.Context, tempTb
 	var tablesTemp []models.TempTable
 
 	for _, tempTable := range tempTbl {
-		columnsTempTables, err := a.DWHProvider.GetColumnsTempTables(ctx, schemaName, tempTable)
+		columnsTempTables, err := a.DWHProvider.GetColumnsTables(ctx, schemaName, tempTable)
 		if err != nil {
 			log.Error("Невозможно получить колонки для временных таблиц", slog.String("error", err.Error()))
 			return nil, err

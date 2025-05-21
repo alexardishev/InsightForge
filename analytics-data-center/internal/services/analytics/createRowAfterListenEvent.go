@@ -17,7 +17,7 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 	conflictKeys := make(map[string]struct{})
 
 	log := a.log.With(slog.String("op", op))
-
+	after := evtData.After
 	databaseEvt := evtData.Source.DB
 	schemaEvt := evtData.Source.Schema
 	tableEvt := evtData.Source.Table
@@ -29,7 +29,7 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 		log.Error("ошибка получения схемы", slog.Any("ошибка", err))
 		return err
 	}
-
+	a.checkColumnInTables(ctx, after, databaseEvt, schemaEvt, tableEvt, schemaIds)
 	for _, schemaId := range schemaIds {
 		schema, err := a.SchemaProvider.GetView(ctx, int64(schemaId))
 		if err != nil {
@@ -131,5 +131,75 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 	}
 
 	log.Info("Успешная вставка в таблицу")
+	return nil
+}
+
+func (a *AnalyticsDataCenterService) checkColumnInTables(
+	ctx context.Context,
+	after map[string]interface{},
+	databaseEvt string,
+	schemaEvt string,
+	tableEvt string,
+	schemaIds []int,
+) error {
+	const op = "checkColumnInTables"
+	log := a.log.With(slog.String("op", op))
+
+	// Получаем список колонок из БД
+	columns, err := a.DWHProvider.GetColumnsTables(ctx, schemaEvt, tableEvt)
+	if err != nil {
+		log.Error("ошибка получения колонок", slog.String("error", err.Error()))
+		return err
+	}
+	// Преобразуем список в map для быстрого поиска
+	actualCols := make(map[string]struct{}, len(columns))
+	for _, col := range columns {
+		actualCols[col] = struct{}{}
+	}
+
+	// Перебираем все связанные схемы
+	for _, schemaId := range schemaIds {
+		view, err := a.SchemaProvider.GetView(ctx, int64(schemaId))
+		if err != nil {
+			log.Warn("не удалось получить view", slog.String("error", err.Error()))
+			continue
+		}
+		changed := false
+
+		for si := range view.Sources {
+			source := &view.Sources[si]
+			if source.Name != databaseEvt {
+				continue
+			}
+			for sci := range source.Schemas {
+				schema := &source.Schemas[sci]
+				if schema.Name != schemaEvt {
+					continue
+				}
+				for ti := range schema.Tables {
+					table := &schema.Tables[ti]
+					if table.Name != tableEvt {
+						continue
+					}
+					for ci := range table.Columns {
+						column := &table.Columns[ci]
+						_, exists := actualCols[column.Name]
+						if column.IsDeleted == exists {
+							// Был is_deleted=false, а колонки нет — ставим true. Или наоборот.
+							column.IsDeleted = !exists
+							changed = true
+						}
+					}
+				}
+			}
+		}
+		if changed {
+			if err := a.SchemaProvider.UpdateView(ctx, view, schemaId); err != nil {
+				log.Error("ошибка обновления view после is_deleted", slog.String("error", err.Error()))
+			}
+		} else {
+			log.Info("view не изменился, обновление не требуется")
+		}
+	}
 	return nil
 }

@@ -26,6 +26,7 @@ type OLTPDB interface {
 type SchemaProvider interface {
 	GetView(ctx context.Context, idView int64) (models.View, error)
 	GetSchems(ctx context.Context, source string, schema string, table string) ([]int, error)
+	UpdateView(ctx context.Context, view models.View, schemaId int) error
 }
 
 type TaskProvider interface {
@@ -43,7 +44,7 @@ type TableProvider interface {
 
 type DataProviderDWH interface {
 	InsertDataToDWH(ctx context.Context, query string) error
-	GetColumnsTempTables(ctx context.Context, schemaName string, tempTableName string) ([]string, error)
+	GetColumnsTables(ctx context.Context, schemaName string, tempTableName string) ([]string, error)
 	MergeTempTables(ctx context.Context, query string) error
 	// Insert(ctx context.Context, schemaName string, row map[string]interface{}) error
 	ReplicaIdentityFull(ctx context.Context, tableDWHName string) error

@@ -82,3 +82,22 @@ func (p *PostgresSys) GetSchems(ctx context.Context, source string, schema strin
 
 	return schemsIds, nil
 }
+
+func (p *PostgresSys) UpdateView(ctx context.Context, view models.View, schemaId int) error {
+	const op = "Storage.PostgreSQL.UpdateView"
+	log := p.Log.With(slog.String("op", op))
+	log.Info("Operation starting")
+	unmarshalView, err := json.Marshal(view)
+	if err != nil {
+		log.Error("Ошибка перевода в JSON", slog.String("error", err.Error()))
+		return err
+	}
+
+	query := "UPDATE schems set schema_view = ($1) where id = ($2)"
+	_, err = p.Db.ExecContext(ctx, query, unmarshalView, schemaId)
+	if err != nil {
+		log.Error("Ошибка обновления схемы", slog.String("error", err.Error()))
+		return err
+	}
+	return nil
+}

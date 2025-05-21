@@ -60,7 +60,7 @@ func (p *PostgresDWH) DeleteTempTable(ctx context.Context, tableName string) err
 	}
 	return nil
 }
-func (p *PostgresDWH) GetColumnsTempTables(ctx context.Context, schemaName string, tempTableName string) ([]string, error) {
+func (p *PostgresDWH) GetColumnsTables(ctx context.Context, schemaName string, tempTableName string) ([]string, error) {
 	const op = "Storage.PostgreSQL.GetColumnsTempTables"
 	var columns []string
 	log := p.Log.With(
