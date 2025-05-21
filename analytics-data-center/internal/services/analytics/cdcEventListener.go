@@ -83,6 +83,10 @@ func (a *AnalyticsDataCenterService) eventDispathFunction(ctx context.Context, t
 		}
 		return "", nil
 	case "u":
+		err := a.createRowAfterListenEventInDWH(ctx, eventData)
+		if err != nil {
+			return "", err
+		}
 		return "u", nil
 	case "d":
 		return "d", nil

@@ -73,7 +73,7 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 								conflictKeys[column.ViewKey] = struct{}{}
 							}
 						}
-
+						// Переделать на вызов функций
 						// === FieldTransform ===
 						if column.Transform != nil && column.Transform.Type == "FieldTransform" && column.Transform.Mapping != nil {
 							rawStr := fmt.Sprintf("%v", val)
