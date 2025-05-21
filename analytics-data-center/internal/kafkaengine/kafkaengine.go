@@ -52,7 +52,7 @@ func NewKafkaConsumer(
 	}
 
 	// Подписка на топики по паттерну (или можно matchedTopics, если точечно)
-	err = c.SubscribeTopics([]string{"^.*db.*$"}, nil)
+	err = c.SubscribeTopics([]string{"^.*db.*$"}, rebalanceCallback)
 	if err != nil {
 		log.Error("Неудачная подписка", slog.String("error", err.Error()))
 		return nil, err
@@ -77,4 +77,22 @@ func NewKafkaConsumer(
 	}
 
 	return c, nil
+}
+
+func rebalanceCallback(c *kafka.Consumer, ev kafka.Event) error {
+	switch e := ev.(type) {
+	case kafka.AssignedPartitions:
+		var filtered []kafka.TopicPartition
+		for _, tp := range e.Partitions {
+			if strings.Contains(*tp.Topic, "temp") {
+				continue
+			}
+			filtered = append(filtered, tp)
+		}
+		return c.Assign(filtered)
+	case kafka.RevokedPartitions:
+		return c.Unassign()
+	default:
+		return nil
+	}
 }
