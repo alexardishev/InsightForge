@@ -7,6 +7,7 @@ import (
 	serviceanalytics "analyticDataCenter/analytics-data-center/internal/services/analytics"
 	"analyticDataCenter/analytics-data-center/internal/services/cdc"
 	"analyticDataCenter/analytics-data-center/internal/services/debezium"
+	smtpsender "analyticDataCenter/analytics-data-center/internal/services/smtrsender"
 	tasksserivce "analyticDataCenter/analytics-data-center/internal/services/tasks"
 	"analyticDataCenter/analytics-data-center/internal/storage"
 	"analyticDataCenter/analytics-data-center/internal/storage/postgres"
@@ -31,7 +32,7 @@ type App struct {
 
 func New(log *slog.Logger, grpcPort int,
 	storagePath string, connectionStringOLTP string, connectionStringDWH string, OLTPName string, DWHName string,
-	tokenTTL time.Duration, factoryOLTP []config.OLTPstorage, BootstrapServers string, GroupId string, AutoOffsetReset string, EnableAutoCommit string, SessionTimeoutMs string, ClientId string, KafkaConnect string) *App {
+	tokenTTL time.Duration, factoryOLTP []config.OLTPstorage, BootstrapServers string, GroupId string, AutoOffsetReset string, EnableAutoCommit string, SessionTimeoutMs string, ClientId string, KafkaConnect string, hostSMTP string, portSMTP int, userNameSMTP string, passwordSMTP string, adminEmailSMTP string, fromEmailSMTP string) *App {
 	// TO DO переделать на cfg
 	statusEnum := []string{"In progress", "Execution error", "Completed"}
 	// var storageOLTP storage.OLTPDB
@@ -40,7 +41,7 @@ func New(log *slog.Logger, grpcPort int,
 	if err != nil {
 		panic("Не удалось создать Storage SYS")
 	}
-
+	smtp := smtpsender.NewSMTP(hostSMTP, portSMTP, userNameSMTP, passwordSMTP, adminEmailSMTP, fromEmailSMTP, log)
 	if DWHName == DbPostgres {
 		var storageDWHPostgres *postgresdwh.PostgresDWH
 		storageDWHPostgres, err = postgresdwh.New(connectionStringDWH, log)
@@ -72,7 +73,7 @@ func New(log *slog.Logger, grpcPort int,
 		panic("Не удалось создать Storage")
 	}
 	tasksserivce := tasksserivce.New(log, storageSys, statusEnum)
-	analyticsService := serviceanalytics.New(log, storage.DbSys, tasksserivce, storageDWH, oltpFactory, DWHName, OLTPName)
+	analyticsService := serviceanalytics.New(log, storage.DbSys, tasksserivce, storageDWH, oltpFactory, DWHName, OLTPName, *smtp)
 
 	kafkaConsumer, err := kafkaengine.NewKafkaConsumer(BootstrapServers, GroupId, AutoOffsetReset, EnableAutoCommit, SessionTimeoutMs, ClientId, log)
 	if err != nil {

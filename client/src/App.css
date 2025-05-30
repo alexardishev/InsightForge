@@ -1,0 +1,50 @@
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #0d0d0d; /* тёмный фон */
+  color: #e6ff00; /* неоново-жёлтый */
+}
+
+h1, h2 {
+  color: #e6ff00;
+}
+
+.container {
+  padding: 2rem;
+  max-width: 600px;
+  margin: 4rem auto;
+  background: #1a1a1a;
+  border-radius: 12px;
+  box-shadow: 0 0 20px rgba(57, 255, 20, 0.3); /* glow эффект */
+}
+
+input[type="text"], select {
+  padding: 0.75rem;
+  width: 100%;
+  margin-bottom: 1.5rem;
+  background: #333;
+  border: 1px solid #39ff14;
+  border-radius: 6px;
+  color: #e6ff00;
+}
+
+input::placeholder {
+  color: #bbb;
+}
+
+button {
+  padding: 0.75rem 1.5rem;
+  background-color: #39ff14;
+  color: #0d0d0d;
+  font-weight: bold;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 0 12px #39ff14;
+  transition: 0.2s;
+}
+
+button:hover {
+  background-color: #32e00d;
+  box-shadow: 0 0 16px #39ff14;
+}

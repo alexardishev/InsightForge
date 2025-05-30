@@ -188,6 +188,20 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 							// Был is_deleted=false, а колонки нет — ставим true. Или наоборот.
 							column.IsDeleted = !exists
 							changed = true
+							if column.IsDeleted {
+								changedData := make(map[string]interface{})
+								message := fmt.Sprintf("Уважаемый пользователь из таблицы %s была удалена колонка %s", table.Name, column.Name)
+								changedData["columnCnahged"] = column.Name
+								changedData["messageEmail"] = message
+
+								eventAfterChangedTable := &models.Event{
+									EventName: "TableChanged",
+									EventData: changedData,
+								}
+								fmt.Println(eventAfterChangedTable)
+								a.SMTPClient.EventQueueSMTP <- *eventAfterChangedTable
+							}
+
 						}
 					}
 				}

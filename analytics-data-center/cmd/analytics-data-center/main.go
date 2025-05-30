@@ -30,7 +30,7 @@ func main() {
 	logger := setupLogger(cfg.Env)
 	logger.Info("Starting Analytics server")
 
-	application := app.New(logger, cfg.GRPC.Port, cfg.StoragePath, cfg.OLTPStoragePath, cfg.DWHStoragePath, cfg.OLTPDataBase, cfg.DWHDataBase, cfg.TokenTTL, cfg.OLTPstorages, cfg.Kafka.BootstrapServers, cfg.Kafka.GroupId, cfg.Kafka.AutoOffsetReset, cfg.Kafka.EnableAutoCommit, cfg.Kafka.SessionTimeoutMs, cfg.Kafka.ClientId, cfg.KafkaConnect)
+	application := app.New(logger, cfg.GRPC.Port, cfg.StoragePath, cfg.OLTPStoragePath, cfg.DWHStoragePath, cfg.OLTPDataBase, cfg.DWHDataBase, cfg.TokenTTL, cfg.OLTPstorages, cfg.Kafka.BootstrapServers, cfg.Kafka.GroupId, cfg.Kafka.AutoOffsetReset, cfg.Kafka.EnableAutoCommit, cfg.Kafka.SessionTimeoutMs, cfg.Kafka.ClientId, cfg.KafkaConnect, cfg.SMTP.Host, cfg.SMTP.Port, cfg.SMTP.UserName, cfg.SMTP.Password, cfg.SMTP.AdminEmail, cfg.SMTP.FromEmail)
 
 	go application.GRPCSrv.Run()
 

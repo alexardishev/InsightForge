@@ -7,11 +7,17 @@ oltp_db: "postgres"
 oltp_connections:
   - name: postgres
     connection_string: "postgresql://postgres:password@localhost:5432/postgres?sslmode=disable"
-    connection_string_kafka: "postgresql://postgres:password@172.22.0.6:5432/postgres?sslmode=disable"
+    connection_string_kafka: "postgresql://postgres:password@172.22.0.2:5432/postgres?sslmode=disable"
   - name: postgres1
     connection_string: "postgresql://postgres:11111111111@00000000/postgres?sslmode=disable"
     connection_string_kafka: "postgresql://postgres:11111111111@00000000/postgres?sslmode=disable"
-
+smtp_setting:
+    host: "smtp.rambler.ru"
+    port: 587
+    username: "*********@rambler.ru"
+    password: "*********"
+    admin_email: "************@yandex.ru"
+    from_email: "**********@rambler.ru"
 token_ttl: 1h
 kafka:
     bootstrap.servers: "localhost:9092"

@@ -33,3 +33,8 @@ type CDCSource struct {
 	LSN       int64  `json:"lsn"`
 	Xmin      *int64 `json:"xmin"` // может быть null
 }
+
+type Event struct {
+	EventName string
+	EventData map[string]interface{} // может быть любым типом данных
+}

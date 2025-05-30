@@ -3,6 +3,7 @@ package serviceanalytics
 import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
 	sqlgenerator "analyticDataCenter/analytics-data-center/internal/lib/SQLGenerator"
+	smtpsender "analyticDataCenter/analytics-data-center/internal/services/smtrsender"
 	"analyticDataCenter/analytics-data-center/internal/storage"
 	"context"
 	"errors"
@@ -51,6 +52,7 @@ type AnalyticsDataCenterService struct {
 	OLTPDbName     string
 	jobQueue       chan TaskETL
 	eventQueue     chan models.CDCEvent
+	SMTPClient     smtpsender.SMTP
 }
 
 type TaskService interface {
@@ -67,6 +69,7 @@ func New(
 	OLTPFactory storage.OLTPFactory,
 	DWHDbName string,
 	OLTPDbName string,
+	SMTPClient smtpsender.SMTP,
 
 ) *AnalyticsDataCenterService {
 	service := &AnalyticsDataCenterService{
@@ -79,6 +82,7 @@ func New(
 		OLTPDbName:     OLTPDbName,
 		jobQueue:       make(chan TaskETL, 100),
 		eventQueue:     make(chan models.CDCEvent, 100),
+		SMTPClient:     SMTPClient,
 	}
 	go service.etlWorker()
 	go service.eventWorker()
