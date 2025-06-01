@@ -15,6 +15,8 @@ require (
 	google.golang.org/grpc v1.71.1
 )
 
+require github.com/go-chi/cors v1.2.1 // indirect
+
 require (
 	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect

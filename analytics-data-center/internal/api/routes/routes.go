@@ -8,12 +8,22 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors"
 )
 
 func NewRouter(logger *slog.Logger, serviceAnalytics *serviceanalytics.AnalyticsDataCenterService) http.Handler {
 	r := chi.NewRouter()
 	dbhandlers := dbhandlers.NewDBHandler(logger, serviceAnalytics)
 	handlers := handlers.NewHandlers(logger, dbhandlers)
+
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: false,
+		MaxAge:           300,
+	}))
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
