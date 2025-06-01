@@ -332,7 +332,6 @@ func (a *AnalyticsDataCenterService) transferIndixesAndConstraint(ctx context.Co
 		for _, index := range indexes.Indexes {
 			// TO DO инжектировать в сервис DWH схему, если она нужна через config
 			query, err := sqlgenerator.TransformIndexDefToSQLExpression(index, transferTable.IndexTransfer.SchemaName, transferTable.IndexTransfer.TableName, "public", viewSchema.Name, a.log)
-			// log.Info("Вот запрос на создание индекса в новой таблице", slog.String("query", query))
 			if err != nil {
 				log.Error("Невозможно сформировать запрос на создание индексов", slog.String("error", err.Error()))
 				return err

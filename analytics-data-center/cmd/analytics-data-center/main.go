@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -33,7 +34,13 @@ func main() {
 	application := app.New(logger, cfg.GRPC.Port, cfg.StoragePath, cfg.OLTPStoragePath, cfg.DWHStoragePath, cfg.OLTPDataBase, cfg.DWHDataBase, cfg.TokenTTL, cfg.OLTPstorages, cfg.Kafka.BootstrapServers, cfg.Kafka.GroupId, cfg.Kafka.AutoOffsetReset, cfg.Kafka.EnableAutoCommit, cfg.Kafka.SessionTimeoutMs, cfg.Kafka.ClientId, cfg.KafkaConnect, cfg.SMTP.Host, cfg.SMTP.Port, cfg.SMTP.UserName, cfg.SMTP.Password, cfg.SMTP.AdminEmail, cfg.SMTP.FromEmail)
 
 	go application.GRPCSrv.Run()
-
+	go func() {
+		logger.Info("HTTP сервер запущен на порту 8888")
+		err := http.ListenAndServe(":8888", application.Router)
+		if err != nil {
+			panic("❌ Failed to start server:")
+		}
+	}()
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT, &customSignal)
 

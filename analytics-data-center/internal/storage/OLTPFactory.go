@@ -12,6 +12,7 @@ import (
 type OLTPFactory interface {
 	GetOLTPStorage(ctx context.Context, sourceName string) (OLTPDB, error)
 	CloseAll() error // чтобы можно было корректно закрыть соединения при завершении программы
+	GetOLTPStrings(ctx context.Context) map[string]string
 }
 
 type InstanceOLTPFactory struct {
@@ -38,7 +39,9 @@ func NewOLTPFactory(logger *slog.Logger, connConfigs []config.OLTPstorage) *Inst
 		pool:             make(map[string]*postgresoltp.PostgresOLTP),
 	}
 }
-
+func (f *InstanceOLTPFactory) GetOLTPStrings(ctx context.Context) map[string]string {
+	return f.connections
+}
 func (f *InstanceOLTPFactory) GetOLTPStorage(ctx context.Context, sourceName string) (OLTPDB, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

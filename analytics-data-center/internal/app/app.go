@@ -1,6 +1,7 @@
 package app
 
 import (
+	"analyticDataCenter/analytics-data-center/internal/api/routes"
 	grpcapp "analyticDataCenter/analytics-data-center/internal/app/grpc"
 	"analyticDataCenter/analytics-data-center/internal/config"
 	"analyticDataCenter/analytics-data-center/internal/kafkaengine"
@@ -13,6 +14,7 @@ import (
 	"analyticDataCenter/analytics-data-center/internal/storage/postgres"
 	postgresdwh "analyticDataCenter/analytics-data-center/internal/storage/postgresDWH"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
@@ -28,6 +30,7 @@ type App struct {
 	GRPCSrv     *grpcapp.App
 	OLTPFactory *storage.InstanceOLTPFactory
 	Kafka       *kafka.Consumer
+	Router      http.Handler
 }
 
 func New(log *slog.Logger, grpcPort int,
@@ -74,6 +77,7 @@ func New(log *slog.Logger, grpcPort int,
 	}
 	tasksserivce := tasksserivce.New(log, storageSys, statusEnum)
 	analyticsService := serviceanalytics.New(log, storage.DbSys, tasksserivce, storageDWH, oltpFactory, DWHName, OLTPName, *smtp)
+	r := routes.NewRouter(log, analyticsService)
 
 	kafkaConsumer, err := kafkaengine.NewKafkaConsumer(BootstrapServers, GroupId, AutoOffsetReset, EnableAutoCommit, SessionTimeoutMs, ClientId, log)
 	if err != nil {
@@ -88,5 +92,6 @@ func New(log *slog.Logger, grpcPort int,
 		GRPCSrv:     grpcServer,
 		OLTPFactory: oltpFactory,
 		Kafka:       kafkaConsumer,
+		Router:      r,
 	}
 }

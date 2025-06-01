@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState} from 'react';
 import {
   Box,
   Heading,
@@ -8,37 +8,14 @@ import {
   Text,
   SimpleGrid,
 } from '@chakra-ui/react';
-
-const mockData: {
-  databases: string[];
-  schemas: Record<string, string[]>;
-  tables: Record<string, string[]>;
-  columns: Record<string, string[]>;
-} = {
-  databases: ['main_db', 'test_db'],
-  schemas: {
-    main_db: ['public', 'analytics'],
-    test_db: ['default'],
-  },
-  tables: {
-    public: ['users', 'orders'],
-    analytics: ['events', 'clicks'],
-    default: ['test_table'],
-  },
-  columns: {
-    users: ['id', 'name', 'email'],
-    orders: ['id', 'amount', 'date'],
-    events: ['id', 'type', 'timestamp'],
-    clicks: ['id', 'element', 'timestamp'],
-    test_table: ['id', 'value'],
-  },
-};
+import { useSelector } from 'react-redux';
+import type { RootState } from '../../app/store';
 
 const ViewBuilderPage: React.FC = () => {
   const [selectedDb, setSelectedDb] = useState('');
   const [selectedSchema, setSelectedSchema] = useState('');
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
-
+const data = useSelector((state: RootState) => state.settings.dataBaseInfo)
   const handleToggleTable = (table: string) => {
     setSelectedTables((prev) =>
       prev.includes(table) ? prev.filter((t) => t !== table) : [...prev, table]
@@ -58,7 +35,7 @@ const ViewBuilderPage: React.FC = () => {
             setSelectedTables([]);
           }}
         >
-          {mockData.databases.map((db) => (
+          {data?.databases.map((db: any) => (
             <option key={db} value={db}>
               {db}
             </option>
@@ -74,7 +51,7 @@ const ViewBuilderPage: React.FC = () => {
               setSelectedTables([]);
             }}
           >
-            {(mockData.schemas as Record<string, string[]>)[selectedDb]?.map((schema) => (
+            {(data.schemas as Record<string, string[]>)[selectedDb]?.map((schema) => (
               <option key={schema} value={schema}>
                 {schema}
               </option>
@@ -86,7 +63,7 @@ const ViewBuilderPage: React.FC = () => {
           <>
             <Text>Выберите таблицы:</Text>
             <VStack align="start">
-              {(mockData.tables as Record<string, string[]>)[selectedSchema]?.map((table) => (
+              {(data.tables as Record<string, string[]>)[selectedSchema]?.map((table) => (
                 <Checkbox
                   key={table}
                   isChecked={selectedTables.includes(table)}
@@ -107,7 +84,7 @@ const ViewBuilderPage: React.FC = () => {
                 <Box key={table} p={2} borderWidth="1px" borderRadius="md">
                   <Text fontWeight="bold">{table}</Text>
                   <VStack align="start" mt={2}>
-                    {mockData.columns[table]?.map((col) => (
+                    {data.columns[table]?.map((col: any) => (
                       <Text key={col} fontSize="sm">
                         • {col}
                       </Text>
