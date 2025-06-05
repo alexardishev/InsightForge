@@ -1,0 +1,125 @@
+package tasksserivce
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"testing"
+
+	"analyticDataCenter/analytics-data-center/internal/domain/models"
+
+	"github.com/stretchr/testify/require"
+)
+
+type mockSysDB struct {
+	createCalled  bool
+	createTaskID  string
+	createStatus  string
+	changeCalled  bool
+	changeTaskID  string
+	changeStatus  string
+	changeComment string
+	getCalled     bool
+	getTaskID     string
+	taskResult    models.Task
+	taskErr       error
+	createErr     error
+	changeErr     error
+}
+
+func (m *mockSysDB) CreateTask(ctx context.Context, taskID, status string) error {
+	m.createCalled = true
+	m.createTaskID = taskID
+	m.createStatus = status
+	return m.createErr
+}
+
+func (m *mockSysDB) GetTask(ctx context.Context, taskID string) (models.Task, error) {
+	m.getCalled = true
+	m.getTaskID = taskID
+	return m.taskResult, m.taskErr
+}
+
+func (m *mockSysDB) ChangeStatusTask(ctx context.Context, taskID, newStatus, comment string) error {
+	m.changeCalled = true
+	m.changeTaskID = taskID
+	m.changeStatus = newStatus
+	m.changeComment = comment
+	return m.changeErr
+}
+
+// Unused SchemaProvider methods
+func (m *mockSysDB) GetView(ctx context.Context, idView int64) (models.View, error) {
+	return models.View{}, nil
+}
+func (m *mockSysDB) GetSchems(ctx context.Context, source, schema, table string) ([]int, error) {
+	return nil, nil
+}
+func (m *mockSysDB) UpdateView(ctx context.Context, view models.View, schemaId int) error { return nil }
+
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func TestCreateTaskValidation(t *testing.T) {
+	db := &mockSysDB{}
+	svc := New(testLogger(), db, []string{"In progress", "Execution error", "Completed"})
+
+	err := svc.CreateTask(context.Background(), "", "In progress")
+	require.Error(t, err)
+
+	err = svc.CreateTask(context.Background(), "task", "")
+	require.Error(t, err)
+
+	err = svc.CreateTask(context.Background(), "task", "Unknown")
+	require.Error(t, err)
+}
+
+func TestCreateTaskSuccess(t *testing.T) {
+	db := &mockSysDB{}
+	svc := New(testLogger(), db, []string{"In progress", "Execution error", "Completed"})
+
+	err := svc.CreateTask(context.Background(), "task123", "In progress")
+	require.NoError(t, err)
+	require.True(t, db.createCalled)
+	require.Equal(t, "task123", db.createTaskID)
+	require.Equal(t, "In progress", db.createStatus)
+}
+
+func TestChangeStatusTaskValidation(t *testing.T) {
+	db := &mockSysDB{}
+	svc := New(testLogger(), db, []string{"In progress", "Execution error", "Completed"})
+
+	err := svc.ChangeStatusTask(context.Background(), "", "Completed", "")
+	require.Error(t, err)
+
+	err = svc.ChangeStatusTask(context.Background(), "id", "", "")
+	require.Error(t, err)
+
+	err = svc.ChangeStatusTask(context.Background(), "id", "Bad", "")
+	require.Error(t, err)
+}
+
+func TestChangeStatusTaskSuccess(t *testing.T) {
+	db := &mockSysDB{}
+	svc := New(testLogger(), db, []string{"In progress", "Execution error", "Completed"})
+
+	err := svc.ChangeStatusTask(context.Background(), "id1", "Completed", "done")
+	require.NoError(t, err)
+	require.True(t, db.changeCalled)
+	require.Equal(t, "id1", db.changeTaskID)
+	require.Equal(t, "Completed", db.changeStatus)
+	require.Equal(t, "done", db.changeComment)
+}
+
+func TestGetTask(t *testing.T) {
+	db := &mockSysDB{taskResult: models.Task{ID: "42", Status: "In progress"}}
+	svc := New(testLogger(), db, []string{"In progress", "Execution error", "Completed"})
+
+	task, err := svc.GetTask(context.Background(), "42")
+	require.NoError(t, err)
+	require.True(t, db.getCalled)
+	require.Equal(t, "42", db.getTaskID)
+	require.Equal(t, "42", task.ID)
+	require.Equal(t, "In progress", task.Status)
+}
