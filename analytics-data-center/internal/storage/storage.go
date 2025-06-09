@@ -2,7 +2,8 @@ package storage
 
 import (
 	"errors"
-	"log/slog"
+
+	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 )
 
 var (
@@ -15,11 +16,11 @@ var (
 
 type Storage struct {
 	DbSys SysDB
-	log   *slog.Logger
+	log   *loggerpkg.Logger
 	DbDWH DWHDB
 }
 
-func New(dbSys SysDB, log *slog.Logger, dbDWH DWHDB) (*Storage, error) {
+func New(dbSys SysDB, log *loggerpkg.Logger, dbDWH DWHDB) (*Storage, error) {
 
 	return &Storage{
 		DbSys: dbSys,

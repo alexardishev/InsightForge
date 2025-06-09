@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+
+	"analyticDataCenter/analytics-data-center/internal/logger"
 )
 
 func RegisterPostgresConnector(connectURL string, name string, pgConn string) error {
@@ -80,7 +82,7 @@ func RegisterPostgresConnector(connectURL string, name string, pgConn string) er
 	return nil
 }
 
-func WaitConnectorsReady(connectURL string, conns []config.OLTPstorage, log *slog.Logger) {
+func WaitConnectorsReady(connectURL string, conns []config.OLTPstorage, log *logger.Logger) {
 	for _, c := range conns {
 		name := c.Name
 		maxWait := 30 * time.Second

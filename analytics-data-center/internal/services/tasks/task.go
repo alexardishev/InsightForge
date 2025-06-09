@@ -7,16 +7,18 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
+
+	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 )
 
 type TasksService struct {
-	log          *slog.Logger
+	log          *loggerpkg.Logger
 	TaskProvider storage.SysDB
 	StatusEnum   []string
 }
 
 func New(
-	log *slog.Logger,
+	log *loggerpkg.Logger,
 	taskProvider storage.SysDB,
 	statusEnum []string,
 
@@ -44,10 +46,10 @@ func (s *TasksService) CreateTask(ctx context.Context, taskID string, status str
 	if !slices.Contains(s.StatusEnum, status) {
 		return errors.New("статус не распознан. проверьте правильность указания статуса")
 	}
-	log.Info("CreateTask start")
+	log.InfoMsg(loggerpkg.MsgCreateTaskStart)
 	err := s.TaskProvider.CreateTask(ctx, taskID, status)
 	if err != nil {
-		log.Error("не удалось создать задачу", slog.String("задача", err.Error()))
+		log.ErrorMsg(loggerpkg.MsgCreateTaskFailed, slog.String("error", err.Error()))
 		return err
 	}
 
@@ -60,7 +62,7 @@ func (s *TasksService) ChangeStatusTask(ctx context.Context, taskID string, newS
 		slog.String("op", op),
 		slog.String("taskID", taskID),
 	)
-	log.Info("ChangeStatusTask start")
+	log.InfoMsg(loggerpkg.MsgChangeStatusStart)
 	if taskID == "" {
 		return errors.New("идентификатор задачи не может быть пустым")
 	}
@@ -73,7 +75,7 @@ func (s *TasksService) ChangeStatusTask(ctx context.Context, taskID string, newS
 	}
 	err := s.TaskProvider.ChangeStatusTask(ctx, taskID, newStatus, comment)
 	if err != nil {
-		log.Error("не изменить статус у задачи", slog.String("задача", err.Error()))
+		log.ErrorMsg(loggerpkg.MsgChangeStatusFailed, slog.String("error", err.Error()))
 		return err
 	}
 	return nil
@@ -85,11 +87,11 @@ func (s *TasksService) GetTask(ctx context.Context, taskID string) (models.Task,
 		slog.String("op", op),
 		slog.String("taskID", taskID),
 	)
-	log.Info("GetTask start")
+	log.InfoMsg(loggerpkg.MsgGetTaskStart)
 
 	task, err := s.TaskProvider.GetTask(ctx, taskID)
 	if err != nil {
-		log.Error("не изменить статус у задачи", slog.String("задача", err.Error()))
+		log.ErrorMsg(loggerpkg.MsgGetTaskFailed, slog.String("error", err.Error()))
 		return models.Task{}, err
 	}
 	return task, nil

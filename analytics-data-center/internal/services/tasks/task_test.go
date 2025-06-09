@@ -2,11 +2,10 @@ package tasksserivce
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"testing"
 
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
+	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 
 	"github.com/stretchr/testify/require"
 )
@@ -57,8 +56,8 @@ func (m *mockSysDB) GetSchems(ctx context.Context, source, schema, table string)
 }
 func (m *mockSysDB) UpdateView(ctx context.Context, view models.View, schemaId int) error { return nil }
 
-func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+func testLogger() *loggerpkg.Logger {
+	return loggerpkg.New("test", "ru")
 }
 
 func TestCreateTaskValidation(t *testing.T) {

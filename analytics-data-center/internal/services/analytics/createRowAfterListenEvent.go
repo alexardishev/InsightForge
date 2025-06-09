@@ -198,7 +198,6 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 									EventName: "TableChanged",
 									EventData: changedData,
 								}
-								fmt.Println(eventAfterChangedTable)
 								a.SMTPClient.EventQueueSMTP <- *eventAfterChangedTable
 							}
 

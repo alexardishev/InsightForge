@@ -1,4 +1,5 @@
 env: "local"
+log_lang: "ru"
 storage_path: "postgresql://postgres:password@localhost:5432/postgres?sslmode=disable"
 dwh_db: "postgres"
 dwh_db_path: "postgresql://postgres:password@localhost:5432/postgres?sslmode=disable"

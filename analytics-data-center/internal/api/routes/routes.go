@@ -4,14 +4,15 @@ import (
 	"analyticDataCenter/analytics-data-center/internal/api/handlers"
 	dbhandlers "analyticDataCenter/analytics-data-center/internal/api/handlers/db_handlers.go"
 	serviceanalytics "analyticDataCenter/analytics-data-center/internal/services/analytics"
-	"log/slog"
 	"net/http"
+
+	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 )
 
-func NewRouter(logger *slog.Logger, serviceAnalytics *serviceanalytics.AnalyticsDataCenterService) http.Handler {
+func NewRouter(logger *loggerpkg.Logger, serviceAnalytics *serviceanalytics.AnalyticsDataCenterService) http.Handler {
 	r := chi.NewRouter()
 	dbhandlers := dbhandlers.NewDBHandler(logger, serviceAnalytics)
 	handlers := handlers.NewHandlers(logger, dbhandlers)
