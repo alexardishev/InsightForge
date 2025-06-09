@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"strings"
 
+	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 	"github.com/google/uuid"
 )
 
@@ -43,7 +44,7 @@ type TaskETL struct {
 }
 
 type AnalyticsDataCenterService struct {
-	log            *slog.Logger
+	log            *loggerpkg.Logger
 	SchemaProvider storage.SysDB
 	TaskService    TaskService
 	DWHProvider    storage.DWHDB
@@ -62,7 +63,7 @@ type TaskService interface {
 }
 
 func New(
-	log *slog.Logger,
+	log *loggerpkg.Logger,
 	schemaProvider storage.SysDB,
 	taskService TaskService,
 	dwhProvider storage.DWHDB,
@@ -111,12 +112,12 @@ func (a *AnalyticsDataCenterService) etlWorker() {
 			slog.String("task", job.TaskID),
 			slog.String("component", "ETLWorker"),
 		)
-		log.Info("Начало обработки задачи")
+		log.InfoMsg(loggerpkg.MsgETLWorkerStart)
 
 		ctx := context.Background()
 		err := a.runETL(ctx, job.ViewID, job.TaskID)
 		if err != nil {
-			log.Error("Ошибка при выполнении ETL", slog.String("error", err.Error()))
+			log.ErrorMsg(loggerpkg.MsgInsertDataFailed, slog.String("error", err.Error()))
 			a.TaskService.ChangeStatusTask(ctx, job.TaskID, Error, err.Error())
 		}
 	}
@@ -130,7 +131,7 @@ func (a *AnalyticsDataCenterService) runETL(ctx context.Context, idView int64, t
 		slog.String("op", op),
 		slog.Int64("idSchema", idView),
 	)
-	log.Info("ETL start")
+	log.InfoMsg(loggerpkg.MsgETLStart)
 	viewSchema, err := a.SchemaProvider.GetView(ctx, idView)
 	if err != nil {
 		if errors.Is(err, storage.ErrSchemaNotFound) {
@@ -145,9 +146,9 @@ func (a *AnalyticsDataCenterService) runETL(ctx context.Context, idView int64, t
 	}
 	if a.OLTPDbName == DbPostgres {
 		// Переделать на вызов вспомогательной функции, здесь должен быть чистый код без условий
-		queries, duplicates, err := sqlgenerator.GenerateQueryCreateTempTablePostgres(&viewSchema, log)
+		queries, duplicates, err := sqlgenerator.GenerateQueryCreateTempTablePostgres(&viewSchema, log.Logger)
 		if err != nil {
-			log.Error("не удалось сгенерировать запросы генератором SQL", slog.String("error", err.Error()))
+			log.ErrorMsg(loggerpkg.MsgGenerateQueriesFailed, slog.String("error", err.Error()))
 			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorCreateTemplateTable)
 			return fmt.Errorf("%s:%s", op, err)
 		}
@@ -162,18 +163,18 @@ func (a *AnalyticsDataCenterService) runETL(ctx context.Context, idView int64, t
 	}
 	for _, tempTable := range queriesInit.Queries {
 		tempTables = append(tempTables, tempTable.TableName)
-		log.Info("Временная таблица", slog.String("Таблица", tempTable.TableName))
+		log.InfoMsg(loggerpkg.MsgTempTable, slog.String("table", tempTable.TableName))
 	}
 	err = a.createTempTables(ctx, queriesInit)
 	if err != nil {
-		log.Error("не удалось создать временные таблицы", slog.String("error", err.Error()))
+		log.ErrorMsg(loggerpkg.MsgCreateTempTablesFailed, slog.String("error", err.Error()))
 		a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorCreateTemplateTable)
 		return fmt.Errorf("%s:%s", op, err)
 	}
 
 	countInsertData, err := a.getCountInsertData(ctx, viewSchema, tempTables)
 	if err != nil {
-		log.Error("не удалось получить количество", slog.String("error", err.Error()))
+		log.ErrorMsg(loggerpkg.MsgCountRowsFailed, slog.String("error", err.Error()))
 		a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorCountInsertData)
 		return fmt.Errorf("%s:%s", op, err)
 	}
@@ -182,26 +183,26 @@ func (a *AnalyticsDataCenterService) runETL(ctx context.Context, idView int64, t
 	go func() {
 		_, err := a.prepareAndInsertData(backgroundCtx, &countInsertData, &viewSchema)
 		if err != nil {
-			log.Error("не удалось получить данные для вставки", slog.String("error", err.Error()))
+			log.ErrorMsg(loggerpkg.MsgInsertDataFailed, slog.String("error", err.Error()))
 			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorSelectInsertData)
 			// return "", fmt.Errorf("%s:%s", op, err)
 		}
 
 		err = a.transferIndixesAndConstraint(ctx, &viewSchema)
 		if err != nil {
-			log.Error("не удалось перенести индексы", slog.String("error", err.Error()))
+			log.ErrorMsg(loggerpkg.MsgTransferIndexesFailed, slog.String("error", err.Error()))
 			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorSelectInsertData)
 		}
 		err = a.DWHProvider.ReplicaIdentityFull(ctx, viewSchema.Name)
 		if err != nil {
-			log.Error("не удалось включить полную репликацию вью", slog.String("error", err.Error()))
+			log.ErrorMsg(loggerpkg.MsgEnableReplicationFailed, slog.String("error", err.Error()))
 			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorSelectInsertData)
 		}
-		log.Info("Репликация для вью включена")
+		log.InfoMsg(loggerpkg.MsgReplicationEnabled)
 
 	}()
 
-	log.Info("количество записей в таблице -", slog.Any("slice", countInsertData))
+	log.InfoMsg(loggerpkg.MsgTableRecordCount, slog.Any("count", countInsertData))
 	a.TaskService.ChangeStatusTask(ctx, taskID, Completed, CompletedTask)
 	return nil
 }

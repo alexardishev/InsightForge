@@ -63,7 +63,7 @@ func (a *AnalyticsDataCenterService) getCountInsertData(ctx context.Context, vie
 		slog.String("op", op),
 	)
 
-	queries, err := sqlgenerator.GenerateCountQueries(viewSchema, log)
+	queries, err := sqlgenerator.GenerateCountQueries(viewSchema, log.Logger)
 	if err != nil {
 		log.Info("ошибка генерации запроса", slog.String("error", err.Error()))
 		return []models.CountInsertData{}, err
@@ -144,7 +144,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 			go func(start, end int64, tableName, sourceName string, tempTableName string) {
 				log.Info("Горутина запущена", slog.String("Для таблицы", tableName))
 				defer wg.Done()
-				query, err := sqlgenerator.GenerateSelectInsertDataQuery(*viewSchema, start, end, tableName, log)
+				query, err := sqlgenerator.GenerateSelectInsertDataQuery(*viewSchema, start, end, tableName, log.Logger)
 				if err != nil {
 					log.Error("ошибка генерации SQL", slog.String("error", err.Error()))
 					mu.Lock()
@@ -162,7 +162,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 				}
 				log.Info("получены данные", slog.Any("rows", len(insertData)))
 				log.Info("Запрос для таблицы", slog.String("таблица", tempTableName))
-				queryInsert, err := sqlgenerator.GeneratetInsertDataQuery(*viewSchema, insertData, tempTableName, log)
+				queryInsert, err := sqlgenerator.GeneratetInsertDataQuery(*viewSchema, insertData, tempTableName, log.Logger)
 				if err != nil {
 					log.Error("ошибка при генерации INSERT запроса", slog.String("error", err.Error()))
 					mu.Lock()
@@ -200,7 +200,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 		log.Error("Ошибка", slog.String("error", err.Error()))
 		return false, err
 	}
-	query, err := sqlgenerator.CreateViewQuery(*viewSchema, *viewJoin, log)
+	query, err := sqlgenerator.CreateViewQuery(*viewSchema, *viewJoin, log.Logger)
 	if err != nil {
 		a.DeleteTempTables(ctx, tempTbl)
 		log.Error("Ошибка", slog.String("error", err.Error()))
@@ -331,7 +331,7 @@ func (a *AnalyticsDataCenterService) transferIndixesAndConstraint(ctx context.Co
 		// }
 		for _, index := range indexes.Indexes {
 			// TO DO инжектировать в сервис DWH схему, если она нужна через config
-			query, err := sqlgenerator.TransformIndexDefToSQLExpression(index, transferTable.IndexTransfer.SchemaName, transferTable.IndexTransfer.TableName, "public", viewSchema.Name, a.log)
+			query, err := sqlgenerator.TransformIndexDefToSQLExpression(index, transferTable.IndexTransfer.SchemaName, transferTable.IndexTransfer.TableName, "public", viewSchema.Name, a.log.Logger)
 			if err != nil {
 				log.Error("Невозможно сформировать запрос на создание индексов", slog.String("error", err.Error()))
 				return err

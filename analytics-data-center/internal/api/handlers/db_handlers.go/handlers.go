@@ -7,14 +7,16 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+
+	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 )
 
 type DBHandlers struct {
-	log              *slog.Logger
+	log              *loggerpkg.Logger
 	serviceAnalytics *serviceanalytics.AnalyticsDataCenterService
 }
 
-func NewDBHandler(log *slog.Logger, serviceAnalytics *serviceanalytics.AnalyticsDataCenterService) *DBHandlers {
+func NewDBHandler(log *loggerpkg.Logger, serviceAnalytics *serviceanalytics.AnalyticsDataCenterService) *DBHandlers {
 	return &DBHandlers{
 		log:              log,
 		serviceAnalytics: serviceAnalytics,

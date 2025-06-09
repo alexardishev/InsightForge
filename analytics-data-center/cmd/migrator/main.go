@@ -3,7 +3,8 @@ package main
 import (
 	"errors"
 	"flag"
-	"fmt"
+
+	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 
 	"github.com/golang-migrate/migrate"
 	_ "github.com/golang-migrate/migrate/database/postgres"
@@ -26,6 +27,8 @@ func main() {
 		panic("migration path is req")
 	}
 
+	logger := loggerpkg.New("development", "ru")
+
 	m, err := migrate.New("file://"+migrationsPath, storagePath)
 	if err != nil {
 		panic(err)
@@ -34,12 +37,12 @@ func main() {
 	err = m.Up()
 	if err != nil {
 		if errors.Is(err, migrate.ErrNoChange) {
-			fmt.Println("no changes migrates")
+			logger.InfoMsg(loggerpkg.MsgNoChanges)
 			return
 		}
 		panic(err)
 	}
 
-	fmt.Println("Migrations is completed")
+	logger.InfoMsg(loggerpkg.MsgMigrationsCompleted)
 
 }

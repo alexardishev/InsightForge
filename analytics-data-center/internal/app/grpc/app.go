@@ -7,16 +7,18 @@ import (
 	"log/slog"
 	"net"
 
+	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
+
 	"google.golang.org/grpc"
 )
 
 type App struct {
-	log        *slog.Logger
+	log        *loggerpkg.Logger
 	grpcServer *grpc.Server
 	port       int
 }
 
-func New(log *slog.Logger, port int, analyticsDataCenterService analyticsrpc.AnalyticsDataCenter) *App {
+func New(log *loggerpkg.Logger, port int, analyticsDataCenterService analyticsrpc.AnalyticsDataCenter) *App {
 
 	gRPCServer := grpc.NewServer()
 	analyticsrpc.RegisterServerAPI(gRPCServer, analyticsDataCenterService)

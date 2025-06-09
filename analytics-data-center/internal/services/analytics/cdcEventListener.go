@@ -2,6 +2,7 @@ package serviceanalytics
 
 import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
+	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 	"context"
 	"log/slog"
 )
@@ -11,11 +12,11 @@ func (a *AnalyticsDataCenterService) eventWorker() {
 		log := a.log.With(
 			slog.String("component", "EventWorker"),
 		)
-		log.Info("Событие пришло в eventWorker")
+		log.InfoMsg(loggerpkg.MsgEventWorkerReceived)
 		ctx := context.Background()
 		err := a.handlerCDCFunc(ctx, event)
 		if err != nil {
-			log.Error("Ошибка при выполнени eventWorker", slog.String("error", err.Error()))
+			log.ErrorMsg(loggerpkg.MsgEventWorkerError, slog.String("error", err.Error()))
 		}
 	}
 }
@@ -26,7 +27,7 @@ func (a *AnalyticsDataCenterService) EventPreprocessing(evt models.CDCEvent) {
 		slog.String("eventId", evt.ID),
 	)
 
-	log.Info("Пришло событие из Kafka, пересылаю в канал")
+	log.InfoMsg(loggerpkg.MsgForwardCDCEvent)
 	a.eventQueue <- evt
 }
 
@@ -40,10 +41,10 @@ func (a *AnalyticsDataCenterService) handlerCDCFunc(ctx context.Context, evt mod
 	eventType := a.eventIdentifier(evt.Data.Op)
 	res, err := a.eventDispathFunction(ctx, eventType, evt.Data)
 	if err != nil {
-		log.Error("Ошибка при выполнении определения функции вызова", slog.String("error", err.Error()))
+		log.ErrorMsg(loggerpkg.MsgEventHandlerError, slog.String("error", err.Error()))
 		return err
 	}
-	log.Info("Обновления выполнены", slog.String("type", res))
+	log.InfoMsg(loggerpkg.MsgUpdatesDone, slog.String("type", res))
 	return nil
 
 }
@@ -53,7 +54,7 @@ func (a *AnalyticsDataCenterService) eventIdentifier(typeEvt string) string {
 		slog.String("op", op),
 		slog.String("eventId", typeEvt),
 	)
-	log.Info("Определяю тип события", slog.Any("", typeEvt))
+	log.InfoMsg(loggerpkg.MsgDeterminingEventType, slog.Any("type", typeEvt))
 
 	switch typeEvt {
 	case "c":
@@ -74,7 +75,7 @@ func (a *AnalyticsDataCenterService) eventDispathFunction(ctx context.Context, t
 		slog.String("op", op),
 		slog.String("eventId", typeEvt),
 	)
-	log.Info("Определяю тип вызываемой функции", slog.Any("", typeEvt))
+	log.InfoMsg(loggerpkg.MsgDeterminingFuncType, slog.Any("type", typeEvt))
 	switch typeEvt {
 	case "c":
 		err := a.createRowAfterListenEventInDWH(ctx, eventData)

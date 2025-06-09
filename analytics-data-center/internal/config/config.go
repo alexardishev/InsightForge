@@ -17,6 +17,7 @@ type Config struct {
 	DWHStoragePath  string        `yaml:"dwh_db_path" json:"dwh_db_path,omitempty"`
 	OLTPstorages    []OLTPstorage `yaml:"oltp_connections" json:"olt_pstorages,omitempty"`
 	TokenTTL        time.Duration `yaml:"token_ttl,omitempty" json:"token_ttl,omitempty"`
+	LogLang         string        `yaml:"log_lang" env-default:"ru" json:"log_lang,omitempty"`
 	GRPC            GRPCSetting   `yaml:"grpc" json:"grpc,omitempty"`
 	Kafka           KafkaSetting  `yaml:"kafka" json:"kafka,omitempty"`
 	KafkaConnect    string        `yaml:"kafka_connect" json:"kafka_connect,omitempty"`

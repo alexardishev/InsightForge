@@ -1,12 +1,13 @@
 package handlers
 
 import (
-	"log/slog"
 	"net/http"
+
+	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 )
 
 type Handlers struct {
-	log *slog.Logger
+	log *loggerpkg.Logger
 	HandlersDB
 }
 
@@ -15,7 +16,7 @@ type HandlersDB interface {
 	GetDB(w http.ResponseWriter, r *http.Request)
 }
 
-func NewHandlers(log *slog.Logger, db HandlersDB) *Handlers {
+func NewHandlers(log *loggerpkg.Logger, db HandlersDB) *Handlers {
 	return &Handlers{
 		log:        log,
 		HandlersDB: db,
