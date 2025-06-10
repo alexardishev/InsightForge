@@ -30,7 +30,6 @@ func NewOLTPFactory(logger *slog.Logger, connConfigs []config.OLTPstorage) *Inst
 	for _, c := range connConfigs {
 		connMap[c.Name] = c.Path
 		connMapKafka[c.Name] = c.PathKafka
-		fmt.Println(c.PathKafka)
 	}
 	return &InstanceOLTPFactory{
 		logger:           logger,

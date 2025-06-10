@@ -3,15 +3,15 @@ package serviceanalytics
 import (
 	"context"
 	"fmt"
-	"io"
-	"log/slog"
+
+	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
 	"analyticDataCenter/analytics-data-center/internal/storage"
 )
 
-func getTestLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+func getTestLogger() *loggerpkg.Logger {
+	return loggerpkg.New("test", "ru")
 }
 
 type mockDWH struct {

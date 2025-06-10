@@ -14,6 +14,8 @@ import (
 	"analyticDataCenter/analytics-data-center/internal/storage/postgres"
 	postgresdwh "analyticDataCenter/analytics-data-center/internal/storage/postgresDWH"
 	"log/slog"
+
+	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 	"net/http"
 	"time"
 
@@ -33,28 +35,28 @@ type App struct {
 	Router      http.Handler
 }
 
-func New(log *slog.Logger, grpcPort int,
+func New(log *loggerpkg.Logger, grpcPort int,
 	storagePath string, connectionStringOLTP string, connectionStringDWH string, OLTPName string, DWHName string,
 	tokenTTL time.Duration, factoryOLTP []config.OLTPstorage, BootstrapServers string, GroupId string, AutoOffsetReset string, EnableAutoCommit string, SessionTimeoutMs string, ClientId string, KafkaConnect string, hostSMTP string, portSMTP int, userNameSMTP string, passwordSMTP string, adminEmailSMTP string, fromEmailSMTP string) *App {
 	// TO DO переделать на cfg
 	statusEnum := []string{"In progress", "Execution error", "Completed"}
 	// var storageOLTP storage.OLTPDB
 	var storageDWH storage.DWHDB
-	storageSys, err := postgres.New(storagePath, log)
+	storageSys, err := postgres.New(storagePath, log.Logger)
 	if err != nil {
 		panic("Не удалось создать Storage SYS")
 	}
 	smtp := smtpsender.NewSMTP(hostSMTP, portSMTP, userNameSMTP, passwordSMTP, adminEmailSMTP, fromEmailSMTP, log)
 	if DWHName == DbPostgres {
 		var storageDWHPostgres *postgresdwh.PostgresDWH
-		storageDWHPostgres, err = postgresdwh.New(connectionStringDWH, log)
+		storageDWHPostgres, err = postgresdwh.New(connectionStringDWH, log.Logger)
 		if err != nil {
 			panic("Не удалось создать Storage DWH")
 		}
 		storageDWH = storageDWHPostgres
 	}
 
-	oltpFactory := storage.NewOLTPFactory(log, factoryOLTP)
+	oltpFactory := storage.NewOLTPFactory(log.Logger, factoryOLTP)
 	if DWHName == DbClickhouse {
 		//TO DO дописать когда появится адаптер для Clickhouse
 	}
@@ -84,7 +86,7 @@ func New(log *slog.Logger, grpcPort int,
 		panic("Не удалось подключиться к Kafka")
 	}
 	cdcListener := cdc.NewListener(kafkaConsumer, log, func(data []byte) {
-		cdc.Dispatch(data, analyticsService)
+		cdc.Dispatch(data, log, analyticsService)
 	})
 	cdcListener.Start()
 	grpcServer := grpcapp.New(log, grpcPort, analyticsService)

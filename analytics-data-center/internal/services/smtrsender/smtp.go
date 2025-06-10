@@ -2,6 +2,7 @@ package smtpsender
 
 import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
+	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 	"fmt"
 	"log/slog"
 	"net/smtp"
@@ -15,7 +16,7 @@ type SMTP struct {
 	AdminEmail     string `json:"admin_email,omitempty"`
 	FromEmail      string `json:"from_email,omitempty"`
 	EventQueueSMTP chan models.Event
-	log            *slog.Logger
+	log            *loggerpkg.Logger
 }
 
 func NewSMTP(
@@ -25,7 +26,7 @@ func NewSMTP(
 	Password string,
 	AdminEmail string,
 	FromEmail string,
-	Logger *slog.Logger,
+	Logger *loggerpkg.Logger,
 ) *SMTP {
 	smtp := &SMTP{
 		Host:           Host,
@@ -46,11 +47,11 @@ func (s *SMTP) emailSendWorker() {
 		log := s.log.With(
 			slog.String("component", "EmailSendWorker"),
 		)
-		log.Info("Событие пришло в eventWorker")
+		log.InfoMsg(loggerpkg.MsgEventWorkerReceived)
 		// ctx := context.Background()
 		err := s.SendEmail(event)
 		if err != nil {
-			log.Error("Ошибка при выполнени eventWorker", slog.String("error", err.Error()))
+			log.ErrorMsg(loggerpkg.MsgEventWorkerError, slog.String("error", err.Error()))
 		}
 	}
 }
@@ -82,7 +83,7 @@ func (s *SMTP) prepareMail(event models.Event) error {
 	addr := fmt.Sprintf("%s:%d", s.Host, s.Port)
 	err := smtp.SendMail(addr, auth, s.FromEmail, []string{s.AdminEmail}, []byte(msg))
 	if err != nil {
-		s.log.Error("Ошибка при отправке письма", slog.String("error", err.Error()))
+		s.log.ErrorMsg(loggerpkg.MsgEmailSendFailed, slog.String("error", err.Error()))
 		return err
 	}
 	return nil

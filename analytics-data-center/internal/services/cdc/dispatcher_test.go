@@ -2,9 +2,9 @@ package cdc
 
 import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
-	"testing"
-
+	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 	"github.com/stretchr/testify/require"
+	"testing"
 )
 
 type mockHandler struct {
@@ -21,7 +21,7 @@ func TestDispatch_ValidJSON(t *testing.T) {
 	handler := &mockHandler{}
 	data := []byte(`{"before":null,"after":{"id":1},"source":{"db":"test","schema":"public","table":"users"},"op":"c","transaction":null,"ts_ms":123}`)
 
-	Dispatch(data, handler)
+	Dispatch(data, loggerpkg.New("test", "ru"), handler)
 
 	require.True(t, handler.called, "handler should be called")
 	require.Equal(t, "test", handler.event.Data.Source.DB)
@@ -34,7 +34,7 @@ func TestDispatch_InvalidJSON(t *testing.T) {
 	handler := &mockHandler{}
 	data := []byte("{invalid json}")
 
-	Dispatch(data, handler)
+	Dispatch(data, loggerpkg.New("test", "ru"), handler)
 
 	require.False(t, handler.called, "handler should not be called on invalid JSON")
 }

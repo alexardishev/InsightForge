@@ -1,0 +1,113 @@
+{
+  "view_name": "user_basic_info",
+  "joins": [
+    {
+      "inner": {
+        "main_table": "users",
+        "source": "postgres",
+        "schema": "public",
+        "table": "profiles",
+        "column_first": "id",
+        "column_second": "user_id"
+      }
+    }
+  ],
+  "sources": [
+    {
+      "name": "postgres",
+      "schemas": [
+        {
+          "name": "public",
+          "tables": [
+            {
+              "name": "users",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "uuid",
+                  "view_key": "user_id",
+                  "is_nullable": true,
+                  "is_update_key": true,
+                  "is_primary_key": true
+                },
+                {
+                  "name": "email",
+                  "type": "text",
+                  "is_nullable": true
+                },
+                {
+                  "name": "json_transform",
+                  "type": "jsonb",
+                  "is_nullable": true,
+                  "transform": {
+                    "type": "JSON",
+                    "mode": "Mapping",
+                    "output_column": "json_transform",
+                    "mapping": {
+                      "type_map": "JSON",
+                      "mapping_json": [
+                        {
+                          "type_field": "int",
+                          "mapping": {
+                            "field1_in_json": "field1_view_column"
+                          }
+                        },
+                        {
+                          "type_field": "text",
+                          "mapping": {
+                            "field2_in_json": "field2_view_column"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "status",
+                  "type": "int",
+                  "transform": {
+                    "type": "FieldTransform",
+                    "mode": "Mapping",
+                    "output_column": "status_label",
+                    "mapping": {
+                      "type_map": "FieldTransform",
+                      "alias_new_column_transform": "status_label",
+                      "mapping": {
+                        "1": "Создан",
+                        "2": "В обработке",
+                        "3": "Завершен"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "profiles",
+              "columns": [
+                {
+                  "name": "user_id",
+                  "type": "uuid",
+                  "view_key": "id",
+                  "is_update_key": true,
+                  "is_primary_key": true
+                },
+                {
+                  "name": "age",
+                  "type": "int",
+                  "is_nullable": true
+                },
+                {
+                  "name": "test",
+                  "type": "varchar",
+                  "is_deleted": true,
+                  "is_nullable": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
