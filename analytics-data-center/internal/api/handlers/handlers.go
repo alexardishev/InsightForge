@@ -12,7 +12,7 @@ type Handlers struct {
 
 type HandlersDB interface {
 	GetConnectionsStrings(w http.ResponseWriter, r *http.Request)
-	GetDB(w http.ResponseWriter, r *http.Request)
+	GetDBInformations(w http.ResponseWriter, r *http.Request)
 }
 
 func NewHandlers(log *slog.Logger, db HandlersDB) *Handlers {

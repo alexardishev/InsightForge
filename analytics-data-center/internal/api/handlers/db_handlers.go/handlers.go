@@ -39,7 +39,7 @@ func (d *DBHandlers) GetConnectionsStrings(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (d *DBHandlers) GetDB(w http.ResponseWriter, r *http.Request) {
+func (d *DBHandlers) GetDBInformations(w http.ResponseWriter, r *http.Request) {
 	const op = "DBHandlers.GetDB"
 	d.log.With(
 		slog.String("op", op),
@@ -59,8 +59,7 @@ func (d *DBHandlers) GetDB(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 
-	dbNames, err := d.serviceAnalytics.GetDB(ctx, connectionsStrings)
-
+	dbNames, err := d.serviceAnalytics.GetDBInformations(ctx, connectionsStrings)
 	if err := json.NewEncoder(w).Encode(dbNames); err != nil {
 		d.log.Error("failed to encode response", slog.String("error", err.Error()))
 		http.Error(w, "internal error", http.StatusInternalServerError)

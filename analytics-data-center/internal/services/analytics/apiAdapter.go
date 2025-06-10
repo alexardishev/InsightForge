@@ -7,21 +7,63 @@ import (
 	"net/url"
 )
 
-func (a *AnalyticsDataCenterService) GetDB(ctx context.Context, connections models.ConnectionStrings) ([]string, error) {
-
-	var dbNames []string
+func (a *AnalyticsDataCenterService) GetDBInformations(ctx context.Context, connections models.ConnectionStrings) ([]models.Source, error) {
+	var response []models.Source
 	for _, conn := range connections.ConnectionStrings {
 		for _, value := range conn.ConnectionString {
+			var source models.Source
 			connectionString := value
 			u, err := url.Parse(connectionString)
 			if err != nil {
-				return []string{}, fmt.Errorf("ошибка парсинга url: %w", err)
+				a.log.Error("Парсинг строки подключения завершен с ошибкой")
+				return nil, fmt.Errorf("ошибка парсинга url: %w", err)
 			}
 			dbname := u.Path[1:]
-			dbNames = append(dbNames, dbname)
-
+			source.Name = dbname
+			oltpStorage, err := a.OLTPFactory.GetOLTPStorage(ctx, source.Name)
+			if err != nil {
+				a.log.Error("Получение хранилища OLTP завершено с ошибкой")
+				return nil, fmt.Errorf("ошибка получения хранилища: %w", err)
+			}
+			schemas, err := oltpStorage.GetSchemas(ctx, source.Name)
+			if err != nil {
+				a.log.Error("ошибка получения схем")
+				return nil, fmt.Errorf("ошибка получения схем: %w", err)
+			}
+			for sidx, schema := range schemas {
+				tables, err := oltpStorage.GetTables(ctx, schema.Name)
+				if err != nil {
+					a.log.Error("ошибка получения таблиц")
+					return nil, fmt.Errorf("ошибка получения таблиц: %w", err)
+				}
+				for tidx, table := range tables {
+					columns, err := oltpStorage.GetColumns(ctx, schema.Name, table.Name)
+					if err != nil {
+						a.log.Error("ошибка получения столбцов")
+						return nil, fmt.Errorf("ошибка получения столбцов: %w", err)
+					}
+					for cidx, column := range columns {
+						info, err := oltpStorage.GetColumnInfo(ctx, table.Name, column.Name)
+						if err != nil {
+							a.log.Error("ошибка получения информации о столбце")
+							return nil, fmt.Errorf("ошибка получения информации о столбце: %w", err)
+						}
+						columns[cidx].IsPrimaryKey = info.IsPK
+						columns[cidx].IsNullable = info.IsNullable
+						columns[cidx].Type = info.Type
+						columns[cidx].IsFK = info.IsFK
+						columns[cidx].IsUNQ = info.IsUnique
+						if info.Default != nil {
+							columns[cidx].Default = *info.Default
+						}
+					}
+					tables[tidx].Columns = columns
+				}
+				schemas[sidx].Tables = tables
+			}
+			source.Schemas = schemas
+			response = append(response, source)
 		}
 	}
-	return dbNames, nil
-
+	return response, nil
 }

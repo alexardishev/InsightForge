@@ -30,7 +30,7 @@ func NewRouter(logger *slog.Logger, serviceAnalytics *serviceanalytics.Analytics
 
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/get-connections", handlers.GetConnectionsStrings)
-		r.Post("/get-db", handlers.GetDB)
+		r.Post("/get-db", handlers.GetDBInformations)
 	})
 
 	return r

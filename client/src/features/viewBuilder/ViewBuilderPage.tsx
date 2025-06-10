@@ -27,16 +27,17 @@ const data = useSelector((state: RootState) => state.settings.dataBaseInfo)
       <Heading mb={6}>Конструктор витрины</Heading>
       <VStack align="stretch" spacing={4} maxW="md">
         <Select
-          placeholder="Выберите базу данных"
-          value={selectedDb}
+            placeholder={data?.length > 0 ? undefined : "Выберите базу данных"}
+            value={selectedDb}
           onChange={(e) => {
             setSelectedDb(e.target.value);
             setSelectedSchema('');
             setSelectedTables([]);
           }}
-        >
-          {data?.databases.map((db: any) => (
-            <option key={db} value={db}>
+        > 
+          {data?.map((db: any, index: number) => (
+
+            <option key={index + 1} value={db}>
               {db}
             </option>
           ))}

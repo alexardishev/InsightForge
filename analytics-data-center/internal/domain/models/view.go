@@ -31,6 +31,9 @@ type Column struct {
 	IsNullable   bool       `json:"is_nullable,omitempty"`
 	IsPrimaryKey bool       `json:"is_primary_key,omitempty"`
 	ViewKey      string     `json:"view_key,omitempty"`
+	IsFK         bool       `json:"is_fk,omitempty"`
+	Default      string     `json:"default,omitempty"`
+	IsUNQ        bool       `json:"is_unq,omitempty"`
 }
 
 type Transform struct {

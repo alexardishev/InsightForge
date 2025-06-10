@@ -99,6 +99,20 @@ func (m *mockOLTP) GetIndexes(context.Context, string, string) (models.Indexes, 
 func (m *mockOLTP) GetConstraint(context.Context, string, string) (models.Constraints, error) {
 	return models.Constraints{}, nil
 }
+func (m *mockOLTP) GetColumns(context.Context, string, string) ([]models.Column, error) {
+	return []models.Column{}, nil
+}
+
+func (m *mockOLTP) GetSchemas(context.Context, string) ([]models.Schema, error) {
+	return []models.Schema{}, nil
+}
+func (m *mockOLTP) GetTables(context.Context, string) ([]models.Table, error) {
+	return []models.Table{}, nil
+}
+
+func (m *mockOLTP) GetColumnInfo(context.Context, string, string) (models.ColumnInfo, error) {
+	return models.ColumnInfo{}, nil
+}
 
 // ---- factory ----
 type mockFactory struct {

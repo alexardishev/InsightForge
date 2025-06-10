@@ -22,6 +22,7 @@ type DWHDB interface {
 
 type OLTPDB interface {
 	DataProviderOLTP
+	DataBaseProviderOLTP
 }
 type SchemaProvider interface {
 	GetView(ctx context.Context, idView int64) (models.View, error)
@@ -56,4 +57,11 @@ type DataProviderOLTP interface {
 	SelectDataToInsert(ctx context.Context, query string) ([]map[string]interface{}, error) // select data to insert
 	GetIndexes(ctx context.Context, tableName string, schemaName string) (models.Indexes, error)
 	GetConstraint(ctx context.Context, tableName string, schemaName string) (models.Constraints, error)
+}
+
+type DataBaseProviderOLTP interface {
+	GetSchemas(ctx context.Context, source string) ([]models.Schema, error)
+	GetTables(ctx context.Context, schema string) ([]models.Table, error)
+	GetColumns(ctx context.Context, schemaName string, tableName string) ([]models.Column, error)
+	GetColumnInfo(ctx context.Context, tableName string, columnName string) (models.ColumnInfo, error)
 }
