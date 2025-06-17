@@ -1,7 +1,13 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Box, Heading, VStack, Button } from '@chakra-ui/react';
-import { useSelector } from 'react-redux';
-import type { RootState } from '../../app/store';
+import { useSelector, useDispatch } from 'react-redux';
+import type { RootState, AppDispatch } from '../../app/store';
+import {
+  setSelectedDb,
+  setSelectedSchema,
+  toggleTable,
+  toggleColumn,
+} from './viewBuilderSlice';
 import DatabaseSelector from './components/DatabaseSelector';
 import SchemaSelector from './components/SchemaSelector';
 import TableSelector from './components/TableSelector';
@@ -46,27 +52,18 @@ interface SelectedColumn {
 }
 
 const ViewBuilderPage: React.FC = () => {
-  const [selectedDb, setSelectedDb] = useState('');
-  const [selectedSchema, setSelectedSchema] = useState('');
-  const [selectedTables, setSelectedTables] = useState<string[]>([]);
-  const [selectedColumns, setSelectedColumns] = useState<SelectedColumn[]>([]);
+  const dispatch = useDispatch<AppDispatch>();
   const data = useSelector((state: RootState) => state.settings.dataBaseInfo);
+  const { selectedDb, selectedSchema, selectedTables, selectedColumns } =
+    useSelector((state: RootState) => state.viewBuilder);
 
 
   const handleToggleTable = (table: string) => {
-    setSelectedTables((prev) =>
-      prev.includes(table) ? prev.filter((t) => t !== table) : [...prev, table]
-    );
-    setSelectedColumns((prev) => prev.filter((c) => c.table !== table));
+    dispatch(toggleTable(table));
   };
 
   const handleToggleColumn = (table: string, column: string) => {
-    const exists = selectedColumns.find((c) => c.table === table && c.column === column);
-    if (exists) {
-      setSelectedColumns((prev) => prev.filter((c) => !(c.table === table && c.column === column)));
-    } else {
-      setSelectedColumns((prev) => [...prev, { table, column }]);
-    }
+    dispatch(toggleColumn({ table, column }));
   };
 
   const selectedDatabase = data?.find((db: any) => db.name === selectedDb);
@@ -118,12 +115,7 @@ const ViewBuilderPage: React.FC = () => {
           <DatabaseSelector
             data={data}
             selectedDb={selectedDb}
-            onChange={(db) => {
-              setSelectedDb(db);
-              setSelectedSchema('');
-              setSelectedTables([]);
-              setSelectedColumns([]);
-            }}
+            onChange={(db) => dispatch(setSelectedDb(db))}
           />
         </Box>
 
@@ -132,11 +124,7 @@ const ViewBuilderPage: React.FC = () => {
             <SchemaSelector
               selectedDatabase={selectedDatabase}
               selectedSchema={selectedSchema}
-              onChange={(schema) => {
-                setSelectedSchema(schema);
-                setSelectedTables([]);
-                setSelectedColumns([]);
-              }}
+              onChange={(schema) => dispatch(setSelectedSchema(schema))}
             />
           </Box>
         )}
