@@ -101,3 +101,22 @@ func (p *PostgresSys) UpdateView(ctx context.Context, view models.View, schemaId
 	}
 	return nil
 }
+
+func (p *PostgresSys) UploadView(ctx context.Context, view models.View) (int64, error) {
+	const op = "Storage.PostgreSQL.UploadVIew"
+	log := p.Log.With(slog.String("op", op))
+	log.Info("Operation starting")
+	var id int64
+	unmarshalView, err := json.Marshal(view)
+	if err != nil {
+		log.Error("Ошибка перевода в JSON", slog.String("error", err.Error()))
+		return 0, err
+	}
+	query := "INSERT INTO schems (schema_view) VALUES ($1) RETURNING id"
+	err = p.Db.QueryRowContext(ctx, query, unmarshalView).Scan(&id)
+	if err != nil {
+		log.Error("Ошибка создания схемы", slog.String("error", err.Error()))
+		return 0, nil
+	}
+	return id, nil
+}

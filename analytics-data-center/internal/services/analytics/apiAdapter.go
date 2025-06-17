@@ -67,3 +67,14 @@ func (a *AnalyticsDataCenterService) GetDBInformations(ctx context.Context, conn
 	}
 	return response, nil
 }
+
+func (a *AnalyticsDataCenterService) UploadSchema(ctx context.Context, schema models.View) (int64, error) {
+	var id int64
+	id, err := a.SchemaProvider.UploadView(ctx, schema)
+	if err != nil {
+		a.log.Error("Ошибка работы с базой данных")
+		return 0, err
+	}
+	return id, nil
+
+}

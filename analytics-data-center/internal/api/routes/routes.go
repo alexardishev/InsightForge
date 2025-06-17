@@ -35,6 +35,7 @@ func NewRouter(logger *loggerpkg.Logger, serviceAnalytics *serviceanalytics.Anal
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/get-connections", handlers.GetConnectionsStrings)
 		r.Post("/get-db", handlers.GetDBInformations)
+		r.Post("/upload-schem", handlers.UploadSchema)
 	})
 
 	return r

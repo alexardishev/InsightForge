@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 
 -- Таблица со схемами представлений
 CREATE TABLE IF NOT EXISTS schems (
-    id BIGINT PRIMARY KEY,
+id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     schema_view JSONB NOT NULL
 );
 

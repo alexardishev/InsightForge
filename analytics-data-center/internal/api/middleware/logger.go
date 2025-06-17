@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 	"log/slog"
 	"net/http"
 	"time"
@@ -8,11 +9,11 @@ import (
 
 // Logger is a middleware that logs HTTP requests.
 type Logger struct {
-	log *slog.Logger
+	log *loggerpkg.Logger
 }
 
 // NewLogger creates a new instance of Logger middleware using the provided logger.
-func NewLogger(logger *slog.Logger) *Logger {
+func NewLogger(logger *loggerpkg.Logger) *Logger {
 	return &Logger{log: logger}
 }
 

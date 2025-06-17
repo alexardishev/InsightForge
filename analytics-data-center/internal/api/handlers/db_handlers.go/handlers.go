@@ -42,7 +42,7 @@ func (d *DBHandlers) GetConnectionsStrings(w http.ResponseWriter, r *http.Reques
 }
 
 func (d *DBHandlers) GetDBInformations(w http.ResponseWriter, r *http.Request) {
-	const op = "DBHandlers.GetDB"
+	const op = "DBHandlers.GetDBInformations"
 	d.log.With(
 		slog.String("op", op),
 	)
@@ -53,16 +53,60 @@ func (d *DBHandlers) GetDBInformations(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&connectionsStrings); err != nil {
 		d.log.Error("failed to decode request", slog.String("error", err.Error()))
 		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
 	}
 	_, err := validate.Validate(connectionsStrings)
 	if err != nil {
 		d.log.Error("failed validate", slog.String("error", err.Error()))
 		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+
+	dbNames, err := d.serviceAnalytics.GetDBInformations(ctx, connectionsStrings)
+	if err != nil {
+		d.log.Error("ошибка сервиса аналитики", slog.String("error", err.Error()))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
 	}
 	w.WriteHeader(http.StatusOK)
 
-	dbNames, err := d.serviceAnalytics.GetDBInformations(ctx, connectionsStrings)
 	if err := json.NewEncoder(w).Encode(dbNames); err != nil {
+		d.log.Error("failed to encode response", slog.String("error", err.Error()))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+}
+
+func (d *DBHandlers) UploadSchema(w http.ResponseWriter, r *http.Request) {
+	const op = "DBHandlers.UploadSchem"
+	d.log.With(
+		slog.String("op", op),
+	)
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "application/json")
+	var schemaView models.View
+	if err := json.NewDecoder(r.Body).Decode(&schemaView); err != nil {
+		d.log.Error("failed to decode request", slog.String("error", err.Error()))
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	_, err := validate.Validate(schemaView)
+	if err != nil {
+		d.log.Error("failed validate", slog.String("error", err.Error()))
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+
+	id, err := d.serviceAnalytics.UploadSchema(ctx, schemaView)
+	if err != nil {
+		d.log.Error("ошибка сервиса аналитики", slog.String("error", err.Error()))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(id); err != nil {
 		d.log.Error("failed to encode response", slog.String("error", err.Error()))
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return

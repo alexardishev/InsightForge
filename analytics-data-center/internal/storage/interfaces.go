@@ -28,6 +28,7 @@ type SchemaProvider interface {
 	GetView(ctx context.Context, idView int64) (models.View, error)
 	GetSchems(ctx context.Context, source string, schema string, table string) ([]int, error)
 	UpdateView(ctx context.Context, view models.View, schemaId int) error
+	UploadView(ctx context.Context, view models.View) (int64, error)
 }
 
 type TaskProvider interface {
