@@ -1,25 +1,11 @@
 import React, { useState } from 'react';
-import {
-  Box,
-  Heading,
-  Select,
-  VStack,
-  Checkbox,
-  Text,
-  SimpleGrid,
-  Accordion,
-  AccordionItem,
-  AccordionButton,
-  AccordionPanel,
-  AccordionIcon,
-  Badge,
-  HStack,
-  Divider,
-  Button,
-  useColorModeValue,
-} from '@chakra-ui/react';
+import { Box, Heading, VStack, Button } from '@chakra-ui/react';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../../app/store';
+import DatabaseSelector from './components/DatabaseSelector';
+import SchemaSelector from './components/SchemaSelector';
+import TableSelector from './components/TableSelector';
+import ColumnsGrid from './components/ColumnsGrid';
 
 interface Column {
   name: string;
@@ -66,10 +52,6 @@ const ViewBuilderPage: React.FC = () => {
   const [selectedColumns, setSelectedColumns] = useState<SelectedColumn[]>([]);
   const data = useSelector((state: RootState) => state.settings.dataBaseInfo);
 
-  const panelBg = useColorModeValue('gray.50', 'gray.700');
-  const panelText = useColorModeValue('gray.800', 'gray.100');
-  const cardBg = useColorModeValue('white', 'gray.800');
-  const cardBorder = useColorModeValue('gray.200', 'gray.600');
 
   const handleToggleTable = (table: string) => {
     setSelectedTables((prev) =>
@@ -133,172 +115,46 @@ const ViewBuilderPage: React.FC = () => {
       <Heading mb={8} textAlign="center">Конструктор витрины</Heading>
       <VStack align="stretch" spacing={6}>
         <Box maxW="md" mx="auto">
-          <Select
-            placeholder={data?.length > 0 ? "Выберите базу данных" : "Нет доступных баз данных"}
-            value={selectedDb}
-            onChange={(e) => {
-              setSelectedDb(e.target.value);
+          <DatabaseSelector
+            data={data}
+            selectedDb={selectedDb}
+            onChange={(db) => {
+              setSelectedDb(db);
               setSelectedSchema('');
               setSelectedTables([]);
               setSelectedColumns([]);
             }}
-          >
-            {data?.map((db: any, index: number) => (
-              <option key={index} value={db?.name}>
-                {db?.name}
-              </option>
-            ))}
-          </Select>
+          />
         </Box>
 
         {selectedDb && selectedDatabase && (
           <Box maxW="md" mx="auto">
-            <Select
-              placeholder="Выберите схему"
-              value={selectedSchema}
-              onChange={(e) => {
-                setSelectedSchema(e.target.value);
+            <SchemaSelector
+              selectedDatabase={selectedDatabase}
+              selectedSchema={selectedSchema}
+              onChange={(schema) => {
+                setSelectedSchema(schema);
                 setSelectedTables([]);
                 setSelectedColumns([]);
               }}
-            >
-              {selectedDatabase.schemas?.map((schema: any, index: number) => (
-                <option key={index} value={schema?.name}>
-                  {schema?.name}
-                </option>
-              ))}
-            </Select>
+            />
           </Box>
         )}
 
         {selectedSchema && selectedSchemaData && (
-          <Box maxW="md" mx="auto">
-            <Text mb={4} fontWeight="medium" textAlign="center">Выберите таблицы:</Text>
-            <VStack align="start" spacing={3}>
-              {selectedSchemaData.tables?.map((table: any) => (
-                <Checkbox
-                  key={table.name}
-                  isChecked={selectedTables.includes(table.name)}
-                  onChange={() => handleToggleTable(table.name)}
-                  size="lg"
-                >
-                  <Text fontSize="md">{table.name}</Text>
-                </Checkbox>
-              ))}
-            </VStack>
-          </Box>
+          <TableSelector
+            selectedSchemaData={selectedSchemaData}
+            selectedTables={selectedTables}
+            onToggleTable={handleToggleTable}
+          />
         )}
 
-        {selectedTables.length > 0 && selectedSchemaData && (
-          <Box w="100%">
-            <Text pt={4} mb={6} fontWeight="medium" textAlign="center" fontSize="lg">
-              Колонки в выбранных таблицах:
-            </Text>
-            <SimpleGrid columns={{ base: 1, lg: 2, xl: 3 }} spacing={6}>
-              {selectedTables.map((tableName) => {
-                const tableData = selectedSchemaData.tables?.find((table: any) => table.name === tableName);
-                return (
-                  <Box
-                    key={tableName}
-                    p={4}
-                    borderWidth="1px"
-                    borderColor={cardBorder}
-                    borderRadius="lg"
-                    bg={cardBg}
-                    shadow="md"
-                    _hover={{ shadow: "lg" }}
-                    transition="all 0.2s"
-                  >
-                    <Text fontWeight="bold" fontSize="lg" mb={4} textAlign="center" color="blue.400">
-                      {tableName}
-                    </Text>
-                    <Accordion allowMultiple>
-                      {tableData?.columns?.map((col: any, index: number) => (
-                        <AccordionItem key={col.name || index} border="none">
-                          <AccordionButton
-                            _hover={{ bg: useColorModeValue("gray.100", "gray.600") }}
-                            borderRadius="md"
-                            mb={1}
-                          >
-                            <Checkbox
-                              mr={4}
-                              isChecked={selectedColumns.some((c) => c.table === tableName && c.column === col.name)}
-                              onChange={() => handleToggleColumn(tableName, col.name)}
-                            />
-                            <Box flex="1" textAlign="left">
-                              <VStack align="start" spacing={1}>
-                                <Text fontWeight="medium">{col.name}</Text>
-                                <HStack wrap="wrap">
-                                  <Badge colorScheme="blue" variant="solid" size="sm">{col.type}</Badge>
-                                  {col.is_primary_key && (
-                                    <Badge colorScheme="red" variant="solid" size="sm">PK</Badge>
-                                  )}
-                                  {col.is_fk && (
-                                    <Badge colorScheme="orange" variant="solid" size="sm">FK</Badge>
-                                  )}
-                                  {col.is_unique && (
-                                    <Badge colorScheme="purple" variant="solid" size="sm">UNQ</Badge>
-                                  )}
-                                </HStack>
-                              </VStack>
-                            </Box>
-                            <AccordionIcon />
-                          </AccordionButton>
-                          <AccordionPanel pb={4} bg={panelBg} color={panelText} borderRadius="md" mt={1}>
-                            <VStack align="start" spacing={3}>
-                              <HStack>
-                                <Text fontWeight="medium" minW="80px" fontSize="sm">Тип:</Text>
-                                <Text fontSize="sm">{col.type}</Text>
-                              </HStack>
-                              <HStack>
-                                <Text fontWeight="medium" minW="80px" fontSize="sm">Nullable:</Text>
-                                <Badge colorScheme={col.is_nullable ? "yellow" : "green"} size="sm">
-                                  {col.is_nullable ? "Да" : "Нет"}
-                                </Badge>
-                              </HStack>
-                              {col.default && (
-                                <VStack align="start" spacing={1}>
-                                  <Text fontWeight="medium" fontSize="sm">По умолчанию:</Text>
-                                  <Text fontSize="xs" p={2} borderRadius="md" wordBreak="break-word" bg="gray.600">
-                                    {col.default}
-                                  </Text>
-                                </VStack>
-                              )}
-                              {col.description && (
-                                <VStack align="start" spacing={1}>
-                                  <Text fontWeight="medium" fontSize="sm">Описание:</Text>
-                                  <Text fontSize="sm">{col.description}</Text>
-                                </VStack>
-                              )}
-                              <Divider />
-                              <VStack align="start" spacing={2}>
-                                <Text fontWeight="medium" fontSize="sm">Свойства:</Text>
-                                <HStack wrap="wrap">
-                                  {col.is_pk && (
-                                    <Badge colorScheme="red" variant="outline" size="sm">Первичный ключ</Badge>
-                                  )}
-                                  {col.is_fk && (
-                                    <Badge colorScheme="orange" variant="outline" size="sm">Внешний ключ</Badge>
-                                  )}
-                                  {col.is_unique && (
-                                    <Badge colorScheme="purple" variant="outline" size="sm">Уникальный</Badge>
-                                  )}
-                                  {!col.is_pk && !col.is_fk && !col.is_unique && (
-                                    <Text fontSize="sm" color="gray.400">Обычная колонка</Text>
-                                  )}
-                                </HStack>
-                              </VStack>
-                            </VStack>
-                          </AccordionPanel>
-                        </AccordionItem>
-                      ))}
-                    </Accordion>
-                  </Box>
-                );
-              })}
-            </SimpleGrid>
-          </Box>
-        )}
+        <ColumnsGrid
+          selectedTables={selectedTables}
+          selectedSchemaData={selectedSchemaData}
+          selectedColumns={selectedColumns}
+          onToggleColumn={handleToggleColumn}
+        />
 
         {selectedColumns.length > 0 && (
           <Box textAlign="center">
