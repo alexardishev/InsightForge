@@ -3,6 +3,7 @@ package routes
 import (
 	"analyticDataCenter/analytics-data-center/internal/api/handlers"
 	dbhandlers "analyticDataCenter/analytics-data-center/internal/api/handlers/db_handlers.go"
+	"analyticDataCenter/analytics-data-center/internal/api/middleware"
 	serviceanalytics "analyticDataCenter/analytics-data-center/internal/services/analytics"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,8 @@ func NewRouter(logger *slog.Logger, serviceAnalytics *serviceanalytics.Analytics
 	dbhandlers := dbhandlers.NewDBHandler(logger, serviceAnalytics)
 	handlers := handlers.NewHandlers(logger, dbhandlers)
 
+	logMiddleware := middleware.NewLogger(logger)
+	r.Use(logMiddleware.Middleware)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
