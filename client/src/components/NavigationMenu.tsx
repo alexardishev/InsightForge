@@ -11,12 +11,14 @@ const NavigationMenu: React.FC = () => {
   const canBuilder = !!settings.dataBaseInfo;
   const canJoins = builder.selectedColumns.length > 0;
   const canTransforms = canJoins;
+  const canSummary = canTransforms;
 
   const links = [
     { label: 'Подключение', path: '/settings', enabled: true },
     { label: 'Таблицы', path: '/builder', enabled: canBuilder },
     { label: 'Джоины', path: '/joins', enabled: canJoins },
     { label: 'Трансформации', path: '/transforms', enabled: canTransforms },
+    { label: 'Итог', path: '/summary', enabled: canSummary },
   ];
 
   return (

@@ -7,6 +7,7 @@ import NavigationMenu from './components/NavigationMenu';
 import ViewBuilderPage from './features/viewBuilder/ViewBuilderPage';
 import JoinBuilderPage from './features/viewBuilder/JoinBuilderPage';
 import TransformBuilderPage from './features/viewBuilder/TransformBuilderPage';
+import SummaryPage from './features/summary/SummaryPage';
 
 const App: React.FC = () => {
   return (
@@ -21,6 +22,7 @@ const App: React.FC = () => {
         <Route path='/builder' element={<ViewBuilderPage/>}></Route>
         <Route path='/joins' element={<JoinBuilderPage/>}></Route>
         <Route path='/transforms' element={<TransformBuilderPage/>}></Route>
+        <Route path='/summary' element={<SummaryPage/>}></Route>
         <Route path="*" element={<Navigate to="/settings" replace />} />
       </Routes>
     </Box>
