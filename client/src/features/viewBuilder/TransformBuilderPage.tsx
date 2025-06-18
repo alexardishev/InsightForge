@@ -13,8 +13,7 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import type { RootState, AppDispatch } from '../../app/store';
-import { setTransformation } from './viewBuilderSlice';
-import { useHttp } from '../../hooks/http.hook';
+import { setTransformation, setViewKey } from './viewBuilderSlice';
 
 interface LocalTransformState {
   type: string;
@@ -26,7 +25,6 @@ interface LocalTransformState {
 const TransformBuilderPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
-  const { request } = useHttp();
 
   const data = useSelector((state: RootState) => state.settings.dataBaseInfo);
   const {
@@ -34,8 +32,6 @@ const TransformBuilderPage: React.FC = () => {
     selectedSchema,
     selectedTables,
     selectedColumns,
-    joins,
-    viewName,
     transformations,
   } = useSelector((state: RootState) => state.viewBuilder);
 
@@ -87,62 +83,44 @@ const TransformBuilderPage: React.FC = () => {
       dispatch(setTransformation({ table, column, transform }));
     });
 
-    if (!selectedSchemaData) return;
-    const source = {
-      name: selectedDb,
-      schemas: [
-        {
-          name: selectedSchema,
-          tables: selectedTables.map((tableName) => {
-            const tableData = selectedSchemaData.tables.find((t: any) => t.name === tableName);
-            return {
-              name: tableName,
-              columns: tableData.columns
-                .filter((col: any) => selectedColumns.some((c) => c.table === tableName && c.column === col.name))
-                .map((col: any) => {
-                  const key = `${tableName}.${col.name}`;
-                  const base = {
-                    name: col.name,
-                    type: col.type,
-                    is_nullable: col.is_nullable,
-                    is_primary_key: col.is_primary_key || col.is_pk,
-                    is_fk: col.is_fk,
-                    default: col.default,
-                    is_unq: col.is_unique,
-                    view_key: col.view_key,
-                    is_update_key: col.is_update_key,
-                  };
-                  const tr = transformations[key];
-                  return tr ? { ...base, transform: tr } : base;
-                }),
-            };
-          }),
-        },
-      ],
-    };
-
-    const view = {
-      view_name: viewName,
-      sources: [source],
-      joins,
-    };
-
-    try {
-      await request('http://localhost:8888/api/upload-schem', 'POST', view);
-      navigate('/settings');
-    } catch (e) {
-      console.error(e);
-    }
+    navigate('/summary');
   };
 
   const renderColumn = (table: string, column: any) => {
     const key = `${table}.${column.name}`;
     if (!local[key]) return null;
     const val = local[key];
+    const otherColumns = selectedColumns.filter(
+      (c) => c.table !== table || c.column !== column.name,
+    );
+    const selectedCol = selectedColumns.find(
+      (c) => c.table === table && c.column === column.name,
+    );
     return (
       <Box key={key} p={4} borderWidth="1px" borderRadius="md" mb={4}
            background="gray.700">
         <Text mb={2} fontWeight="bold">{table}.{column.name}</Text>
+        <Select
+          mb={2}
+          placeholder="view_key"
+          value={selectedCol?.viewKey || ''}
+          onChange={(e) =>
+            dispatch(
+              setViewKey({
+                table,
+                column: column.name,
+                viewKey: e.target.value,
+              }),
+            )
+          }
+        >
+          <option value="">Без view_key</option>
+          {otherColumns.map((c) => (
+            <option key={`${c.table}.${c.column}`} value={c.column}>
+              {c.table}.{c.column}
+            </option>
+          ))}
+        </Select>
         <Select mb={2} value={val.type} onChange={(e) => updateField(key, 'type', e.target.value)}>
           <option value="">Без трансформации</option>
           <option value="FieldTransform">FieldTransform</option>

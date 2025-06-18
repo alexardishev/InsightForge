@@ -3,6 +3,7 @@ import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 interface SelectedColumn {
   table: string;
   column: string;
+  viewKey?: string;
 }
 
 interface JoinSide {
@@ -84,15 +85,25 @@ const viewBuilderSlice = createSlice({
     },
     toggleColumn(state, action: PayloadAction<SelectedColumn>) {
       const { table, column } = action.payload;
-      const exists = state.selectedColumns.find(
+      const idx = state.selectedColumns.findIndex(
         (c) => c.table === table && c.column === column,
       );
-      if (exists) {
-        state.selectedColumns = state.selectedColumns.filter(
-          (c) => !(c.table === table && c.column === column),
-        );
+      if (idx !== -1) {
+        state.selectedColumns.splice(idx, 1);
       } else {
         state.selectedColumns.push({ table, column });
+      }
+    },
+    setViewKey(
+      state,
+      action: PayloadAction<{ table: string; column: string; viewKey: string }>,
+    ) {
+      const { table, column, viewKey } = action.payload;
+      const col = state.selectedColumns.find(
+        (c) => c.table === table && c.column === column,
+      );
+      if (col) {
+        col.viewKey = viewKey || undefined;
       }
     },
     addJoin(state, action: PayloadAction<Join>) {
@@ -132,6 +143,7 @@ export const {
   setSelectedSchema,
   toggleTable,
   toggleColumn,
+  setViewKey,
   addJoin,
   removeJoin,
   setTransformation,
