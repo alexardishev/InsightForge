@@ -16,7 +16,6 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import type { RootState, AppDispatch } from '../../app/store';
 import { addJoin, removeJoin, setViewName } from './viewBuilderSlice';
-import { useHttp } from '../../hooks/http.hook';
 import { DeleteIcon } from '@chakra-ui/icons';
 
 interface Column {
@@ -26,7 +25,6 @@ interface Column {
 const JoinBuilderPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
-  const { request } = useHttp();
 
   const data = useSelector((state: RootState) => state.settings.dataBaseInfo);
   const {
@@ -64,50 +62,8 @@ const JoinBuilderPage: React.FC = () => {
     setJoinColumn('');
   };
 
-  const handleCreateView = async () => {
-    if (!selectedSchemaData) return;
-    const source = {
-      name: selectedDb,
-      schemas: [
-        {
-          name: selectedSchema,
-          tables: selectedTables.map((tableName) => {
-            const tableData = selectedSchemaData.tables.find((t: any) => t.name === tableName);
-            return {
-              name: tableName,
-              columns: tableData.columns
-                .filter((col: Column) =>
-                  selectedColumns.some((c) => c.table === tableName && c.column === col.name)
-                )
-                .map((col: any) => ({
-                  name: col.name,
-                  type: col.type,
-                  is_nullable: col.is_nullable,
-                  is_primary_key: col.is_primary_key || col.is_pk,
-                  is_fk: col.is_fk,
-                  default: col.default,
-                  is_unq: col.is_unique,
-                  view_key: col.view_key,
-                  is_update_key: col.is_update_key,
-                })),
-            };
-          }),
-        },
-      ],
-    };
-
-    const view = {
-      view_name: viewName,
-      sources: [source],
-      joins,
-    };
-
-    try {
-      await request('http://localhost:8888/api/upload-schem', 'POST', view);
-      navigate('/settings');
-    } catch (e) {
-      console.error(e);
-    }
+  const handleNext = () => {
+    navigate('/transforms');
   };
 
   const getColumnsForTable = (tableName: string): Column[] => {
@@ -190,8 +146,8 @@ const JoinBuilderPage: React.FC = () => {
           ))}
         </List>
 
-        <Button colorScheme="blue" onClick={handleCreateView} alignSelf="center">
-          Создать витрину
+        <Button colorScheme="blue" onClick={handleNext} alignSelf="center">
+          Далее
         </Button>
       </VStack>
     </Box>

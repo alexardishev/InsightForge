@@ -25,6 +25,27 @@ interface ViewBuilderState {
   selectedColumns: SelectedColumn[];
   joins: Join[];
   viewName: string;
+  transformations: Record<string, Transform>;
+}
+
+export interface MappingJSON {
+  mapping: Record<string, string>;
+  type_field: string;
+}
+
+export interface Mapping {
+  type_map?: string;
+  mapping?: Record<string, string>;
+  alias_new_column_transform?: string;
+  type_field?: string;
+  mapping_json?: MappingJSON[];
+}
+
+export interface Transform {
+  type: string;
+  mode: string;
+  output_column: string;
+  mapping: Mapping;
 }
 
 const initialState: ViewBuilderState = {
@@ -34,9 +55,10 @@ const initialState: ViewBuilderState = {
   selectedColumns: [],
   joins: [],
   viewName: 'MyView',
+  transformations: {},
 };
 
-const viewBuilderSlice = createSlice<ViewBuilderState>({
+const viewBuilderSlice = createSlice({
   name: 'viewBuilder',
   initialState,
   reducers: {
@@ -79,6 +101,17 @@ const viewBuilderSlice = createSlice<ViewBuilderState>({
     removeJoin(state, action: PayloadAction<number>) {
       state.joins.splice(action.payload, 1);
     },
+    setTransformation(
+      state,
+      action: PayloadAction<{ table: string; column: string; transform: Transform | null }>,
+    ) {
+      const key = `${action.payload.table}.${action.payload.column}`;
+      if (action.payload.transform) {
+        state.transformations[key] = action.payload.transform;
+      } else {
+        delete state.transformations[key];
+      }
+    },
     setViewName(state, action: PayloadAction<string>) {
       state.viewName = action.payload;
     },
@@ -89,6 +122,7 @@ const viewBuilderSlice = createSlice<ViewBuilderState>({
       state.selectedColumns = [];
       state.joins = [];
       state.viewName = 'MyView';
+      state.transformations = {};
     },
   },
 });
@@ -100,6 +134,7 @@ export const {
   toggleColumn,
   addJoin,
   removeJoin,
+  setTransformation,
   setViewName,
   resetSelections,
 } = viewBuilderSlice.actions;

@@ -3,8 +3,10 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import SettingsPage from './features/settings/SettingsPage';
 import { Box, Flex } from '@chakra-ui/react';
 import ThemeToggle from './components/ThemeToggle';
+import NavigationMenu from './components/NavigationMenu';
 import ViewBuilderPage from './features/viewBuilder/ViewBuilderPage';
 import JoinBuilderPage from './features/viewBuilder/JoinBuilderPage';
+import TransformBuilderPage from './features/viewBuilder/TransformBuilderPage';
 
 const App: React.FC = () => {
   return (
@@ -12,11 +14,13 @@ const App: React.FC = () => {
       <Flex justify="flex-end" p={4}>
         <ThemeToggle />
       </Flex>
+      <NavigationMenu />
 
       <Routes>
         <Route path="/settings" element={<SettingsPage />} />
         <Route path='/builder' element={<ViewBuilderPage/>}></Route>
         <Route path='/joins' element={<JoinBuilderPage/>}></Route>
+        <Route path='/transforms' element={<TransformBuilderPage/>}></Route>
         <Route path="*" element={<Navigate to="/settings" replace />} />
       </Routes>
     </Box>
