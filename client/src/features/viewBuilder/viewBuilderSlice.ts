@@ -5,11 +5,26 @@ interface SelectedColumn {
   column: string;
 }
 
+interface JoinSide {
+  source: string;
+  schema: string;
+  table: string;
+  main_table: string;
+  column_first: string;
+  column_second: string;
+}
+
+interface Join {
+  inner: JoinSide;
+}
+
 interface ViewBuilderState {
   selectedDb: string;
   selectedSchema: string;
   selectedTables: string[];
   selectedColumns: SelectedColumn[];
+  joins: Join[];
+  viewName: string;
 }
 
 const initialState: ViewBuilderState = {
@@ -17,9 +32,11 @@ const initialState: ViewBuilderState = {
   selectedSchema: '',
   selectedTables: [],
   selectedColumns: [],
+  joins: [],
+  viewName: 'MyView',
 };
 
-const viewBuilderSlice = createSlice({
+const viewBuilderSlice = createSlice<ViewBuilderState>({
   name: 'viewBuilder',
   initialState,
   reducers: {
@@ -56,11 +73,22 @@ const viewBuilderSlice = createSlice({
         state.selectedColumns.push({ table, column });
       }
     },
+    addJoin(state, action: PayloadAction<Join>) {
+      state.joins.push(action.payload);
+    },
+    removeJoin(state, action: PayloadAction<number>) {
+      state.joins.splice(action.payload, 1);
+    },
+    setViewName(state, action: PayloadAction<string>) {
+      state.viewName = action.payload;
+    },
     resetSelections(state) {
       state.selectedDb = '';
       state.selectedSchema = '';
       state.selectedTables = [];
       state.selectedColumns = [];
+      state.joins = [];
+      state.viewName = 'MyView';
     },
   },
 });
@@ -70,6 +98,9 @@ export const {
   setSelectedSchema,
   toggleTable,
   toggleColumn,
+  addJoin,
+  removeJoin,
+  setViewName,
   resetSelections,
 } = viewBuilderSlice.actions;
 

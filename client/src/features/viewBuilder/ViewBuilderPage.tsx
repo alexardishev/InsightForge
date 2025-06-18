@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Heading, VStack, Button } from '@chakra-ui/react';
 import { useSelector, useDispatch } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import type { RootState, AppDispatch } from '../../app/store';
 import {
   setSelectedDb,
@@ -13,46 +14,9 @@ import SchemaSelector from './components/SchemaSelector';
 import TableSelector from './components/TableSelector';
 import ColumnsGrid from './components/ColumnsGrid';
 
-interface Column {
-  name: string;
-  type?: string;
-  is_nullable?: boolean;
-  is_primary_key?: boolean;
-  is_pk?: boolean;
-  is_fk?: boolean;
-  default?: string;
-  is_unique?: boolean;
-  description?: string;
-}
-
-interface Table {
-  name: string;
-  columns: Column[];
-}
-
-interface Schema {
-  name: string;
-  tables: Table[];
-}
-
-interface Source {
-  name: string;
-  schemas: Schema[];
-}
-
-interface View {
-  view_name: string;
-  sources: Source[];
-  joins: any[];
-}
-
-interface SelectedColumn {
-  table: string;
-  column: string;
-}
-
 const ViewBuilderPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const navigate = useNavigate();
   const data = useSelector((state: RootState) => state.settings.dataBaseInfo);
   const { selectedDb, selectedSchema, selectedTables, selectedColumns } =
     useSelector((state: RootState) => state.viewBuilder);
@@ -70,41 +34,7 @@ const ViewBuilderPage: React.FC = () => {
   const selectedSchemaData = selectedDatabase?.schemas?.find((schema: any) => schema.name === selectedSchema);
 
   const handleBuildView = () => {
-    const source: Source = {
-      name: selectedDb,
-      schemas: [
-        {
-          name: selectedSchema,
-          tables: selectedTables.map((tableName) => {
-            const tableData = selectedSchemaData.tables.find((t: any) => t.name === tableName);
-            return {
-              name: tableName,
-              columns: tableData.columns
-                .filter((col: any) =>
-                  selectedColumns.some((c) => c.table === tableName && c.column === col.name)
-                )
-                .map((col: any) => ({
-                  name: col.name,
-                  type: col.type,
-                  is_nullable: col.is_nullable,
-                  is_primary_key: col.is_primary_key || col.is_pk,
-                  is_fk: col.is_fk,
-                  default: col.default,
-                  is_unq: col.is_unique,
-                })),
-            };
-          }),
-        },
-      ],
-    };
-
-    const view: View = {
-      view_name: 'MyView',
-      sources: [source],
-      joins: [],
-    };
-
-    console.log('Собранная витрина:', view);
+    navigate('/joins');
   };
 
   return (
