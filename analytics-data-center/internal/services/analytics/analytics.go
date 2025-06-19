@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
+
 	"github.com/google/uuid"
 )
 
@@ -144,21 +145,17 @@ func (a *AnalyticsDataCenterService) runETL(ctx context.Context, idView int64, t
 		a.log.Warn("view not found", slog.String("error", err.Error()))
 		return fmt.Errorf("%s:%s", op, err)
 	}
-	if a.OLTPDbName == DbPostgres {
-		// Переделать на вызов вспомогательной функции, здесь должен быть чистый код без условий
-		queries, duplicates, err := sqlgenerator.GenerateQueryCreateTempTablePostgres(&viewSchema, log.Logger)
-		if err != nil {
-			log.ErrorMsg(loggerpkg.MsgGenerateQueriesFailed, slog.String("error", err.Error()))
-			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorCreateTemplateTable)
-			return fmt.Errorf("%s:%s", op, err)
-		}
+	queries, duplicates, err := sqlgenerator.GenerateQueryCreateTempTable(&viewSchema, log.Logger, a.DWHDbName)
+	if err != nil {
+		log.ErrorMsg(loggerpkg.MsgGenerateQueriesFailed, slog.String("error", err.Error()))
+		a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorCreateTemplateTable)
+		return fmt.Errorf("%s:%s", op, err)
+	}
 
-		queriesInit = queries
+	queriesInit = queries
 
-		if len(duplicates) > 0 {
-			log.Warn("duplicates", slog.String("duplicates", strings.Join(duplicates, ",")))
-
-		}
+	if len(duplicates) > 0 {
+		log.Warn("duplicates", slog.String("duplicates", strings.Join(duplicates, ",")))
 
 	}
 	for _, tempTable := range queriesInit.Queries {

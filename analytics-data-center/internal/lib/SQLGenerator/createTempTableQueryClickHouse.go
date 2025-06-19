@@ -8,37 +8,35 @@ import (
 	"strings"
 )
 
-func MapTypeToPostgres(typ string) string {
-	switch strings.ToLower(typ) {
-	case "int", "integer", "int4":
-		return "INTEGER"
-	case "bigint", "int8":
-		return "BIGINT"
-	case "float", "float4", "real":
-		return "REAL"
-	case "double precision", "float8":
-		return "DOUBLE PRECISION"
-	case "bool", "boolean":
-		return "BOOLEAN"
-	case "date":
-		return "DATE"
-	case "timestamp", "timestamp without time zone", "timestamptz":
-		return "TIMESTAMP"
-	case "json", "jsonb":
-		return "JSONB"
+// Маппинг типов для ClickHouse
+func MapTypeToClickhouse(pgType string) string {
+	switch strings.ToLower(pgType) {
 	case "text", "varchar", "character varying":
-		return "TEXT"
+		return "String"
+	case "int", "integer", "int4":
+		return "Int32"
+	case "bigint", "int8":
+		return "Int64"
+	case "double precision", "float8":
+		return "Float64"
+	case "float4", "real":
+		return "Float32"
+	case "boolean", "bool":
+		return "UInt8"
+	case "date":
+		return "Date"
+	case "timestamp", "timestamp without time zone", "timestamptz":
+		return "DateTime"
 	default:
-		return "TEXT"
+		return "String"
 	}
 }
 
-func GenerateQueryCreateTempTablePostgres(
+func GenerateQueryCreateTempTableClickhouse(
 	schema *models.View,
 	logger *slog.Logger,
-	_ string,
 ) (models.Queries, []string, error) {
-	const op = "sqlgenerator.GenerateQueryCreateTempTablePostgres"
+	const op = "sqlgenerator.GenerateQueryCreateTempTableClickhouse"
 	logger = logger.With(slog.String("op", op))
 	logger.Info("start operation")
 	var duplicateColumnNames []string
@@ -55,9 +53,6 @@ func GenerateQueryCreateTempTablePostgres(
 					logger.Error("ошибка", slog.String("error", err.Error()))
 					return models.Queries{}, nil, err
 				}
-
-				linePrimary := ""
-
 				for _, clmn := range tbl.Columns {
 					if clmn.Transform == nil {
 						continue
@@ -87,7 +82,6 @@ func GenerateQueryCreateTempTablePostgres(
 						tbl.Columns = append(tbl.Columns, *column)
 					}
 				}
-
 				cleanList, duplicateList := duplicate.RemoveDuplicateColumns(tbl.Columns)
 				if len(duplicateList) > 0 {
 					logger.Warn("duplicate", slog.Any("Дублирующие имена колонок", duplicateList), slog.Any("в таблице", tbl.Name))
@@ -100,20 +94,11 @@ func GenerateQueryCreateTempTablePostgres(
 					if colName == "" {
 						colName = col.Name
 					}
-					colType := MapTypeToPostgres(col.Type)
-					isNotNull := "NOT NULL"
-					if colType == "" {
-						colType = "TEXT"
+					colType := MapTypeToClickhouse(col.Type)
+					if col.IsNullable {
+						colType = fmt.Sprintf("Nullable(%s)", colType)
 					}
-					var line string
-					if !col.IsNullable {
-						line = fmt.Sprintf("  %s %s %s", colName, colType, isNotNull)
-					} else {
-						line = fmt.Sprintf("  %s %s", colName, colType)
-					}
-					if col.IsPrimaryKey {
-						linePrimary = fmt.Sprintf(", CONSTRAINT %s_%s_prk PRIMARY KEY (%s)", colName, tableName, colName)
-					}
+					line := fmt.Sprintf("  %s %s", colName, colType)
 					if idx < len(cleanList)-1 {
 						line += ","
 					}
@@ -123,7 +108,7 @@ func GenerateQueryCreateTempTablePostgres(
 						return models.Queries{}, nil, err
 					}
 				}
-				_, err = b.WriteString(fmt.Sprintf(" %s );\n", linePrimary))
+				_, err = b.WriteString(") ENGINE = Memory;\n")
 				if err != nil {
 					logger.Error("ошибка", slog.String("error", err.Error()))
 					return models.Queries{}, nil, err
@@ -132,6 +117,7 @@ func GenerateQueryCreateTempTablePostgres(
 					TableName: tableName,
 					Query:     b.String(),
 				}
+				fmt.Sprintln(querySt.Query)
 				queryObject = append(queryObject, *querySt)
 			}
 		}

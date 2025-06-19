@@ -11,6 +11,7 @@ import (
 	smtpsender "analyticDataCenter/analytics-data-center/internal/services/smtrsender"
 	tasksserivce "analyticDataCenter/analytics-data-center/internal/services/tasks"
 	"analyticDataCenter/analytics-data-center/internal/storage"
+	clickhousedwh "analyticDataCenter/analytics-data-center/internal/storage/clickhouseDWH"
 	"analyticDataCenter/analytics-data-center/internal/storage/postgres"
 	postgresdwh "analyticDataCenter/analytics-data-center/internal/storage/postgresDWH"
 	"log/slog"
@@ -58,7 +59,12 @@ func New(log *loggerpkg.Logger, grpcPort int,
 
 	oltpFactory := storage.NewOLTPFactory(log.Logger, factoryOLTP)
 	if DWHName == DbClickhouse {
-		//TO DO дописать когда появится адаптер для Clickhouse
+		var storageDWHClickHouse *clickhousedwh.ClickHouseDB
+		storageDWHClickHouse, err = clickhousedwh.New(connectionStringDWH, log.Logger)
+		if err != nil {
+			panic("Не удалось создать Storage DWH")
+		}
+		storageDWH = storageDWHClickHouse
 	}
 
 	var registeredConnectors []config.OLTPstorage

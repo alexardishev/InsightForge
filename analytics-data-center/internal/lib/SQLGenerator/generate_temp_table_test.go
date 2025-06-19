@@ -81,7 +81,7 @@ func TestGenerateQueryCreateTempTablePostgres(t *testing.T) {
 		},
 	}
 
-	queries, duplicates, err := sqlgenerator.GenerateQueryCreateTempTablePostgres(view, logger)
+	queries, duplicates, err := sqlgenerator.GenerateQueryCreateTempTablePostgres(view, logger, "postgres")
 	t.Log(duplicates)
 	if err != nil {
 		t.Fatalf("ошибка генерации: %v", err)
