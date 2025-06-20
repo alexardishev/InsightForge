@@ -110,7 +110,6 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 						}
 					}
 
-					// ✨ финальный шаг: вызвать SQL вставку
 					var conflictColumns []string
 					for k := range conflictKeys {
 						conflictColumns = append(conflictColumns, k)

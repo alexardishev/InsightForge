@@ -30,11 +30,54 @@ func (c *ClickHouseDB) CreateTempTable(ctx context.Context, query string, tempTa
 	return nil
 }
 
-func (p *ClickHouseDB) DeleteTempTable(ctx context.Context, tableName string) error {
-	panic("DeleteTempTable")
+func (c *ClickHouseDB) DeleteTempTable(ctx context.Context, tableName string) error {
+	const op = "Storage.ClickHouseDB.DeleteTempTable"
+	log := c.Log.With(
+		slog.String("op", op),
+		slog.String("tableName", tableName),
+	)
+	log.Info("удаление таблицы запущено")
+
+	query := fmt.Sprintf("DROP TABLE IF EXISTS %s", tableName)
+	_, err := c.Db.ExecContext(ctx, query)
+	if err != nil {
+		log.Error("не удалось удалить таблицу", slog.String("error", err.Error()))
+		return err
+	}
+	return nil
 }
-func (p *ClickHouseDB) GetColumnsTables(ctx context.Context, schemaName string, tempTableName string) ([]string, error) {
-	return []string{}, nil
+
+func (c *ClickHouseDB) GetColumnsTables(ctx context.Context, schemaName string, tempTableName string) ([]string, error) {
+	const op = "Storage.ClickHouseDB.GetColumnsTempTables"
+	var columns []string
+	log := c.Log.With(
+		slog.String("op", op),
+	)
+
+	query := "SELECT name FROM system.columns WHERE database = ? AND table = ? ORDER BY position"
+	rows, err := c.Db.QueryContext(ctx, query, schemaName, tempTableName)
+	if err != nil {
+		log.Error("Запрос выполнен с ошибкой", slog.String("error", err.Error()))
+		return columns, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var colName string
+		err = rows.Scan(&colName)
+		if err != nil {
+			log.Error("ошибка чтения строки", slog.String("error", err.Error()))
+			return columns, err
+		}
+		columns = append(columns, colName)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Error("ошибка при проходе по строкам", slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	return columns, nil
 }
 
 func (p *ClickHouseDB) CreateIndex(ctx context.Context, query string) error {

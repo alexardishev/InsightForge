@@ -37,7 +37,7 @@ type App struct {
 }
 
 func New(log *loggerpkg.Logger, grpcPort int,
-	storagePath string, connectionStringOLTP string, connectionStringDWH string, OLTPName string, DWHName string,
+	storagePath string, connectionStringOLTP string, connectionStringDWH string, OLTPName string, DWHName string, DWHPath string,
 	tokenTTL time.Duration, factoryOLTP []config.OLTPstorage, BootstrapServers string, GroupId string, AutoOffsetReset string, EnableAutoCommit string, SessionTimeoutMs string, ClientId string, KafkaConnect string, hostSMTP string, portSMTP int, userNameSMTP string, passwordSMTP string, adminEmailSMTP string, fromEmailSMTP string) *App {
 	// TO DO переделать на cfg
 	statusEnum := []string{"In progress", "Execution error", "Completed"}
@@ -84,7 +84,7 @@ func New(log *loggerpkg.Logger, grpcPort int,
 		panic("Не удалось создать Storage")
 	}
 	tasksserivce := tasksserivce.New(log, storageSys, statusEnum)
-	analyticsService := serviceanalytics.New(log, storage.DbSys, tasksserivce, storageDWH, oltpFactory, DWHName, OLTPName, *smtp)
+	analyticsService := serviceanalytics.New(log, storage.DbSys, tasksserivce, storageDWH, oltpFactory, DWHName, DWHPath, OLTPName, *smtp)
 	r := routes.NewRouter(log, analyticsService)
 
 	kafkaConsumer, err := kafkaengine.NewKafkaConsumer(BootstrapServers, GroupId, AutoOffsetReset, EnableAutoCommit, SessionTimeoutMs, ClientId, log)

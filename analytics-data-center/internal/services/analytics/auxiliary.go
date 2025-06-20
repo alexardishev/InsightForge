@@ -7,7 +7,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"runtime"
+	"strings"
 	"sync"
 )
 
@@ -200,7 +202,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 		log.Error("Ошибка", slog.String("error", err.Error()))
 		return false, err
 	}
-	query, err := sqlgenerator.CreateViewQuery(*viewSchema, *viewJoin, log.Logger)
+	query, err := sqlgenerator.CreateViewQuery(*viewSchema, *viewJoin, log.Logger, a.DWHDbName)
 	if err != nil {
 		a.DeleteTempTables(ctx, tempTbl)
 		log.Error("Ошибка", slog.String("error", err.Error()))
@@ -236,6 +238,15 @@ func (a *AnalyticsDataCenterService) prepareViewJoin(ctx context.Context, tempTb
 	var tablesTemp []models.TempTable
 
 	for _, tempTable := range tempTbl {
+		if a.DWHDbName == DbClickhouse {
+			u, err := url.Parse(a.DWHDbPath)
+			if err != nil {
+				log.Error("Невозможно распарсить URL", slog.String("error", err.Error()))
+				return nil, err
+			}
+			dbName := strings.Trim(u.Path, "/")
+			schemaName = dbName
+		}
 		columnsTempTables, err := a.DWHProvider.GetColumnsTables(ctx, schemaName, tempTable)
 		if err != nil {
 			log.Error("Невозможно получить колонки для временных таблиц", slog.String("error", err.Error()))

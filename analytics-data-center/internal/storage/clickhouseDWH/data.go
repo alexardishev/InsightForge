@@ -22,7 +22,17 @@ func (c *ClickHouseDB) InsertDataToDWH(ctx context.Context, query string) error 
 }
 
 func (c *ClickHouseDB) MergeTempTables(ctx context.Context, query string) error {
-	panic("MergeTempTables")
+	const op = "Storage.ClickHouseDB.MergeTempTables"
+	log := c.Log.With(
+		slog.String("op", op),
+	)
+	_, err := c.Db.ExecContext(ctx, query)
+	if err != nil {
+		log.Error("ошибка подготовки запроса", slog.String("error", err.Error()))
+		return err
+	}
+
+	return nil
 }
 
 func (c *ClickHouseDB) ReplicaIdentityFull(ctx context.Context, tableDWHName string) error {

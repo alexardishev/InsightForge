@@ -51,6 +51,7 @@ type AnalyticsDataCenterService struct {
 	DWHProvider    storage.DWHDB
 	OLTPFactory    storage.OLTPFactory
 	DWHDbName      string
+	DWHDbPath      string
 	OLTPDbName     string
 	jobQueue       chan TaskETL
 	eventQueue     chan models.CDCEvent
@@ -70,6 +71,7 @@ func New(
 	dwhProvider storage.DWHDB,
 	OLTPFactory storage.OLTPFactory,
 	DWHDbName string,
+	DWHDbPath string,
 	OLTPDbName string,
 	SMTPClient smtpsender.SMTP,
 
@@ -81,6 +83,7 @@ func New(
 		DWHProvider:    dwhProvider,
 		OLTPFactory:    OLTPFactory,
 		DWHDbName:      DWHDbName,
+		DWHDbPath:      DWHDbPath,
 		OLTPDbName:     OLTPDbName,
 		jobQueue:       make(chan TaskETL, 100),
 		eventQueue:     make(chan models.CDCEvent, 100),

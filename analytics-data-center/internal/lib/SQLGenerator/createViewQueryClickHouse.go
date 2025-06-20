@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"unicode/utf8"
 )
 
-func CreateViewQuery(schema models.View, viewJoin models.ViewJoinTable, logger *slog.Logger) (models.Query, error) {
-	const op = "sqlgenerator.CreateViewQuery"
+func CreateViewQueryClickhouse(schema models.View, viewJoin models.ViewJoinTable, logger *slog.Logger) (models.Query, error) {
+	const op = "sqlgenerator.CreateViewQueryClickhouse"
 	logger = logger.With(slog.String("op", op))
 	logger.Info("start operation")
 
@@ -17,7 +16,6 @@ func CreateViewQuery(schema models.View, viewJoin models.ViewJoinTable, logger *
 		return models.Query{}, fmt.Errorf("нет временных таблиц для формирования вью")
 	}
 
-	// SELECT част
 	var selectParts []string
 	for _, tempTable := range viewJoin.TempTables {
 		alias := CleanAndTrim(tempTable.TempTableName, 4)
@@ -26,10 +24,6 @@ func CreateViewQuery(schema models.View, viewJoin models.ViewJoinTable, logger *
 		}
 	}
 
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf("CREATE TABLE %s AS SELECT %s", schema.Name, strings.Join(selectParts, ", ")))
-
-	// Определяем главную таблицу
 	mainTableName := ""
 	mainAlias := ""
 	mainTableSet := false
@@ -49,7 +43,6 @@ func CreateViewQuery(schema models.View, viewJoin models.ViewJoinTable, logger *
 
 	fromClause := fmt.Sprintf(" FROM %s %s", mainTableName, mainAlias)
 
-	// JOIN части
 	var joinClauses []string
 	for _, join := range schema.Joins {
 		if join.Inner != nil {
@@ -63,20 +56,21 @@ func CreateViewQuery(schema models.View, viewJoin models.ViewJoinTable, logger *
 		}
 	}
 
+	orderBy := ""
+	if len(viewJoin.TempTables) > 0 && len(viewJoin.TempTables[0].TempColumns) > 0 {
+		orderBy = viewJoin.TempTables[0].TempColumns[0].ColumnName
+	} else {
+		orderBy = "tuple()"
+	}
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("CREATE TABLE %s ENGINE = MergeTree() ORDER BY %s AS SELECT %s",
+		schema.Name, orderBy, strings.Join(selectParts, ", ")))
+
 	finalQuery := fmt.Sprintf("%s%s %s", b.String(), fromClause, strings.Join(joinClauses, " "))
 
 	return models.Query{
 		Query:     finalQuery,
 		TableName: schema.Name,
 	}, nil
-}
-
-func CleanAndTrim(input string, maxLen int) string {
-	cleaned := strings.TrimSpace(input)
-	cleaned = strings.Join(strings.Fields(cleaned), "_")
-	if utf8.RuneCountInString(cleaned) > maxLen {
-		runes := []rune(cleaned)
-		return string(runes[len(runes)-maxLen:])
-	}
-	return cleaned
 }
