@@ -34,7 +34,7 @@ This Code of Conduct applies within all project spaces, and it also applies when
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project maintainers at [YOUR EMAIL HERE].  
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project maintainers at aaardyshev@yandex.ru.  
 All complaints will be reviewed and investigated promptly and fairly.
 
 All project maintainers are obligated to respect the privacy and security of the reporter of any incident.
