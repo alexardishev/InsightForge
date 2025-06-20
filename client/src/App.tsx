@@ -8,6 +8,7 @@ import ViewBuilderPage from './features/viewBuilder/ViewBuilderPage';
 import JoinBuilderPage from './features/viewBuilder/JoinBuilderPage';
 import TransformBuilderPage from './features/viewBuilder/TransformBuilderPage';
 import SummaryPage from './features/summary/SummaryPage';
+import DatabaseViewerPage from './features/dbViewer/DatabaseViewerPage';
 
 const App: React.FC = () => {
   return (
@@ -18,6 +19,7 @@ const App: React.FC = () => {
       <NavigationMenu />
 
       <Routes>
+        <Route path="/db-viewer" element={<DatabaseViewerPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path='/builder' element={<ViewBuilderPage/>}></Route>
         <Route path='/joins' element={<JoinBuilderPage/>}></Route>
