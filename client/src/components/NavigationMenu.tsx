@@ -1,5 +1,12 @@
 import React from 'react';
-import { HStack, Button } from '@chakra-ui/react';
+import {
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  IconButton,
+} from '@chakra-ui/react';
+import { HamburgerIcon } from '@chakra-ui/icons';
 import { NavLink } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../app/store';
@@ -14,6 +21,7 @@ const NavigationMenu: React.FC = () => {
   const canSummary = canTransforms;
 
   const links = [
+    { label: 'Просмотр БД', path: '/db-viewer', enabled: true },
     { label: 'Подключение', path: '/settings', enabled: true },
     { label: 'Таблицы', path: '/builder', enabled: canBuilder },
     { label: 'Джоины', path: '/joins', enabled: canJoins },
@@ -22,20 +30,27 @@ const NavigationMenu: React.FC = () => {
   ];
 
   return (
-    <HStack spacing={4} justify="center" mb={4}>
-      {links.map((link) => (
-        <Button
-          as={NavLink}
-          key={link.path}
-          to={link.path}
-          variant="outline"
-          colorScheme="teal"
-          isDisabled={!link.enabled}
-        >
-          {link.label}
-        </Button>
-      ))}
-    </HStack>
+    <Menu>
+      <MenuButton
+        as={IconButton}
+        icon={<HamburgerIcon />}
+        variant="outline"
+        aria-label="Navigation menu"
+        mb={4}
+      />
+      <MenuList>
+        {links.map((link) => (
+          <MenuItem
+            as={NavLink}
+            key={link.path}
+            to={link.path}
+            isDisabled={!link.enabled}
+          >
+            {link.label}
+          </MenuItem>
+        ))}
+      </MenuList>
+    </Menu>
   );
 };
 

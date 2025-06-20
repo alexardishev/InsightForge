@@ -9,6 +9,7 @@ import {
   Button,
   Text,
   Divider,
+  useColorModeValue,
 } from '@chakra-ui/react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
@@ -97,8 +98,14 @@ const TransformBuilderPage: React.FC = () => {
       (c) => c.table === table && c.column === column.name,
     );
     return (
-      <Box key={key} p={4} borderWidth="1px" borderRadius="md" mb={4}
-           background="gray.700">
+      <Box
+        key={key}
+        p={4}
+        borderWidth="1px"
+        borderRadius="md"
+        mb={4}
+        background={useColorModeValue('gray.50', 'gray.700')}
+      >
         <Text mb={2} fontWeight="bold">{table}.{column.name}</Text>
         <Select
           mb={2}
