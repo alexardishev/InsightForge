@@ -8,13 +8,14 @@ import (
 	"strings"
 )
 
-const (
-	transformTypeJSON           = "JSON"
-	transformTypeFieldTransform = "FieldTransform"
-)
-
-func GenerateSelectInsertDataQuery(view models.View, start int64, end int64, tableName string, logger *slog.Logger) (query models.Query, err error) {
-	const op = "sqlgenerator.GenerateSelectInsertDataQuery"
+func GenerateSelectInsertDataQueryClickhouse(
+	view models.View,
+	start int64,
+	end int64,
+	tableName string,
+	logger *slog.Logger,
+) (models.Query, error) {
+	const op = "sqlgenerator.GenerateSelectInsertDataQueryClickhouse"
 	logger = logger.With(slog.String("op", op))
 	logger.Info("start operation")
 
@@ -38,71 +39,60 @@ func GenerateSelectInsertDataQuery(view models.View, start int64, end int64, tab
 					}
 					used[column.Name] = true
 
-					// Если колонка с JSON-трансформацией
+					// JSON трансформация (ClickHouse)
 					if column.Transform != nil && column.Transform.Type == transformTypeJSON && column.Transform.Mapping != nil {
-						logger.Info("Обработка трансформации JSON", slog.String("column", column.Name))
-
 						for _, mapping := range column.Transform.Mapping.MappingJSON {
 							for jsonField, outputColumn := range mapping.Mapping {
-								extracted := fmt.Sprintf("%s->>'%s' AS %s", column.Name, jsonField, outputColumn)
+								// Пример: JSONExtractString(column, 'jsonField') AS outputColumn
+								extracted := fmt.Sprintf("JSONExtractString(%s, '%s') AS %s", column.Name, jsonField, outputColumn)
 								columns = append(columns, extracted)
 							}
 						}
 						columns = append(columns, column.Name)
 					} else {
-						// Просто обычная колонка
 						columns = append(columns, column.Name)
 					}
+
+					// CASE (Field Transform)
 					if column.Transform != nil && column.Transform.Type == transformTypeFieldTransform && column.Transform.Mapping != nil {
-						logger.Info("Обработка трансформации transformTypeFieldTransform", slog.String("column", column.Name))
 						mapping := column.Transform.Mapping
 						var a strings.Builder
 						a.WriteString("CASE ")
 						for key, value := range mapping.Mapping {
 							safeKey := strings.ReplaceAll(key, "'", "''")
 							safeValue := strings.ReplaceAll(value, "'", "''")
-							a.WriteString(fmt.Sprintf("WHEN %s = '%s' THEN '%s'", column.Name, safeKey, safeValue))
-							a.WriteString(" ")
+							a.WriteString(fmt.Sprintf("WHEN %s = '%s' THEN '%s' ", column.Name, safeKey, safeValue))
 						}
 						alias := mapping.AliasNewColumnTransform
-
 						if alias == "" {
 							alias = column.Name + "_transformed"
 						}
 						a.WriteString(fmt.Sprintf("END as %s", alias))
-						columnsCase := a.String()
-						columns = append(columns, columnsCase)
-
+						columns = append(columns, a.String())
 					}
+
 					if column.IsPrimaryKey && primaryColumn == "" {
 						primaryColumn = column.Name
 					}
 				}
 
-				// Собираем финальный SELECT
+				// В ClickHouse — LIMIT <limit> OFFSET <offset>
+				limit := end - start
 				if primaryColumn != "" {
-					_, err := b.WriteString(fmt.Sprintf("SELECT %s FROM %s ORDER BY %s OFFSET %d LIMIT %d",
+					b.WriteString(fmt.Sprintf("SELECT %s FROM %s ORDER BY %s LIMIT %d OFFSET %d",
 						strings.Join(columns, ", "),
 						tableName,
 						primaryColumn,
+						limit,
 						start,
-						end-start,
 					))
-					if err != nil {
-						logger.Error("ошибка", slog.String("error", err.Error()))
-						return models.Query{}, err
-					}
 				} else {
-					_, err := b.WriteString(fmt.Sprintf("SELECT %s FROM %s OFFSET %d LIMIT %d",
+					b.WriteString(fmt.Sprintf("SELECT %s FROM %s LIMIT %d OFFSET %d",
 						strings.Join(columns, ", "),
 						tableName,
+						limit,
 						start,
-						end-start,
 					))
-					if err != nil {
-						logger.Error("ошибка", slog.String("error", err.Error()))
-						return models.Query{}, err
-					}
 				}
 
 				return models.Query{
@@ -113,7 +103,6 @@ func GenerateSelectInsertDataQuery(view models.View, start int64, end int64, tab
 			}
 		}
 	}
-
 	logger.Info("таблица не найдена в представлении", slog.String("таблица", tableName))
 	return models.Query{}, fmt.Errorf("таблица %s не найдена в представлении", tableName)
 }

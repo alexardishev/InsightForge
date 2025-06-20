@@ -53,7 +53,7 @@ func TestGeneratetInsertDataQuery(t *testing.T) {
 		},
 	}
 
-	query, err := sqlgenerator.GeneratetInsertDataQuery(view, selectData, "temp_test_table", logger)
+	query, err := sqlgenerator.GenerateInsertDataQuery(view, selectData, "temp_test_table", logger, "postgres")
 
 	require.NoError(t, err)
 	t.Log("Generated query:\n" + query.Query)

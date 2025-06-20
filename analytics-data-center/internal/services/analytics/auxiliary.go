@@ -144,7 +144,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 			go func(start, end int64, tableName, sourceName string, tempTableName string) {
 				log.Info("Горутина запущена", slog.String("Для таблицы", tableName))
 				defer wg.Done()
-				query, err := sqlgenerator.GenerateSelectInsertDataQuery(*viewSchema, start, end, tableName, log.Logger)
+				query, err := sqlgenerator.GenerateSelectInsertDataQuery(*viewSchema, start, end, tableName, log.Logger, a.OLTPDbName)
 				if err != nil {
 					log.Error("ошибка генерации SQL", slog.String("error", err.Error()))
 					mu.Lock()
@@ -162,7 +162,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 				}
 				log.Info("получены данные", slog.Any("rows", len(insertData)))
 				log.Info("Запрос для таблицы", slog.String("таблица", tempTableName))
-				queryInsert, err := sqlgenerator.GeneratetInsertDataQuery(*viewSchema, insertData, tempTableName, log.Logger)
+				queryInsert, err := sqlgenerator.GenerateInsertDataQuery(*viewSchema, insertData, tempTableName, log.Logger, a.DWHDbName)
 				if err != nil {
 					log.Error("ошибка при генерации INSERT запроса", slog.String("error", err.Error()))
 					mu.Lock()

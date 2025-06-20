@@ -79,7 +79,7 @@ func TestGenerateSelectInsertDataQuery_WithJSONAndFieldTransform(t *testing.T) {
 		},
 	}
 
-	query, err := sqlgenerator.GenerateSelectInsertDataQuery(view, 0, 100, "users", logger)
+	query, err := sqlgenerator.GenerateSelectInsertDataQuery(view, 0, 100, "users", logger, "postgres")
 	t.Logf(query.Query)
 
 	require.NoError(t, err)
@@ -113,7 +113,7 @@ func TestGenerateSelectInsertDataQuery_Success(t *testing.T) {
 		},
 	}
 
-	query, err := sqlgenerator.GenerateSelectInsertDataQuery(view, 0, 100, "users", getTestLogger())
+	query, err := sqlgenerator.GenerateSelectInsertDataQuery(view, 0, 100, "users", getTestLogger(), "postgres")
 	t.Logf(query.Query)
 	assert.NoError(t, err)
 	assert.Equal(t, "users", query.TableName)
@@ -144,7 +144,7 @@ func TestGenerateSelectInsertDataQuery_DuplicateColumns(t *testing.T) {
 		},
 	}
 
-	_, err := sqlgenerator.GenerateSelectInsertDataQuery(view, 0, 50, "users", getTestLogger())
+	_, err := sqlgenerator.GenerateSelectInsertDataQuery(view, 0, 50, "users", getTestLogger(), "postgres")
 
 	assert.Error(t, err)
 	assert.EqualError(t, err, "колонки с одинаковыми именами недопустимы")
@@ -172,7 +172,7 @@ func TestGenerateSelectInsertDataQuery_TableNotFound(t *testing.T) {
 		},
 	}
 
-	_, err := sqlgenerator.GenerateSelectInsertDataQuery(view, 0, 20, "orders", getTestLogger())
+	_, err := sqlgenerator.GenerateSelectInsertDataQuery(view, 0, 20, "orders", getTestLogger(), "postgres")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "таблица orders не найдена")

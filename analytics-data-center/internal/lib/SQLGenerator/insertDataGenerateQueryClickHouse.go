@@ -11,8 +11,13 @@ import (
 	"github.com/gofrs/uuid"
 )
 
-func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]interface{}, tempTableName string, logger *slog.Logger) (models.Query, error) {
-	const op = "sqlgenerator.GenerateSelectInsertDataQuery"
+func GenerateInsertDataQueryClickhouse(
+	view models.View,
+	selectData []map[string]interface{},
+	tempTableName string,
+	logger *slog.Logger,
+) (models.Query, error) {
+	const op = "sqlgenerator.GenerateInsertDataQueryClickhouse"
 	logger = logger.With(slog.String("op", op))
 	logger.Info("СТАРТ ПОДГОТОВКИ ЗАПРОСА")
 
@@ -32,43 +37,35 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 
 	logger.Info("ДАТА ДЛЯ ВСТАВКИ", slog.Any("Нулевой элемент", selectData[0]))
 
-	columnNames := make(map[string]struct{}) // имя поля -> тип поля
+	columnNames := make(map[string]struct{})
 	for _, src := range view.Sources {
 		for _, sch := range src.Schemas {
 			for _, tbl := range sch.Tables {
 				for _, clmn := range tbl.Columns {
 					if clmn.Transform != nil && clmn.Transform.Type == transformTypeJSON && clmn.Transform.Mapping != nil {
-						logger.Info("Начинаю работу с JSON трансформацией")
 						for _, mapping := range clmn.Transform.Mapping.MappingJSON {
 							for _, outputCol := range mapping.Mapping {
 								columnNames[outputCol] = struct{}{}
 							}
 						}
 						columnNames[clmn.Name] = struct{}{}
-
 					} else {
 						columnNames[clmn.Name] = struct{}{}
 					}
 					if clmn.Transform != nil && clmn.Transform.Type == transformTypeFieldTransform && clmn.Transform.Mapping != nil {
-						logger.Info("Начинаю работу с transformTypeFieldTransform трансформацией")
 						mapping := clmn.Transform.Mapping
 						columnNames[mapping.AliasNewColumnTransform] = struct{}{}
 						columnNames[clmn.Name] = struct{}{}
-
 					} else {
 						columnNames[clmn.Name] = struct{}{}
-
 					}
-
 				}
 			}
 		}
 	}
 
-	// Теперь только добавляем в список те колонки, которые реально есть в данных
 	for colName := range columnNames {
 		if _, ok := availableColumns[colName]; ok {
-			logger.Info("Колонка добавлена", slog.String("name", colName))
 			columns = append(columns, colName)
 		}
 	}
@@ -86,10 +83,10 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 				valueStrings = append(valueStrings, "NULL")
 				continue
 			}
-
 			switch v := val.(type) {
 			case string:
-				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", v))
+				safe := strings.ReplaceAll(v, "'", "''")
+				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", safe))
 			case []byte:
 				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", string(v)))
 			case int, int64, float64:
@@ -98,9 +95,9 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", v.String()))
 			case bool:
 				if v {
-					valueStrings = append(valueStrings, "TRUE")
+					valueStrings = append(valueStrings, "1")
 				} else {
-					valueStrings = append(valueStrings, "FALSE")
+					valueStrings = append(valueStrings, "0")
 				}
 			case time.Time:
 				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", v.Format("2006-01-02 15:04:05")))
@@ -112,11 +109,11 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 		valuesInsertData = append(valuesInsertData, wrapped)
 	}
 
-	// Финальный SQL
 	b.WriteString(fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
 		tempTableName,
 		strings.Join(columns, ", "),
-		strings.Join(valuesInsertData, ", ")))
+		strings.Join(valuesInsertData, ", "),
+	))
 
 	finalQuery := b.String()
 

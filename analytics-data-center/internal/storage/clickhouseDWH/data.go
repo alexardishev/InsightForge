@@ -4,12 +4,23 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"strings"
 )
 
 func (c *ClickHouseDB) InsertDataToDWH(ctx context.Context, query string) error {
-	panic("InsertDataToDWH")
+	const op = "Storage.ClickHouseDB.InsertDataToDWH"
+	log := c.Log.With(
+		slog.String("op", op),
+	)
+	_, err := c.Db.ExecContext(ctx, query)
+	if err != nil {
+		log.Error("ошибка подготовки запроса", slog.String("error", err.Error()))
+		return err
+	}
+	return nil
 }
+
 func (c *ClickHouseDB) MergeTempTables(ctx context.Context, query string) error {
 	panic("MergeTempTables")
 }

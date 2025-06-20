@@ -73,7 +73,7 @@ const ViewBuilderPage: React.FC = () => {
           selectedColumns={selectedColumns}
           onToggleColumn={handleToggleColumn}
         />
-
+        
         {selectedColumns.length > 0 && (
           <Box textAlign="center">
             <Button onClick={handleBuildView} colorScheme="blue" size="lg">
