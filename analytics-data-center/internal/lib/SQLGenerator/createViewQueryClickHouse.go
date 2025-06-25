@@ -23,6 +23,7 @@ func CreateViewQueryClickhouse(schema models.View, viewJoin models.ViewJoinTable
 			selectParts = append(selectParts, fmt.Sprintf("%s.%s", alias, col.ColumnName))
 		}
 	}
+	selectParts = append(selectParts, "now() AS updated_at")
 
 	mainTableName := ""
 	mainAlias := ""
@@ -56,16 +57,18 @@ func CreateViewQueryClickhouse(schema models.View, viewJoin models.ViewJoinTable
 		}
 	}
 
-	orderBy := ""
+	orderBy := "tuple()"
 	if len(viewJoin.TempTables) > 0 && len(viewJoin.TempTables[0].TempColumns) > 0 {
 		orderBy = viewJoin.TempTables[0].TempColumns[0].ColumnName
-	} else {
-		orderBy = "tuple()"
 	}
 
+	engineClause := "ENGINE = ReplacingMergeTree(updated_at)"
+
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("CREATE TABLE %s ENGINE = MergeTree() ORDER BY %s AS SELECT %s",
-		schema.Name, orderBy, strings.Join(selectParts, ", ")))
+	b.WriteString(fmt.Sprintf(
+		"CREATE TABLE %s %s ORDER BY %s AS SELECT %s",
+		schema.Name, engineClause, orderBy, strings.Join(selectParts, ", "),
+	))
 
 	finalQuery := fmt.Sprintf("%s%s %s", b.String(), fromClause, strings.Join(joinClauses, " "))
 

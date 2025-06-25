@@ -188,12 +188,13 @@ func (a *AnalyticsDataCenterService) runETL(ctx context.Context, idView int64, t
 			// return "", fmt.Errorf("%s:%s", op, err)
 		}
 
-		err = a.transferIndixesAndConstraint(ctx, &viewSchema)
+		err = a.transferIndixesAndConstraint(ctx, &viewSchema, a.DWHDbName)
 		if err != nil {
 			log.ErrorMsg(loggerpkg.MsgTransferIndexesFailed, slog.String("error", err.Error()))
 			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorSelectInsertData)
 		}
-		err = a.DWHProvider.ReplicaIdentityFull(ctx, viewSchema.Name)
+		//Похоже перепутал , для DWH оно не нужно
+		// err = a.DWHProvider.ReplicaIdentityFull(ctx, viewSchema.Name)
 		if err != nil {
 			log.ErrorMsg(loggerpkg.MsgEnableReplicationFailed, slog.String("error", err.Error()))
 			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorSelectInsertData)

@@ -2,7 +2,6 @@ package clickhousedwh
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -41,69 +40,35 @@ func (c *ClickHouseDB) ReplicaIdentityFull(ctx context.Context, tableDWHName str
 
 func (c *ClickHouseDB) InsertOrUpdateTransactional(
 	ctx context.Context,
-	schemaName string,
+	tableName string,
 	row map[string]interface{},
-	conflictColumns []string,
+	colStr []string,
 ) error {
-	panic("InsertOrUpdateTransactional")
-}
-func insertWithTx(ctx context.Context, tx *sql.Tx, table string, row map[string]interface{}) error {
 	columns := make([]string, 0, len(row))
 	placeholders := make([]string, 0, len(row))
 	values := make([]interface{}, 0, len(row))
 
-	i := 1
 	for col, val := range row {
 		columns = append(columns, col)
-		placeholders = append(placeholders, fmt.Sprintf("$%d", i))
+		placeholders = append(placeholders, "?")
 		values = append(values, val)
-		i++
 	}
 
-	query := fmt.Sprintf(`INSERT INTO %s (%s) VALUES (%s)`,
-		table,
+	// Всегда добавляем updated_at
+	columns = append(columns, "updated_at")
+	placeholders = append(placeholders, "now()")
+
+	query := fmt.Sprintf(
+		"INSERT INTO %s (%s) VALUES (%s)",
+		tableName,
 		strings.Join(columns, ", "),
 		strings.Join(placeholders, ", "),
 	)
 
-	_, err := tx.ExecContext(ctx, query, values...)
-	return err
-}
-
-func updateWithTx(ctx context.Context, tx *sql.Tx, table string, row map[string]interface{}, conflictColumns []string) error {
-	setParts := []string{}
-	whereParts := []string{}
-	values := []interface{}{}
-
-	i := 1
-	for col, val := range row {
-		isKey := false
-		for _, k := range conflictColumns {
-			if k == col {
-				isKey = true
-				break
-			}
-		}
-		if isKey {
-			continue
-		}
-		setParts = append(setParts, fmt.Sprintf("%s = $%d", col, i))
-		values = append(values, val)
-		i++
+	_, err := c.Db.ExecContext(ctx, query, values...)
+	if err != nil {
+		c.Log.Error("ошибка при вставке строки", slog.String("query", query), slog.Any("err", err))
+		return fmt.Errorf("ошибка вставки в ClickHouse: %w", err)
 	}
-
-	for _, col := range conflictColumns {
-		whereParts = append(whereParts, fmt.Sprintf("%s = $%d", col, i))
-		values = append(values, row[col])
-		i++
-	}
-
-	query := fmt.Sprintf(`UPDATE %s SET %s WHERE %s`,
-		table,
-		strings.Join(setParts, ", "),
-		strings.Join(whereParts, " AND "),
-	)
-
-	_, err := tx.ExecContext(ctx, query, values...)
-	return err
+	return nil
 }

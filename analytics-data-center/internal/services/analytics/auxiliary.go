@@ -290,11 +290,14 @@ func (a *AnalyticsDataCenterService) DeleteTempTables(ctx context.Context, tempT
 
 }
 
-func (a *AnalyticsDataCenterService) transferIndixesAndConstraint(ctx context.Context, viewSchema *models.View) error {
+func (a *AnalyticsDataCenterService) transferIndixesAndConstraint(ctx context.Context, viewSchema *models.View, dbName string) error {
 	const op = "analytics.transferIndicesAndConstraint"
 	log := a.log.With(
 		slog.String("op", op),
 	)
+	if dbName == DbClickhouse {
+		return nil
+	}
 	var OLTPSourceName []string
 	var indexTransfers IndexTransfers
 	for _, src := range viewSchema.Sources {

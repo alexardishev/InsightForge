@@ -18,7 +18,7 @@ func TestTransferIndices(t *testing.T) {
 	view := &models.View{Sources: []models.Source{{Name: "db1", Schemas: []models.Schema{{Name: "public", Tables: []models.Table{{Name: "t1"}}}}}}}
 	svc := &AnalyticsDataCenterService{log: getTestLogger(), OLTPFactory: factory, DWHProvider: dwh}
 
-	err := svc.transferIndixesAndConstraint(context.Background(), view)
+	err := svc.transferIndixesAndConstraint(context.Background(), view, "postgres")
 
 	require.NoError(t, err)
 	require.NotEmpty(t, dwh.indexCalls)
