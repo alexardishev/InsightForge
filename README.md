@@ -10,7 +10,7 @@ Modern applications scatter data across multiple microservices and databases. An
 ## 🚀 Features
 - 📦 Integration with external OLTP systems via API and events
 - 🛠 View builder with tables, columns, joins and transformations
-- 💾 PostgreSQL support as both source and DWH
+- 💾 PostgreSQL support as both source and DWH; ClickHouse supported as DWH
 - 🔄 Automatic data updates using CDC (Debezium) or events
 - 🧠 Data transforms: enums, alias mapping, JSON field extraction and more
 - 🧪 Asynchronous ETL processing with task status tracking

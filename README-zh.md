@@ -8,7 +8,7 @@ InsightForge 是一款用于从多个数据源构建分析视图的强大工具�
 ## 🚀 功能
 - 📦 通过 API 和事件与外部 OLTP 系统集成
 - 🛠 视图构建器：表、列、关联 (JOIN) 与数据转换
-- 💾 PostgreSQL 既可作为源也可作为 DWH
+- 💾 PostgreSQL 既可作为源也可作为 DWH，同时支持 ClickHouse 作为 DWH
 - 🔄 通过 Debezium 的 CDC 或事件自动更新数据
 - 🧠 数据转换：枚举、别名映射、JSON 字段拆分等
 - 🧪 异步 ETL 处理并追踪任务状态
