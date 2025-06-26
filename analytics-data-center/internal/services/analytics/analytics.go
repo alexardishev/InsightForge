@@ -62,6 +62,7 @@ type TaskService interface {
 	CreateTask(ctx context.Context, taskID string, status string) error
 	GetTask(ctx context.Context, taskID string) (models.Task, error)
 	ChangeStatusTask(ctx context.Context, taskID string, status string, comment string) error
+	GetTasks(ctx context.Context, taskFilter models.TaskFilter) ([]models.Task, error)
 }
 
 func New(

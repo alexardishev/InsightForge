@@ -96,3 +96,18 @@ func (s *TasksService) GetTask(ctx context.Context, taskID string) (models.Task,
 	}
 	return task, nil
 }
+
+func (s *TasksService) GetTasks(ctx context.Context, filters models.TaskFilter) ([]models.Task, error) {
+	const op = "tasks.GetTasks"
+	log := s.log.With(
+		slog.String("op", op),
+	)
+	log.InfoMsg(loggerpkg.MsgGetTaskStart)
+
+	tasks, err := s.TaskProvider.GetTasks(ctx, filters)
+	if err != nil {
+		log.ErrorMsg(loggerpkg.MsgGetTaskFailed, slog.String("error", err.Error()))
+		return nil, err
+	}
+	return tasks, nil
+}

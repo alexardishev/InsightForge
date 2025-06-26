@@ -3,6 +3,7 @@ package routes
 import (
 	"analyticDataCenter/analytics-data-center/internal/api/handlers"
 	dbhandlers "analyticDataCenter/analytics-data-center/internal/api/handlers/db_handlers.go"
+	taskshandlers "analyticDataCenter/analytics-data-center/internal/api/handlers/tasks_handlers.go"
 	"analyticDataCenter/analytics-data-center/internal/api/middleware"
 	serviceanalytics "analyticDataCenter/analytics-data-center/internal/services/analytics"
 	"net/http"
@@ -16,7 +17,9 @@ import (
 func NewRouter(logger *loggerpkg.Logger, serviceAnalytics *serviceanalytics.AnalyticsDataCenterService) http.Handler {
 	r := chi.NewRouter()
 	dbhandlers := dbhandlers.NewDBHandler(logger, serviceAnalytics)
-	handlers := handlers.NewHandlers(logger, dbhandlers)
+	taskshandlers := taskshandlers.NewTaskHandlers(logger, serviceAnalytics)
+
+	handlers := handlers.NewHandlers(logger, dbhandlers, taskshandlers)
 
 	logMiddleware := middleware.NewLogger(logger)
 	r.Use(logMiddleware.Middleware)
@@ -36,6 +39,7 @@ func NewRouter(logger *loggerpkg.Logger, serviceAnalytics *serviceanalytics.Anal
 		r.Get("/get-connections", handlers.GetConnectionsStrings)
 		r.Post("/get-db", handlers.GetDBInformations)
 		r.Post("/upload-schem", handlers.UploadSchema)
+		r.Get("/get-tasks", handlers.GetTasks)
 	})
 
 	return r

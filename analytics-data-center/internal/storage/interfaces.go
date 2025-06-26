@@ -35,6 +35,7 @@ type TaskProvider interface {
 	CreateTask(ctx context.Context, taskID string, status string) error
 	GetTask(ctx context.Context, taskID string) (models.Task, error)
 	ChangeStatusTask(ctx context.Context, taskID string, newStatus string, comment string) error
+	GetTasks(ctx context.Context, filters models.TaskFilter) ([]models.Task, error)
 }
 
 type TableProvider interface {

@@ -57,7 +57,9 @@ func (m *mockSysDB) GetSchems(ctx context.Context, source, schema, table string)
 func (m *mockSysDB) UpdateView(ctx context.Context, view models.View, schemaId int) error { return nil }
 
 func (m *mockSysDB) UploadView(ctx context.Context, view models.View) (int64, error) { return 123, nil }
-
+func (m *mockSysDB) GetTasks(ctx context.Context, filters models.TaskFilter) (tasks []models.Task, err error) {
+	return []models.Task{}, nil
+}
 func testLogger() *loggerpkg.Logger {
 	return loggerpkg.New("test", "ru")
 }

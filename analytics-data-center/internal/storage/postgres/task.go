@@ -64,3 +64,41 @@ func (p *PostgresSys) ChangeStatusTask(ctx context.Context, taskID string, newSt
 	return nil
 
 }
+
+func (p *PostgresSys) GetTasks(ctx context.Context, filters models.TaskFilter) ([]models.Task, error) {
+	var tasks []models.Task
+	const op = "Storage.PostgreSQL.CreaChangeStatusTaskteTask"
+	log := p.Log.With(
+		slog.String("op", op),
+	)
+
+	if filters.Page < 1 {
+		filters.Page = 1
+	}
+	if filters.PageSize <= 0 {
+		filters.PageSize = 10
+	}
+	log.Info("получение списка задач")
+	query := `SELECT id, create_at, status, comment FROM tasks
+				WHERE ($1::timestamp IS NULL OR create_at >= $1::timestamp)
+	  			AND ($2::timestamp IS NULL OR create_at <= $2::timestamp)
+				ORDER BY create_at DESC
+				LIMIT $3 OFFSET $4`
+	rows, err := p.Db.QueryContext(ctx, query, filters.StartDate, filters.EndDate, filters.PageSize, (filters.Page-1)*filters.PageSize)
+	if err != nil {
+		log.Error("Запросвыполнен с ошибкой", slog.String("error", err.Error()))
+		return []models.Task{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var task models.Task
+		err = rows.Scan(&task.ID, &task.CreateDate, &task.Status, &task.Comment)
+		if err != nil {
+			log.Error("Запросвыполнен с ошибкой", slog.String("error", err.Error()))
+			return []models.Task{}, err
+		}
+		tasks = append(tasks, task)
+
+	}
+	return tasks, nil
+}

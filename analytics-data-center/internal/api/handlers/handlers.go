@@ -9,6 +9,7 @@ import (
 type Handlers struct {
 	log *loggerpkg.Logger
 	HandlersDB
+	HandlersTasks
 }
 
 type HandlersDB interface {
@@ -17,9 +18,14 @@ type HandlersDB interface {
 	UploadSchema(w http.ResponseWriter, r *http.Request)
 }
 
-func NewHandlers(log *loggerpkg.Logger, db HandlersDB) *Handlers {
+type HandlersTasks interface {
+	GetTasks(w http.ResponseWriter, r *http.Request)
+}
+
+func NewHandlers(log *loggerpkg.Logger, db HandlersDB, tasks HandlersTasks) *Handlers {
 	return &Handlers{
-		log:        log,
-		HandlersDB: db,
+		log:           log,
+		HandlersDB:    db,
+		HandlersTasks: tasks,
 	}
 }

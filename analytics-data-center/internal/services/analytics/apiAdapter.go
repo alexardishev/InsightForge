@@ -78,3 +78,12 @@ func (a *AnalyticsDataCenterService) UploadSchema(ctx context.Context, schema mo
 	return id, nil
 
 }
+
+func (a *AnalyticsDataCenterService) GetTasks(ctx context.Context, filters models.TaskFilter) ([]models.Task, error) {
+	tasks, err := a.TaskService.GetTasks(ctx, filters)
+	if err != nil {
+		a.log.Error("Ошибка работы с базой данных")
+		return nil, err
+	}
+	return tasks, nil
+}
