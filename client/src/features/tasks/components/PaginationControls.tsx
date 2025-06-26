@@ -1,5 +1,7 @@
 import React from 'react';
 import { HStack, Button, Select } from '@chakra-ui/react';
+import { useSelector } from 'react-redux';
+import type { RootState } from '../../../app/store';
 
 interface Props {
   page: number;
@@ -13,7 +15,12 @@ const PaginationControls: React.FC<Props> = ({
   pageSize,
   onPageChange,
   onPageSizeChange,
-}) => (
+}) => {
+    const { tasks} = useSelector((state: RootState) => state.tasks);
+        console.log(pageSize)
+
+    console.log(tasks.length)
+  return (
   <HStack mt={4} spacing={4} justify="center">
     <Button onClick={() => onPageChange(page - 1)} isDisabled={page <= 1}>
       Предыдущая
@@ -29,8 +36,10 @@ const PaginationControls: React.FC<Props> = ({
         </option>
       ))}
     </Select>
-    <Button onClick={() => onPageChange(page + 1)}>Следующая</Button>
+    <Button onClick={() => onPageChange(page + 1)} isDisabled={pageSize > tasks.length}>Следующая</Button>
   </HStack>
 );
 
+
+}
 export default PaginationControls;

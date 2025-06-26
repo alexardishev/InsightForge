@@ -39,7 +39,7 @@ func NewRouter(logger *loggerpkg.Logger, serviceAnalytics *serviceanalytics.Anal
 		r.Get("/get-connections", handlers.GetConnectionsStrings)
 		r.Post("/get-db", handlers.GetDBInformations)
 		r.Post("/upload-schem", handlers.UploadSchema)
-		r.Get("/get-tasks", handlers.GetTasks)
+		r.Post("/get-tasks", handlers.GetTasks)
 	})
 
 	return r
