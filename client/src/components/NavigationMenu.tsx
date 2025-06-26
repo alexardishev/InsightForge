@@ -23,6 +23,7 @@ const NavigationMenu: React.FC = () => {
   const links = [
     { label: 'Просмотр БД', path: '/db-viewer', enabled: true },
     { label: 'Подключение', path: '/settings', enabled: true },
+    { label: 'Задачи', path: '/tasks', enabled: true },
     { label: 'Таблицы', path: '/builder', enabled: canBuilder },
     { label: 'Джоины', path: '/joins', enabled: canJoins },
     { label: 'Трансформации', path: '/transforms', enabled: canTransforms },
