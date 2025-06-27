@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Checkbox, Text, VStack } from '@chakra-ui/react';
+import { Box, Checkbox, Text, SimpleGrid } from '@chakra-ui/react';
 
 interface Props {
   selectedSchemaData: any;
@@ -15,7 +15,7 @@ const TableSelector: React.FC<Props> = ({ selectedSchemaData, selectedTables, on
       <Text mb={4} fontWeight="medium" textAlign="center">
         Выберите таблицы:
       </Text>
-      <VStack align="start" spacing={3}>
+      <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={3}>
         {selectedSchemaData.tables?.map((table: any) => (
           <Checkbox
             key={table.name}
@@ -26,7 +26,7 @@ const TableSelector: React.FC<Props> = ({ selectedSchemaData, selectedTables, on
             <Text fontSize="md">{table.name}</Text>
           </Checkbox>
         ))}
-      </VStack>
+      </SimpleGrid>
     </Box>
   );
 };

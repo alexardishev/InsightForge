@@ -29,7 +29,7 @@ const TasksPage: React.FC = () => {
   }, [page, pageSize]);
 
   return (
-    <Box p={8} maxW="900px" mx="auto">
+    <Box p={8} maxW="1200px" mx="auto">
       <Heading mb={4} textAlign="center">
         Задачи
       </Heading>
