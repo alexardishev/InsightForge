@@ -53,6 +53,8 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 						mapping := clmn.Transform.Mapping
 						columnNames[mapping.AliasNewColumnTransform] = struct{}{}
 						columnNames[clmn.Name] = struct{}{}
+					} else {
+						columnNames[clmn.Name] = struct{}{}
 					}
 				}
 			}
