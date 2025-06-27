@@ -1,10 +1,14 @@
 import React from 'react';
 import {
-  Menu,
-  MenuButton,
-  MenuList,
-  MenuItem,
   IconButton,
+  useDisclosure,
+  Drawer,
+  DrawerOverlay,
+  DrawerContent,
+  DrawerHeader,
+  DrawerBody,
+  Button,
+  VStack,
 } from '@chakra-ui/react';
 import { HamburgerIcon } from '@chakra-ui/icons';
 import { NavLink } from 'react-router-dom';
@@ -12,6 +16,7 @@ import { useSelector } from 'react-redux';
 import type { RootState } from '../app/store';
 
 const NavigationMenu: React.FC = () => {
+  const { isOpen, onOpen, onClose } = useDisclosure();
   const settings = useSelector((state: RootState) => state.settings);
   const builder = useSelector((state: RootState) => state.viewBuilder);
 
@@ -31,27 +36,39 @@ const NavigationMenu: React.FC = () => {
   ];
 
   return (
-    <Menu>
-      <MenuButton
-        as={IconButton}
+    <>
+      <IconButton
         icon={<HamburgerIcon />}
         variant="outline"
         aria-label="Navigation menu"
         mb={4}
+        onClick={onOpen}
       />
-      <MenuList>
-        {links.map((link) => (
-          <MenuItem
-            as={NavLink}
-            key={link.path}
-            to={link.path}
-            isDisabled={!link.enabled}
-          >
-            {link.label}
-          </MenuItem>
-        ))}
-      </MenuList>
-    </Menu>
+      <Drawer placement="left" onClose={onClose} isOpen={isOpen}>
+        <DrawerOverlay />
+        <DrawerContent>
+          <DrawerHeader borderBottomWidth="1px">Меню</DrawerHeader>
+          <DrawerBody>
+            <VStack align="start" spacing={3} mt={2}>
+              {links.map((link) => (
+                <Button
+                  as={NavLink}
+                  key={link.path}
+                  to={link.path}
+                  onClick={onClose}
+                  isDisabled={!link.enabled}
+                  variant="ghost"
+                  width="100%"
+                  _activeLink={{ bg: 'blue.500', color: 'white' }}
+                >
+                  {link.label}
+                </Button>
+              ))}
+            </VStack>
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
+    </>
   );
 };
 

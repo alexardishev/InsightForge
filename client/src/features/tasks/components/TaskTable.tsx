@@ -6,9 +6,10 @@ import {
   Tr,
   Th,
   Td,
-  Collapse,
   Box,
   useColorModeValue,
+  Badge,
+  ScaleFade,
 } from '@chakra-ui/react';
 import type { Task } from '../tasksSlice';
 
@@ -21,8 +22,15 @@ const TaskTable: React.FC<Props> = ({ tasks }) => {
   const rowBg = useColorModeValue('white', 'gray.700');
   const expandBg = useColorModeValue('gray.50', 'gray.800');
 
+  const getStatusColor = (status: string) => {
+    const s = status.toLowerCase();
+    if (s.includes('success')) return 'green';
+    if (s.includes('fail') || s.includes('error')) return 'red';
+    return 'yellow';
+  };
+
   return (
-    <Table variant="simple" size="sm">
+    <Table variant="simple" size="md" width="100%">
       <Thead>
         <Tr>
           <Th>ID</Th>
@@ -37,19 +45,23 @@ const TaskTable: React.FC<Props> = ({ tasks }) => {
               bg={rowBg}
               _hover={{ bg: useColorModeValue('gray.100', 'gray.600') }}
               cursor="pointer"
+              transition="transform 0.1s"
+              _active={{ transform: 'scale(0.98)' }}
               onClick={() => setExpanded(expanded === task.id ? null : task.id)}
             >
               <Td>{task.id}</Td>
-              <Td>{task.status}</Td>
+              <Td>
+                <Badge colorScheme={getStatusColor(task.status)}>{task.status}</Badge>
+              </Td>
               <Td>{new Date(task.create_date).toLocaleString()}</Td>
             </Tr>
             <Tr>
               <Td colSpan={3} p={0} border="none">
-                <Collapse in={expanded === task.id} animateOpacity>
+                <ScaleFade in={expanded === task.id} unmountOnExit>
                   <Box p={4} bg={expandBg}>
                     {task.comment || 'Нет комментария'}
                   </Box>
-                </Collapse>
+                </ScaleFade>
               </Td>
             </Tr>
           </React.Fragment>

@@ -46,7 +46,12 @@ const ColumnsGrid: React.FC<Props> = ({
       <Text pt={4} mb={6} fontWeight="medium" textAlign="center" fontSize="lg">
         Колонки в выбранных таблицах:
       </Text>
-      <SimpleGrid columns={{ base: 1, lg: 2, xl: 3 }} spacing={6}>
+      <SimpleGrid
+        columns={{ base: 1, lg: 2, xl: 3 }}
+        spacing={6}
+        alignItems="start"
+        gridAutoRows="max-content"
+      >
         {selectedTables.map((tableName) => {
           const tableData = selectedSchemaData.tables?.find((t: any) => t.name === tableName);
           return (

@@ -8,10 +8,10 @@ import {
   Tr,
   Th,
   Td,
-  Collapse,
   Text,
   SimpleGrid,
   useColorModeValue,
+  ScaleFade,
 } from '@chakra-ui/react';
 import { useSelector, useDispatch } from 'react-redux';
 import {
@@ -118,7 +118,7 @@ const DatabaseViewerPage: React.FC = () => {
                 </Tr>
                 <Tr>
                   <Td colSpan={2} p={0} border="none">
-                    <Collapse in={expanded === row.id} animateOpacity>
+                    <ScaleFade in={expanded === row.id} unmountOnExit>
                       <Box p={4} bg={expandBg}>
                         <Text fontWeight="bold" mb={2}>Колонки:</Text>
                         <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={2}>
@@ -130,7 +130,7 @@ const DatabaseViewerPage: React.FC = () => {
                           ))}
                         </SimpleGrid>
                       </Box>
-                    </Collapse>
+                    </ScaleFade>
                   </Td>
                 </Tr>
               </React.Fragment>
