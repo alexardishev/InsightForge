@@ -32,7 +32,7 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 
 	logger.Info("ДАТА ДЛЯ ВСТАВКИ", slog.Any("Нулевой элемент", selectData[0]))
 
-	columnNames := make(map[string]struct{}) // имя поля -> тип поля
+	columnNames := make(map[string]struct{})
 	for _, src := range view.Sources {
 		for _, sch := range src.Schemas {
 			for _, tbl := range sch.Tables {
@@ -45,7 +45,6 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 							}
 						}
 						columnNames[clmn.Name] = struct{}{}
-
 					} else {
 						columnNames[clmn.Name] = struct{}{}
 					}
@@ -54,18 +53,12 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 						mapping := clmn.Transform.Mapping
 						columnNames[mapping.AliasNewColumnTransform] = struct{}{}
 						columnNames[clmn.Name] = struct{}{}
-
-					} else {
-						columnNames[clmn.Name] = struct{}{}
-
 					}
-
 				}
 			}
 		}
 	}
 
-	// Теперь только добавляем в список те колонки, которые реально есть в данных
 	for colName := range columnNames {
 		if _, ok := availableColumns[colName]; ok {
 			logger.Info("Колонка добавлена", slog.String("name", colName))
@@ -89,9 +82,11 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 
 			switch v := val.(type) {
 			case string:
-				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", v))
+				safe := strings.ReplaceAll(v, "'", "''")
+				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", safe))
 			case []byte:
-				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", string(v)))
+				safe := strings.ReplaceAll(string(v), "'", "''")
+				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", safe))
 			case int, int64, float64:
 				valueStrings = append(valueStrings, fmt.Sprintf("%v", v))
 			case uuid.UUID:
@@ -112,13 +107,13 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 		valuesInsertData = append(valuesInsertData, wrapped)
 	}
 
-	// Финальный SQL
 	b.WriteString(fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
 		tempTableName,
 		strings.Join(columns, ", "),
 		strings.Join(valuesInsertData, ", ")))
 
 	finalQuery := b.String()
+	logger.Info("Сгенерированный SQL", slog.String("query", finalQuery))
 
 	return models.Query{
 		Query:     finalQuery,
