@@ -116,7 +116,7 @@ const DatabaseViewerPage: React.FC = () => {
         </Box>
       )}
       {selectedSchema && (
-        <Table variant="simple" size="sm">
+        <><Table variant="simple" size="sm">
           <Thead>
             {table.getHeaderGroups().map(headerGroup => (
               <Tr key={headerGroup.id}>
@@ -169,10 +169,9 @@ const DatabaseViewerPage: React.FC = () => {
               </React.Fragment>
             ))}
           </Tbody>
-        </Table>
-        <Box textAlign="center" mt={4}>
-          <Button onClick={loadMore}>Загрузить ещё</Button>
-        </Box>
+        </Table><Box textAlign="center" mt={4}>
+            <Button onClick={loadMore}>Загрузить ещё</Button>
+          </Box></>
       )}
     </Box>
   );

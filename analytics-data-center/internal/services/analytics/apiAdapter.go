@@ -7,7 +7,7 @@ import (
 	"net/url"
 )
 
-func (a *AnalyticsDataCenterService) GetDBInformations(ctx context.Context, connections models.ConnectionStrings, page, pageSize int) ([]models.Source, error) {
+func (a *AnalyticsDataCenterService) GetDBInformations(ctx context.Context, connections []models.ConnectionString, page, pageSize int) ([]models.Source, error) {
 	if page <= 0 {
 		page = 1
 	}
@@ -16,7 +16,7 @@ func (a *AnalyticsDataCenterService) GetDBInformations(ctx context.Context, conn
 	}
 	offset := (page - 1) * pageSize
 	var response []models.Source
-	for _, conn := range connections.ConnectionStrings {
+	for _, conn := range connections {
 		for _, value := range conn.ConnectionString {
 			var source models.Source
 			connectionString := value
