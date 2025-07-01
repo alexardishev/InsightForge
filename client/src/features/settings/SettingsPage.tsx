@@ -14,7 +14,7 @@ import {
 } from '@chakra-ui/react';
 // import { ChevronDownIcon } from '@chakra-ui/icons';
 import {useDispatch} from 'react-redux';
-import {setConnectionString, setDataForConnection, setSavedConnections} from './settingsSlice';
+import {setConnectionString, setDataForConnection, setSavedConnections, setConnectionsMap} from './settingsSlice';
 import {useNavigate} from 'react-router-dom';
 import {useHttp} from '../../hooks/http.hook';
 
@@ -36,11 +36,12 @@ const [rawData, setRawData] = useState<Record<string, string>>({});
     const fetchConnections = async() => {
         setLoading(true);
         try {
-             const rawData = await request(`${url}/api/get-connections`);
-             setRawData(rawData);
+            const rawData = await request(`${url}/api/get-connections`);
+            setRawData(rawData);
             const data : string[] = Object.values(rawData);
             setAvailableConnections(data);
             dispatch(setSavedConnections(data));
+            dispatch(setConnectionsMap(rawData));
         } catch (e) {
             console.error('Ошибка при получении списка подключений:', e);
         } finally {
@@ -66,15 +67,12 @@ const [rawData, setRawData] = useState<Record<string, string>>({});
 
         try {
         const body = {
-            "connection_strings": [
-                {
-                "connection_string": rawData
-                
-                }
-            ]
-}
-console.log(JSON.stringify(body, null, 2));
-            const dbInfo = await request(`${url}/api/get-db`, "POST", body);
+            connection_strings: [{ connection_string: rawData }],
+            page: 1,
+            page_size: 20,
+        };
+        console.log(JSON.stringify(body, null, 2));
+        const dbInfo = await request(`${url}/api/get-db`, "POST", body);
             dispatch(setDataForConnection(dbInfo));
             console.log(dbInfo)
             navigate('/builder');

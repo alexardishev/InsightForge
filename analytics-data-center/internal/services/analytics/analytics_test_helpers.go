@@ -109,6 +109,9 @@ func (m *mockOLTP) GetSchemas(context.Context, string) ([]models.Schema, error) 
 func (m *mockOLTP) GetTables(context.Context, string) ([]models.Table, error) {
 	return []models.Table{}, nil
 }
+func (m *mockOLTP) GetTablesPaginated(context.Context, string, int, int) ([]models.Table, error) {
+	return []models.Table{}, nil
+}
 
 func (m *mockOLTP) GetColumnInfo(context.Context, string, string) (models.ColumnInfo, error) {
 	return models.ColumnInfo{}, nil

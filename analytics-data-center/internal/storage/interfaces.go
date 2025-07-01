@@ -66,6 +66,7 @@ type DataProviderOLTP interface {
 type DataBaseProviderOLTP interface {
 	GetSchemas(ctx context.Context, source string) ([]models.Schema, error)
 	GetTables(ctx context.Context, schema string) ([]models.Table, error)
+	GetTablesPaginated(ctx context.Context, schema string, limit, offset int) ([]models.Table, error)
 	GetColumns(ctx context.Context, schemaName string, tableName string) ([]models.Column, error)
 	GetColumnInfo(ctx context.Context, tableName string, columnName string) (models.ColumnInfo, error)
 }
