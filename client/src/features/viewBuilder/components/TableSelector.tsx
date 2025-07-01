@@ -9,6 +9,7 @@ import {
   Stack,
   Badge,
   Icon,
+  Button,
 } from '@chakra-ui/react';
 import { FaDatabase } from 'react-icons/fa';
 
@@ -21,12 +22,14 @@ interface Props {
   selectedSchemaData: { tables: Table[] };
   selectedTables: string[];
   onToggleTable: (table: string) => void;
+  onLoadMore?: () => void;
 }
 
 const TableSelector: React.FC<Props> = ({
   selectedSchemaData,
   selectedTables,
   onToggleTable,
+  onLoadMore,
 }) => {
   if (!selectedSchemaData) return null;
 
@@ -87,6 +90,11 @@ const TableSelector: React.FC<Props> = ({
           </Fade>
         ))}
       </SimpleGrid>
+      {onLoadMore && (
+        <Box textAlign="center" mt={4}>
+          <Button onClick={onLoadMore}>Загрузить ещё</Button>
+        </Box>
+      )}
     </Box>
   );
 };
