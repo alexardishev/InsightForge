@@ -44,6 +44,11 @@ type TaskETL struct {
 	TaskID string
 }
 
+// TopicNotifier allows to send information about new topics to subscribe.
+type TopicNotifier interface {
+	EnqueueTopic(topic string)
+}
+
 type AnalyticsDataCenterService struct {
 	log            *loggerpkg.Logger
 	SchemaProvider storage.SysDB
@@ -56,6 +61,7 @@ type AnalyticsDataCenterService struct {
 	jobQueue       chan TaskETL
 	eventQueue     chan models.CDCEvent
 	SMTPClient     smtpsender.SMTP
+	topicNotifier  TopicNotifier
 }
 
 type TaskService interface {
@@ -93,6 +99,11 @@ func New(
 	go service.etlWorker()
 	go service.eventWorker()
 	return service
+}
+
+// SetTopicNotifier injects notifier implementation used to send topic updates.
+func (a *AnalyticsDataCenterService) SetTopicNotifier(n TopicNotifier) {
+	a.topicNotifier = n
 }
 
 func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView int64) (taskID string, err error) {

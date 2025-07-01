@@ -75,6 +75,16 @@ func (a *AnalyticsDataCenterService) UploadSchema(ctx context.Context, schema mo
 		a.log.Error("Ошибка работы с базой данных")
 		return 0, err
 	}
+	if a.topicNotifier != nil {
+		for _, src := range schema.Sources {
+			for _, sch := range src.Schemas {
+				for _, tbl := range sch.Tables {
+					topic := fmt.Sprintf("dbserver_%s.%s.%s", src.Name, sch.Name, tbl.Name)
+					a.topicNotifier.EnqueueTopic(topic)
+				}
+			}
+		}
+	}
 	return id, nil
 
 }

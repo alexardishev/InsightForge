@@ -29,6 +29,8 @@ type SchemaProvider interface {
 	GetSchems(ctx context.Context, source string, schema string, table string) ([]int, error)
 	UpdateView(ctx context.Context, view models.View, schemaId int) error
 	UploadView(ctx context.Context, view models.View) (int64, error)
+	// ListTopics returns list of kafka topics required by existing views
+	ListTopics(ctx context.Context) ([]string, error)
 }
 
 type TaskProvider interface {
