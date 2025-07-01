@@ -87,10 +87,12 @@ func New(log *loggerpkg.Logger, grpcPort int,
 	analyticsService := serviceanalytics.New(log, storage.DbSys, tasksserivce, storageDWH, oltpFactory, DWHName, DWHPath, OLTPName, *smtp)
 	r := routes.NewRouter(log, analyticsService)
 
-	kafkaConsumer, err := kafkaengine.NewKafkaConsumer(BootstrapServers, GroupId, AutoOffsetReset, EnableAutoCommit, SessionTimeoutMs, ClientId, log)
+	kafkaEngine, err := kafkaengine.NewEngine(BootstrapServers, GroupId, AutoOffsetReset, EnableAutoCommit, SessionTimeoutMs, ClientId, storage.DbSys, log)
 	if err != nil {
 		panic("Не удалось подключиться к Kafka")
 	}
+	analyticsService.SetTopicNotifier(kafkaEngine)
+	kafkaConsumer := kafkaEngine.Consumer()
 	cdcListener := cdc.NewListener(kafkaConsumer, log, func(data []byte) {
 		cdc.Dispatch(data, log, analyticsService)
 	})

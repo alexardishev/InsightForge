@@ -120,3 +120,41 @@ func (p *PostgresSys) UploadView(ctx context.Context, view models.View) (int64, 
 	}
 	return id, nil
 }
+
+func (p *PostgresSys) ListTopics(ctx context.Context) ([]string, error) {
+	const op = "Storage.PostgreSQL.ListTopics"
+	log := p.Log.With(slog.String("op", op))
+
+	query := `SELECT DISTINCT
+               src->>'name' AS source,
+               sch->>'name' AS schema,
+               tbl->>'name' AS table
+       FROM schems,
+               LATERAL jsonb_array_elements(schema_view->'sources') AS s(src),
+               LATERAL jsonb_array_elements(src->'schemas') AS sc(sch),
+               LATERAL jsonb_array_elements(sch->'tables') AS t(tbl)`
+
+	rows, err := p.Db.QueryContext(ctx, query)
+	if err != nil {
+		log.Error("Запрос выполнен с ошибкой", slog.String("error", err.Error()))
+		return nil, err
+	}
+	defer rows.Close()
+
+	var topics []string
+	for rows.Next() {
+		var source, schema, table string
+		if err := rows.Scan(&source, &schema, &table); err != nil {
+			log.Error("Ошибка сканирования строки", slog.String("error", err.Error()))
+			return nil, err
+		}
+		topic := fmt.Sprintf("dbserver_%s.%s.%s", source, schema, table)
+		topics = append(topics, topic)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Error("Ошибка после сканирования всех строк", slog.String("error", err.Error()))
+		return nil, err
+	}
+	return topics, nil
+}
