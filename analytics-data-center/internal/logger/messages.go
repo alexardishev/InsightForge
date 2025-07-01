@@ -81,6 +81,58 @@ var (
 	MsgDeterminingEventType = Message{RU: "Определяю тип события", EN: "determine event type", CN: "确定事件类型"}
 	MsgDeterminingFuncType  = Message{RU: "Определяю тип вызываемой функции", EN: "determine function type", CN: "确定调用函数类型"}
 
+	MsgKafkaAdminClientCreateError = Message{
+		RU: "Ошибка при создании Kafka AdminClient",
+		EN: "Kafka AdminClient creation error",
+		CN: "创建 Kafka 管理客户端时出错",
+	}
+
+	MsgKafkaAdminMetadataError = Message{
+		RU: "Ошибка получения метаданных Kafka",
+		EN: "Failed to fetch Kafka metadata",
+		CN: "获取 Kafka 元数据失败",
+	}
+
+	MsgKafkaAdminTopicMarkedForDeletion = Message{
+		RU: "Топик помечен для удаления",
+		EN: "Topic marked for deletion",
+		CN: "主题已标记为删除",
+	}
+
+	MsgKafkaAdminDeleteError = Message{
+		RU: "Ошибка при удалении топиков Kafka",
+		EN: "Error while deleting Kafka topics",
+		CN: "删除 Kafka 主题时出错",
+	}
+
+	MsgKafkaAdminDeleteSuccess = Message{
+		RU: "Топик успешно удалён",
+		EN: "Topic successfully deleted",
+		CN: "主题删除成功",
+	}
+
+	MsgKafkaAdminNoTopicsToDelete = Message{
+		RU: "Нет топиков для удаления",
+		EN: "No topics to delete",
+		CN: "没有需要删除的主题",
+	}
+
+	// MsgKafkaAdminClientCreateError = Message{RU: "Ошибка при создании Kafka AdminClient", EN: "Kafka AdminClient creation error", CN: "创建 Kafka 管理客户端时出错"}
+	// MsgKafkaAdminMetadataError     = Message{RU: "Ошибка получения метаданных Kafka", EN: "Failed to fetch Kafka metadata", CN: "获取 Kafka 元数据失败"}
+
+	MsgKafkaAdminTopicMarkedForCreation = Message{RU: "Топик помечен для создания", EN: "Topic marked for creation", CN: "主题已标记为创建"}
+
+	MsgKafkaAdminCreateError   = Message{RU: "Ошибка при создании топика", EN: "Kafka topic creation error", CN: "Kafka 主题创建错误"}
+	MsgKafkaAdminCreateWarning = Message{RU: "Предупреждение при создании топика", EN: "Kafka topic creation warning", CN: "Kafka 主题创建警告"}
+	MsgKafkaAdminCreateSuccess = Message{RU: "Топик создан успешно", EN: "Kafka topic created successfully", CN: "Kafka 主题创建成功"}
+
+	MsgKafkaAdminConfigReadError = Message{RU: "Ошибка чтения конфигурации топика", EN: "Failed to read topic config", CN: "读取主题配置失败"}
+	MsgKafkaAdminUpdateNeeded    = Message{RU: "Требуется изменение cleanup.policy", EN: "cleanup.policy needs update", CN: "需要更新 cleanup.policy"}
+
+	MsgKafkaAdminUpdateError   = Message{RU: "Ошибка при обновлении конфигурации топика", EN: "Kafka topic config update error", CN: "Kafka 主题配置更新错误"}
+	MsgKafkaAdminUpdateWarning = Message{RU: "Предупреждение при обновлении конфигурации", EN: "Kafka config update warning", CN: "Kafka 配置更新警告"}
+	MsgKafkaAdminUpdateSuccess = Message{RU: "Конфигурация топика успешно обновлена", EN: "Kafka config updated successfully", CN: "Kafka 配置更新成功"}
+
 	// SMTP service messages
 	MsgSMTPEventReceived = Message{RU: "Событие получено", EN: "event received", CN: "收到事件"}
 	MsgSMTPWorkerError   = Message{RU: "Ошибка worker", EN: "worker error", CN: "工作器错误"}

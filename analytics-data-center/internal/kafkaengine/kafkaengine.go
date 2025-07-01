@@ -22,8 +22,6 @@ func NewKafkaConsumer(
 	topics []string,
 	log *loggerpkg.Logger,
 ) (*kafka.Consumer, error) {
-
-	// Создание Kafka consumer
 	c, err := kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers":  BootstrapServers,
 		"group.id":           GroupId,
@@ -37,39 +35,22 @@ func NewKafkaConsumer(
 		return nil, err
 	}
 
-	// Получение всех топиков с "db"
-	meta, err := c.GetMetadata(nil, true, 5000)
-	if err != nil {
-		log.ErrorMsg(loggerpkg.MsgKafkaMetadataError, slog.String("error", err.Error()))
-		return nil, err
-	}
-
-	var matchedTopics []string
-	for topic := range meta.Topics {
-		if strings.Contains(topic, "db") {
-			log.InfoMsg(loggerpkg.MsgKafkaTopicFound, slog.String("topic", topic))
-			matchedTopics = append(matchedTopics, topic)
+	if len(topics) == 0 {
+		log.WarnMsg(loggerpkg.MsgKafkaNoPatternTopics)
+	} else {
+		log.Info("Kafka consumer subscribing to topics", slog.Any("topics", topics))
+		err = c.SubscribeTopics(topics, RebalanceCallback)
+		if err != nil {
+			log.ErrorMsg(loggerpkg.MsgKafkaSubscribeError, slog.String("error", err.Error()))
+			return nil, err
 		}
 	}
 
-	if len(matchedTopics) == 0 {
-		log.WarnMsg(loggerpkg.MsgKafkaNoPatternTopics)
-	}
-
-	if len(topics) == 0 {
-		topics = []string{"^.*db.*$"}
-	}
-	err = c.SubscribeTopics(topics, RebalanceCallback)
-	if err != nil {
-		log.ErrorMsg(loggerpkg.MsgKafkaSubscribeError, slog.String("error", err.Error()))
-		return nil, err
-	}
 	log.InfoMsg(loggerpkg.MsgKafkaConsumerCreated)
 
-	// Ожидание initial assign
+	// Ожидание assign'а
 	time.Sleep(5 * time.Second)
 
-	// Проверка assign'а
 	partitions, err := c.Assignment()
 	if err != nil {
 		log.ErrorMsg(loggerpkg.MsgKafkaAssignError, slog.String("error", err.Error()))
@@ -104,12 +85,10 @@ func RebalanceCallback(c *kafka.Consumer, ev kafka.Event) error {
 	}
 }
 
-// TopicLister describes ability to load kafka topics from storage.
 type TopicLister interface {
 	ListTopics(ctx context.Context) ([]string, error)
 }
 
-// Engine manages kafka subscriptions based on topics received from services.
 type Engine struct {
 	consumer   *kafka.Consumer
 	log        *loggerpkg.Logger
@@ -118,7 +97,6 @@ type Engine struct {
 	mu         sync.Mutex
 }
 
-// NewEngine creates kafka consumer, loads initial topics from lister and starts subscription worker.
 func NewEngine(
 	BootstrapServers string,
 	GroupId string,
@@ -153,14 +131,15 @@ func NewEngine(
 	for _, t := range topics {
 		eng.subscribed[t] = struct{}{}
 	}
+	eng.EnsureKafkaConnectTopics(BootstrapServers, log)
 	go eng.subscriptionWorker()
 	return eng, nil
 }
 
-// Consumer returns underlying kafka consumer.
+// Вернет эземпляр консьюмера
 func (e *Engine) Consumer() *kafka.Consumer { return e.consumer }
 
-// EnqueueTopic notifies engine about new topic to subscribe.
+// Событие в очередь и в дальше в воркер
 func (e *Engine) EnqueueTopic(topic string) {
 	select {
 	case e.topicCh <- topic:
@@ -184,4 +163,111 @@ func (e *Engine) subscriptionWorker() {
 		}
 		e.mu.Unlock()
 	}
+}
+
+func (e *Engine) EnsureKafkaConnectTopics(bootstrapServers string, log *loggerpkg.Logger) error {
+	adminClient, err := kafka.NewAdminClient(&kafka.ConfigMap{
+		"bootstrap.servers": bootstrapServers,
+	})
+	if err != nil {
+		log.ErrorMsg(loggerpkg.MsgKafkaAdminClientCreateError, slog.String("error", err.Error()))
+		return err
+	}
+	defer adminClient.Close()
+
+	metadata, err := adminClient.GetMetadata(nil, true, 5000)
+	if err != nil {
+		log.ErrorMsg(loggerpkg.MsgKafkaAdminMetadataError, slog.String("error", err.Error()))
+		return err
+	}
+
+	requiredTopics := map[string]kafka.TopicSpecification{
+		"connect_offsets": {
+			Topic:             "connect_offsets",
+			NumPartitions:     25,
+			ReplicationFactor: 1,
+			Config:            map[string]string{"cleanup.policy": "compact"},
+		},
+		"connect_configs": {
+			Topic:             "connect_configs",
+			NumPartitions:     1,
+			ReplicationFactor: 1,
+			Config:            map[string]string{"cleanup.policy": "compact"},
+		},
+		"connect_statuses": {
+			Topic:             "connect_statuses",
+			NumPartitions:     5,
+			ReplicationFactor: 1,
+			Config:            map[string]string{"cleanup.policy": "compact"},
+		},
+	}
+
+	var toCreate []kafka.TopicSpecification
+	var toAlter []kafka.ConfigResource
+
+	for name, spec := range requiredTopics {
+		_, exists := metadata.Topics[name]
+		if !exists {
+			log.InfoMsg(loggerpkg.MsgKafkaAdminTopicMarkedForCreation, slog.String("topic", name))
+			toCreate = append(toCreate, spec)
+			continue
+		}
+
+		// Проверка cleanup.policy
+		cfgs, err := adminClient.DescribeConfigs(
+			context.Background(),
+			[]kafka.ConfigResource{
+				{Type: kafka.ResourceTopic, Name: name},
+			},
+		)
+		if err != nil || len(cfgs) == 0 {
+			log.WarnMsg(loggerpkg.MsgKafkaAdminConfigReadError, slog.String("topic", name), slog.String("error", err.Error()))
+			continue
+		}
+
+		cleanup := cfgs[0].Config["cleanup.policy"]
+		if cleanup.Value != "compact" {
+			log.InfoMsg(loggerpkg.MsgKafkaAdminUpdateNeeded, slog.String("topic", name), slog.String("oldPolicy", cleanup.Value))
+			toAlter = append(toAlter, kafka.ConfigResource{
+				Type: kafka.ResourceTopic,
+				Name: name,
+				Config: []kafka.ConfigEntry{
+					{Name: "cleanup.policy", Value: "compact"},
+				}})
+		}
+	}
+
+	// Создание новых топиков
+	if len(toCreate) > 0 {
+		results, err := adminClient.CreateTopics(context.Background(), toCreate)
+		if err != nil {
+			log.ErrorMsg(loggerpkg.MsgKafkaAdminCreateError, slog.String("error", err.Error()))
+			return err
+		}
+		for _, res := range results {
+			if res.Error.Code() != kafka.ErrNoError {
+				log.WarnMsg(loggerpkg.MsgKafkaAdminCreateWarning, slog.String("topic", res.Topic), slog.String("error", res.Error.String()))
+			} else {
+				log.InfoMsg(loggerpkg.MsgKafkaAdminCreateSuccess, slog.String("topic", res.Topic))
+			}
+		}
+	}
+
+	// Обновление конфигураций существующих топиков
+	if len(toAlter) > 0 {
+		results, err := adminClient.AlterConfigs(context.Background(), toAlter)
+		if err != nil {
+			log.ErrorMsg(loggerpkg.MsgKafkaAdminUpdateError, slog.String("error", err.Error()))
+			return err
+		}
+		for _, res := range results {
+			if res.Error.Code() != kafka.ErrNoError {
+				log.WarnMsg(loggerpkg.MsgKafkaAdminUpdateWarning, slog.String("topic", res.Name), slog.String("error", res.Error.String()))
+			} else {
+				log.InfoMsg(loggerpkg.MsgKafkaAdminUpdateSuccess, slog.String("topic", res.Name))
+			}
+		}
+	}
+
+	return nil
 }
