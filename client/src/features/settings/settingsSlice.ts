@@ -4,12 +4,14 @@ interface SettingsState {
   connectionString: string;
   savedConnections: string[];
   dataBaseInfo: any;
+  connectionsMap: Record<string, string>;
 }
 
 const initialState: SettingsState = {
   connectionString: '',
   savedConnections: [],
   dataBaseInfo: null,
+  connectionsMap: {},
 };
 
 const settingsSlice = createSlice({
@@ -25,6 +27,9 @@ const settingsSlice = createSlice({
     setDataForConnection(state, action: PayloadAction<any>) {
       state.dataBaseInfo = action.payload;
     },
+    setConnectionsMap(state, action: PayloadAction<Record<string, string>>) {
+      state.connectionsMap = action.payload;
+    },
   },
 });
 
@@ -32,6 +37,7 @@ export const {
   setConnectionString,
   setSavedConnections,
   setDataForConnection,
+  setConnectionsMap,
 } = settingsSlice.actions;
 
 export default settingsSlice.reducer;

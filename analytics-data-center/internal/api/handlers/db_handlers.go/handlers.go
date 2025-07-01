@@ -49,20 +49,20 @@ func (d *DBHandlers) GetDBInformations(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	w.Header().Set("Content-Type", "application/json")
 
-	var connectionsStrings models.ConnectionStrings
-	if err := json.NewDecoder(r.Body).Decode(&connectionsStrings); err != nil {
+	var req models.DBInfoRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		d.log.Error("failed to decode request", slog.String("error", err.Error()))
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
-	_, err := validate.Validate(connectionsStrings)
+	_, err := validate.Validate(req)
 	if err != nil {
 		d.log.Error("failed validate", slog.String("error", err.Error()))
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
 
-	dbNames, err := d.serviceAnalytics.GetDBInformations(ctx, connectionsStrings)
+	dbNames, err := d.serviceAnalytics.GetDBInformations(ctx, req.ConnectionStrings, req.Page, req.PageSize)
 	if err != nil {
 		d.log.Error("ошибка сервиса аналитики", slog.String("error", err.Error()))
 		http.Error(w, "internal error", http.StatusInternalServerError)

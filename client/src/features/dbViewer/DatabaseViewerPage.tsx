@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Heading,
@@ -12,6 +12,7 @@ import {
   SimpleGrid,
   useColorModeValue,
   ScaleFade,
+  Button,
 } from '@chakra-ui/react';
 import { useSelector, useDispatch } from 'react-redux';
 import {
@@ -26,6 +27,7 @@ import type { RootState, AppDispatch } from '../../app/store';
 import DatabaseSelector from '../viewBuilder/components/DatabaseSelector';
 import SchemaSelector from '../viewBuilder/components/SchemaSelector';
 import { setSelectedDb, setSelectedSchema } from '../viewBuilder/viewBuilderSlice';
+import { useHttp } from '../../hooks/http.hook';
 
 interface TableRow {
   name: string;
@@ -37,12 +39,17 @@ const columnHelper = createColumnHelper<TableRow>();
 const DatabaseViewerPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const data = useSelector((state: RootState) => state.settings.dataBaseInfo);
+  const connectionsMap = useSelector((state: RootState) => state.settings.connectionsMap);
   const { selectedDb, selectedSchema } = useSelector((state: RootState) => state.viewBuilder);
+  const { request } = useHttp();
+  const url = 'http://localhost:8888';
 
   const selectedDatabase = data?.find((db: any) => db.name === selectedDb);
   const selectedSchemaData = selectedDatabase?.schemas?.find((s: any) => s.name === selectedSchema);
 
-  const tables: TableRow[] = selectedSchemaData?.tables || [];
+  const [tablesState, setTablesState] = useState<TableRow[]>(selectedSchemaData?.tables || []);
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
 
   const [sorting, setSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -60,7 +67,7 @@ const DatabaseViewerPage: React.FC = () => {
   ];
 
   const table = useReactTable({
-    data: tables,
+    data: tablesState,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
@@ -70,6 +77,32 @@ const DatabaseViewerPage: React.FC = () => {
 
   const rowBg = useColorModeValue('white', 'gray.700');
   const expandBg = useColorModeValue('gray.50', 'gray.800');
+
+  useEffect(() => {
+    setTablesState(selectedSchemaData?.tables || []);
+    setPage(1);
+  }, [selectedSchemaData]);
+
+  const loadMore = async () => {
+    const nextPage = page + 1;
+    try {
+      const body = {
+        connection_strings: [{ connection_string: connectionsMap }],
+        page: nextPage,
+        page_size: pageSize,
+      };
+      const dbInfo = await request(`${url}/api/get-db`, 'POST', body);
+      const db = dbInfo.find((d: any) => d.name === selectedDb);
+      const schema = db?.schemas?.find((s: any) => s.name === selectedSchema);
+      const newTables = schema?.tables || [];
+      if (newTables.length > 0) {
+        setTablesState(prev => [...prev, ...newTables]);
+        setPage(nextPage);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   return (
     <Box p={8} maxW="1000px" mx="auto">
@@ -137,6 +170,9 @@ const DatabaseViewerPage: React.FC = () => {
             ))}
           </Tbody>
         </Table>
+        <Box textAlign="center" mt={4}>
+          <Button onClick={loadMore}>Загрузить ещё</Button>
+        </Box>
       )}
     </Box>
   );

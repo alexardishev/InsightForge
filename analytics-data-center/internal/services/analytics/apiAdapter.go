@@ -7,7 +7,14 @@ import (
 	"net/url"
 )
 
-func (a *AnalyticsDataCenterService) GetDBInformations(ctx context.Context, connections models.ConnectionStrings) ([]models.Source, error) {
+func (a *AnalyticsDataCenterService) GetDBInformations(ctx context.Context, connections models.ConnectionStrings, page, pageSize int) ([]models.Source, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
 	var response []models.Source
 	for _, conn := range connections.ConnectionStrings {
 		for _, value := range conn.ConnectionString {
@@ -31,7 +38,7 @@ func (a *AnalyticsDataCenterService) GetDBInformations(ctx context.Context, conn
 				return nil, fmt.Errorf("ошибка получения схем: %w", err)
 			}
 			for sidx, schema := range schemas {
-				tables, err := oltpStorage.GetTables(ctx, schema.Name)
+				tables, err := oltpStorage.GetTablesPaginated(ctx, schema.Name, pageSize, offset)
 				if err != nil {
 					a.log.Error("ошибка получения таблиц")
 					return nil, fmt.Errorf("ошибка получения таблиц: %w", err)
