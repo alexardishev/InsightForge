@@ -194,8 +194,10 @@ func (a *AnalyticsDataCenterService) runETL(ctx context.Context, idView int64, t
 			log.ErrorMsg(loggerpkg.MsgTransferIndexesFailed, slog.String("error", err.Error()))
 			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorSelectInsertData)
 		}
-		//Похоже перепутал , для DWH оно не нужно
-		// err = a.DWHProvider.ReplicaIdentityFull(ctx, viewSchema.Name)
+		//Нужно для постгри, если DWH и OLTP одна БД.
+		if a.DWHDbName == DbPostgres {
+			err = a.DWHProvider.ReplicaIdentityFull(ctx, viewSchema.Name)
+		}
 		if err != nil {
 			log.ErrorMsg(loggerpkg.MsgEnableReplicationFailed, slog.String("error", err.Error()))
 			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorSelectInsertData)
