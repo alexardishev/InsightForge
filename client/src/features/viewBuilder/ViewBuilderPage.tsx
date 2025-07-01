@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Heading, VStack, Button } from '@chakra-ui/react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
@@ -13,13 +13,23 @@ import DatabaseSelector from './components/DatabaseSelector';
 import SchemaSelector from './components/SchemaSelector';
 import TableSelector from './components/TableSelector';
 import ColumnsGrid from './components/ColumnsGrid';
+import { useHttp } from '../../hooks/http.hook';
 
 const ViewBuilderPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const data = useSelector((state: RootState) => state.settings.dataBaseInfo);
+  const connectionsMap = useSelector(
+    (state: RootState) => state.settings.connectionsMap,
+  );
   const { selectedDb, selectedSchema, selectedTables, selectedColumns } =
     useSelector((state: RootState) => state.viewBuilder);
+  const { request } = useHttp();
+  const url = 'http://localhost:8888';
+
+  const [tablesState, setTablesState] = useState<any[]>([]);
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
 
 
   const handleToggleTable = (table: string) => {
@@ -32,6 +42,36 @@ const ViewBuilderPage: React.FC = () => {
 
   const selectedDatabase = data?.find((db: any) => db.name === selectedDb);
   const selectedSchemaData = selectedDatabase?.schemas?.find((schema: any) => schema.name === selectedSchema);
+
+  useEffect(() => {
+    setTablesState(selectedSchemaData?.tables || []);
+    setPage(1);
+  }, [selectedSchemaData]);
+
+  const schemaDataWithTables = selectedSchemaData
+    ? { ...selectedSchemaData, tables: tablesState }
+    : undefined;
+
+  const loadMore = async () => {
+    const nextPage = page + 1;
+    try {
+      const body = {
+        connection_strings: [{ connection_string: connectionsMap }],
+        page: nextPage,
+        page_size: pageSize,
+      };
+      const dbInfo = await request(`${url}/api/get-db`, 'POST', body);
+      const db = dbInfo.find((d: any) => d.name === selectedDb);
+      const schema = db?.schemas?.find((s: any) => s.name === selectedSchema);
+      const newTables = schema?.tables || [];
+      if (newTables.length > 0) {
+        setTablesState(prev => [...prev, ...newTables]);
+        setPage(nextPage);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const handleBuildView = () => {
     navigate('/joins');
@@ -59,17 +99,18 @@ const ViewBuilderPage: React.FC = () => {
           </Box>
         )}
 
-        {selectedSchema && selectedSchemaData && (
+        {selectedSchema && schemaDataWithTables && (
           <TableSelector
-            selectedSchemaData={selectedSchemaData}
+            selectedSchemaData={schemaDataWithTables}
             selectedTables={selectedTables}
             onToggleTable={handleToggleTable}
+            onLoadMore={loadMore}
           />
         )}
 
         <ColumnsGrid
           selectedTables={selectedTables}
-          selectedSchemaData={selectedSchemaData}
+          selectedSchemaData={schemaDataWithTables}
           selectedColumns={selectedColumns}
           onToggleColumn={handleToggleColumn}
         />
