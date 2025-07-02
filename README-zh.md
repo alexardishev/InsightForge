@@ -88,4 +88,9 @@ ALTER TABLE public.users REPLICA IDENTITY FULL;
 ALTER TABLE public.profiles REPLICA IDENTITY FULL;
 ```
 
+## 🛰 Kafka 事件流
+初始化时，`cdc-listener` 会连接到 Kafka 集群。Debezium 借助 Kafka Connect 将 OLTP 数据库的变更写入多个主题。只要在系统表 Schemas 创建了新模式，应用就会自动订阅相应主题并开始消费事件。
+
+监听器会先读取所有历史消息，因此在最初阶段可能出现延迟。随着积压处理完成，后续的变更将几乎实时到达。Kafka 在分区内保证消息顺序，消费者会记录偏移量以避免数据丢失。
+
 InsightForge 采用 MIT 许可证发布。

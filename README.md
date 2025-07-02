@@ -93,4 +93,10 @@ ALTER TABLE public.users REPLICA IDENTITY FULL;
 ALTER TABLE public.profiles REPLICA IDENTITY FULL;
 ```
 
+## 🛰 Kafka event flow
+During initialization the `cdc-listener` component connects to your Kafka cluster. Debezium via Kafka Connect captures changes from the OLTP database and publishes them to topics. Once a new schema is created in the `Schemas` table, the application automatically subscribes to the relevant topics and starts consuming events.
+
+The listener first reads all existing messages, so after enabling a schema there may be a short delay while the backlog is processed. As offsets catch up, new changes arrive almost in real time. Kafka guarantees ordered delivery within a partition and the consumer tracks offsets to avoid missing updates.
+
+
 InsightForge is licensed under the MIT License.
