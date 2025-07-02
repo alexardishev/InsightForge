@@ -28,6 +28,7 @@ import DatabaseSelector from '../viewBuilder/components/DatabaseSelector';
 import SchemaSelector from '../viewBuilder/components/SchemaSelector';
 import { setSelectedDb, setSelectedSchema } from '../viewBuilder/viewBuilderSlice';
 import { useHttp } from '../../hooks/http.hook';
+import { appendTables } from '../settings/settingsSlice';
 
 interface TableRow {
   name: string;
@@ -97,6 +98,7 @@ const DatabaseViewerPage: React.FC = () => {
       const newTables = schema?.tables || [];
       if (newTables.length > 0) {
         setTablesState(prev => [...prev, ...newTables]);
+        dispatch(appendTables({ db: selectedDb, schema: selectedSchema, tables: newTables }));
         setPage(nextPage);
       }
     } catch (e) {
