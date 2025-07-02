@@ -207,7 +207,7 @@ func (a *AnalyticsDataCenterService) runETL(ctx context.Context, idView int64, t
 		}
 		//Нужно для постгри, если DWH и OLTP одна БД.
 		if a.DWHDbName == DbPostgres {
-			err = a.DWHProvider.ReplicaIdentityFull(ctx, viewSchema.Name)
+			err = a.DWHProvider.ReplicaIdentityFull(ctx, strings.ToLower(viewSchema.Name))
 		}
 		if err != nil {
 			log.ErrorMsg(loggerpkg.MsgEnableReplicationFailed, slog.String("error", err.Error()))
