@@ -52,3 +52,8 @@ export default tseslint.config({
   },
 })
 ```
+
+## Backend events
+This UI consumes data from InsightForge services. The Kafka initialization
+process and Debezium-based event flow are described in the main project
+[README](../README.md).
