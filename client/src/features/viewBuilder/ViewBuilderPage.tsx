@@ -14,6 +14,7 @@ import SchemaSelector from './components/SchemaSelector';
 import TableSelector from './components/TableSelector';
 import ColumnsGrid from './components/ColumnsGrid';
 import { useHttp } from '../../hooks/http.hook';
+import { appendTables } from '../settings/settingsSlice';
 
 const ViewBuilderPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -66,6 +67,7 @@ const ViewBuilderPage: React.FC = () => {
       const newTables = schema?.tables || [];
       if (newTables.length > 0) {
         setTablesState(prev => [...prev, ...newTables]);
+        dispatch(appendTables({ db: selectedDb, schema: selectedSchema, tables: newTables }));
         setPage(nextPage);
       }
     } catch (e) {
