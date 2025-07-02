@@ -307,15 +307,22 @@ func (a *AnalyticsDataCenterService) transferIndixesAndConstraint(ctx context.Co
 			return err
 		}
 		OLTPSourceName = append(OLTPSourceName, src.Name)
+		var indexTransfer *IndexTransfer
+		var columnIndexes []string
 		for _, sch := range src.Schemas {
 			for _, tbl := range sch.Tables {
-				indexTransfer := &IndexTransfer{
-					IndexTransfer: models.IndexTransferTable{
-						TableName:  tbl.Name,
-						SourceName: src.Name,
-						SchemaName: sch.Name,
-					},
-					storage: storage,
+				for _, clmn := range sch.Tables {
+					columnIndexes = append(columnIndexes, clmn.Name)
+					indexTransfer = &IndexTransfer{
+						IndexTransfer: models.IndexTransferTable{
+							TableName:  tbl.Name,
+							SourceName: src.Name,
+							SchemaName: sch.Name,
+							Columns:    columnIndexes,
+						},
+						storage: storage,
+					}
+
 				}
 				indexTransfers.IndexTransfers = append(indexTransfers.IndexTransfers, *indexTransfer)
 			}

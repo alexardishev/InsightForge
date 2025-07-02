@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+
+	"github.com/lib/pq"
 )
 
 func (p *PostgresDWH) CreateTempTable(ctx context.Context, query string, tempTableName string) error {
@@ -92,19 +94,24 @@ func (p *PostgresDWH) GetColumnsTables(ctx context.Context, schemaName string, t
 
 	return columns, nil
 }
-
 func (p *PostgresDWH) CreateIndex(ctx context.Context, query string) error {
 	const op = "Storage.PostgreSQL.CreateIndex"
 	log := p.Log.With(
 		slog.String("op", op),
 	)
+
 	_, err := p.Db.ExecContext(ctx, query)
 	if err != nil {
+		if pgErr, ok := err.(*pq.Error); ok && pgErr.Code == "42703" {
+			log.Warn("колонка не существует, индекс не создан", slog.String("column", pgErr.Column), slog.String("detail", pgErr.Message))
+			return nil
+		}
+
 		log.Error("ошибка создания индексов", slog.String("error", err.Error()))
 		return err
 	}
-	return nil
 
+	return nil
 }
 
 func (p *PostgresDWH) CreateConstraint(ctx context.Context, query string) error {

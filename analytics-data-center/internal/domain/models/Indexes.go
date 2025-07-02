@@ -9,7 +9,8 @@ type Index struct {
 }
 
 type IndexTransferTable struct {
-	TableName  string `json:"table_name,omitempty"`
-	SourceName string `json:"source_name,omitempty"`
-	SchemaName string `json:"schema_name,omitempty"`
+	TableName  string   `json:"table_name,omitempty"`
+	SourceName string   `json:"source_name,omitempty"`
+	SchemaName string   `json:"schema_name,omitempty"`
+	Columns    []string `json:"columns,omitempty"`
 }
