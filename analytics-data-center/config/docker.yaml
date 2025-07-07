@@ -1,0 +1,30 @@
+env: "local"
+log_lang: "ru"
+storage_path: "postgresql://postgres:password@postgres:5432/postgres?sslmode=disable"
+dwh_db: "postgres"
+dwh_db_path: "postgresql://postgres:password@postgres:5432/postgres_copy?sslmode=disable"
+oltp_db: "postgres"
+oltp_connections:
+  - name: postgres
+    connection_string: "postgresql://postgres:password@postgres:5432/postgres?sslmode=disable"
+    connection_string_kafka: "postgresql://postgres:password@postgres:5432/postgres?sslmode=disable"
+smtp_setting:
+    host: "smtp.example.com"
+    port: 587
+    username: "user@example.com"
+    password: "password"
+    admin_email: "admin@example.com"
+    from_email: "noreply@example.com"
+token_ttl: 1h
+kafka:
+    bootstrap.servers: "kafka:9092"
+    acks: "all"
+    client_id: "debeziumConsumer"
+    enable.auto.commit: "false"
+    auto.offset.reset: "earliest"
+    session.timeout.ms: "6000"
+    group.id: "cdc-consumer-group"
+kafka_connect: "http://kafka-connect:8083"
+grpc:
+  port: 13890
+  timeout: 11h

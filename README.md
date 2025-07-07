@@ -45,6 +45,17 @@ The front‑end resides in `client/` and is built with React, TypeScript and Vit
 ## 📦 Configuration
 Runtime settings are defined in `analytics-data-center/config/local.yaml` and parsed by `internal/config`. The main entry point (`cmd/analytics-data-center/main.go`) launches both an HTTP server (port 8888) and a gRPC server (port specified in the config).
 
+## 🐳 Docker Compose
+The repository contains a `docker-compose.yml` that starts all required services:
+PostgreSQL, Kafka with Kafka Connect, the Go back‑end and the React front‑end served by Nginx.
+Run the stack with:
+
+```bash
+docker compose up --build
+```
+
+After the build completes the UI will be available on [http://localhost:3000](http://localhost:3000).
+
 ## 🏗 Example view (JSON)
 See `README-ru.md` for a detailed JSON example of a view definition. You can also
 find the same file in `examples/user_basic_info.json`.
