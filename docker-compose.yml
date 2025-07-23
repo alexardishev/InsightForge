@@ -55,6 +55,7 @@ services:
       dockerfile: Dockerfile.backend
     environment:
       CONFIG_PATH: /app/config/docker.yaml
+      MIGRATOR_STORAGE_PATH: postgresql://postgres:password@postgres:5432/postgres?sslmode=disable
     depends_on:
       - postgres
       - kafka

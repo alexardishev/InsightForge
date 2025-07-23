@@ -47,7 +47,7 @@ Runtime settings are defined in `analytics-data-center/config/local.yaml` and pa
 
 ## 🐳 Docker Compose
 The repository contains a `docker-compose.yml` that starts all required services:
-PostgreSQL, Kafka with Kafka Connect, the Go back‑end and the React front‑end served by Nginx.
+PostgreSQL, Kafka with Kafka Connect, the Go back‑end and the React front‑end served by Nginx. The back‑end container automatically runs migrations for the system database on start.
 Run the stack with:
 
 ```bash
