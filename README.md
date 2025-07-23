@@ -56,6 +56,13 @@ docker compose up --build
 
 After the build completes the UI will be available on [http://localhost:3000](http://localhost:3000).
 
+If you already run PostgreSQL, Kafka and Kafka Connect externally, start only the application containers using:
+
+```bash
+docker compose -f docker-compose.app.yml up --build
+```
+Update `analytics-data-center/config/docker.yaml` with the addresses of your existing services.
+
 ## 🏗 Example view (JSON)
 See `README-ru.md` for a detailed JSON example of a view definition. You can also
 find the same file in `examples/user_basic_info.json`.
