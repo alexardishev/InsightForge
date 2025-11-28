@@ -13,7 +13,7 @@ func (p *PostgresOLTP) GetColumns(ctx context.Context, schemaName string, tableN
 		slog.String("op", op),
 	)
 
-	query := "SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 ORDER BY ordinal_position"
+	query := "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 ORDER BY ordinal_position"
 	rows, err := p.Db.QueryContext(ctx, query, schemaName, tableName)
 	if err != nil {
 		log.Error("Запрос выполнен с ошибкой", slog.String("error", err.Error()))
@@ -23,7 +23,7 @@ func (p *PostgresOLTP) GetColumns(ctx context.Context, schemaName string, tableN
 
 	for rows.Next() {
 		var row models.Column
-		err = rows.Scan(&row.Name)
+		err = rows.Scan(&row.Name, &row.Type)
 		if err != nil {
 			log.Error("Запрос выполнен с ошибкой", slog.String("error", err.Error()))
 			return []models.Column{}, err

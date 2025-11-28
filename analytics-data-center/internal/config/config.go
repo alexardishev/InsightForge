@@ -15,6 +15,7 @@ type Config struct {
 	OLTPStoragePath string        `yaml:"oltp_db_path" json:"oltp_db_path,omitempty"`
 	DWHDataBase     string        `yaml:"dwh_db" json:"dwh_db,omitempty"`
 	DWHStoragePath  string        `yaml:"dwh_db_path" json:"dwh_db_path,omitempty"`
+	RenameHeuristic bool          `yaml:"rename_heuristic" env:"ENABLE_RENAME_HEURISTIC" env-default:"true" json:"rename_heuristic,omitempty"`
 	OLTPstorages    []OLTPstorage `yaml:"oltp_connections" json:"olt_pstorages,omitempty"`
 	TokenTTL        time.Duration `yaml:"token_ttl,omitempty" json:"token_ttl,omitempty"`
 	LogLang         string        `yaml:"log_lang" env-default:"ru" json:"log_lang,omitempty"`

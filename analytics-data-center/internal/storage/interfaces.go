@@ -45,6 +45,7 @@ type TableProvider interface {
 	DeleteTempTable(ctx context.Context, tableName string) error
 	CreateIndex(ctx context.Context, query string) error
 	CreateConstraint(ctx context.Context, query string) error
+	RenameColumn(ctx context.Context, query string) error
 }
 
 type DataProviderDWH interface {

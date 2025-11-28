@@ -87,3 +87,18 @@ func (p *ClickHouseDB) CreateIndex(ctx context.Context, query string) error {
 func (p *ClickHouseDB) CreateConstraint(ctx context.Context, query string) error {
 	panic("CreateConstraint")
 }
+
+func (c *ClickHouseDB) RenameColumn(ctx context.Context, query string) error {
+	const op = "Storage.ClickHouseDB.RenameColumn"
+	log := c.Log.With(
+		slog.String("op", op),
+		slog.String("query", query),
+	)
+
+	if _, err := c.Db.ExecContext(ctx, query); err != nil {
+		log.Error("ошибка переименования колонки", slog.String("error", err.Error()))
+		return err
+	}
+
+	return nil
+}

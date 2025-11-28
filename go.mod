@@ -18,6 +18,7 @@ require (
 require (
 	github.com/ClickHouse/ch-go v0.66.0 // indirect
 	github.com/ClickHouse/clickhouse-go/v2 v2.37.1 // indirect
+	github.com/adrg/strutil v0.3.1 // indirect
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/go-chi/cors v1.2.1 // indirect
 	github.com/go-faster/city v1.0.1 // indirect

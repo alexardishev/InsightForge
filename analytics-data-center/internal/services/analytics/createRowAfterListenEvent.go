@@ -2,6 +2,8 @@ package serviceanalytics
 
 import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
+	sqlgenerator "analyticDataCenter/analytics-data-center/internal/lib/SQLGenerator"
+	renameheuristics "analyticDataCenter/analytics-data-center/internal/lib/renameheuristics"
 	"analyticDataCenter/analytics-data-center/internal/storage"
 	"context"
 	"encoding/json"
@@ -29,7 +31,7 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 		log.Error("ошибка получения схемы", slog.Any("ошибка", err))
 		return err
 	}
-	a.checkColumnInTables(ctx, after, databaseEvt, schemaEvt, tableEvt, schemaIds)
+	a.checkColumnInTables(ctx, evtData.Before, after, databaseEvt, schemaEvt, tableEvt, schemaIds)
 	for _, schemaId := range schemaIds {
 		schema, err := a.SchemaProvider.GetView(ctx, int64(schemaId))
 		if err != nil {
@@ -135,6 +137,7 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 
 func (a *AnalyticsDataCenterService) checkColumnInTables(
 	ctx context.Context,
+	before map[string]interface{},
 	after map[string]interface{},
 	databaseEvt string,
 	schemaEvt string,
@@ -156,12 +159,77 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 		actualCols[col] = struct{}{}
 	}
 
-	// Перебираем все связанные схемы
+	viewCache := make(map[int]models.View)
+	var expectedColumns []models.Column
 	for _, schemaId := range schemaIds {
 		view, err := a.SchemaProvider.GetView(ctx, int64(schemaId))
 		if err != nil {
 			log.Warn("не удалось получить view", slog.String("error", err.Error()))
 			continue
+		}
+		viewCache[schemaId] = view
+
+		for _, source := range view.Sources {
+			if source.Name != databaseEvt {
+				continue
+			}
+			for _, schema := range source.Schemas {
+				if schema.Name != schemaEvt {
+					continue
+				}
+				for _, table := range schema.Tables {
+					if table.Name != tableEvt {
+						continue
+					}
+					expectedColumns = append(expectedColumns, table.Columns...)
+				}
+			}
+		}
+	}
+
+	renameCandidate, err := renameheuristics.DetectRenameCandidate(ctx, renameheuristics.DetectorConfig{
+		ActualDWHColumns:      actualCols,
+		BeforeEvent:           before,
+		AfterEvent:            after,
+		Database:              databaseEvt,
+		Schema:                schemaEvt,
+		Table:                 tableEvt,
+		RenameHeuristicEnable: a.RenameHeuristicEnabled,
+		ExpectedColumns:       expectedColumns,
+		OLTPFactory:           a.OLTPFactory,
+		Logger:                a.log.Logger,
+	})
+	if err != nil {
+		log.Warn("ошибка определения переименования", slog.String("error", err.Error()))
+	}
+
+	if renameCandidate != nil {
+		log.Info("обнаружено переименование колонки", slog.String("from", renameCandidate.OldName), slog.String("to", renameCandidate.NewName), slog.String("strategy", renameCandidate.Strategy))
+		renameQuery, err := sqlgenerator.GenerateRenameColumnQuery(a.DWHDbName, schemaEvt, tableEvt, renameCandidate.OldName, renameCandidate.NewName)
+		if err != nil {
+			log.Error("не удалось сгенерировать запрос переименования", slog.String("error", err.Error()))
+		} else {
+			if err := a.DWHProvider.RenameColumn(ctx, renameQuery); err != nil {
+				log.Error("ошибка применения переименования в DWH", slog.String("error", err.Error()))
+				// даже если DWH не обновился, продолжаем помечать is_deleted, чтобы не пропустить проблему
+			} else {
+				delete(actualCols, renameCandidate.OldName)
+				actualCols[renameCandidate.NewName] = struct{}{}
+			}
+		}
+	}
+
+	// Перебираем все связанные схемы
+	for _, schemaId := range schemaIds {
+		view, ok := viewCache[schemaId]
+		if !ok {
+			fetchedView, err := a.SchemaProvider.GetView(ctx, int64(schemaId))
+			if err != nil {
+				log.Warn("не удалось получить view", slog.String("error", err.Error()))
+				continue
+			}
+			viewCache[schemaId] = fetchedView
+			view = fetchedView
 		}
 		changed := false
 
@@ -182,6 +250,14 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 					}
 					for ci := range table.Columns {
 						column := &table.Columns[ci]
+
+						if renameCandidate != nil && column.Name == renameCandidate.OldName {
+							column.Name = renameCandidate.NewName
+							column.IsDeleted = false
+							changed = true
+							continue
+						}
+
 						_, exists := actualCols[column.Name]
 						if column.IsDeleted == exists {
 							// Был is_deleted=false, а колонки нет — ставим true. Или наоборот.

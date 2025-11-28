@@ -53,6 +53,7 @@ func (m *mockDWH) InsertDataToDWH(_ context.Context, query string) error {
 	m.insertCalls = append(m.insertCalls, query)
 	return m.insertErr
 }
+func (m *mockDWH) RenameColumn(context.Context, string) error { return nil }
 func (m *mockDWH) GetColumnsTables(_ context.Context, _ string, table string) ([]string, error) {
 	if cols, ok := m.columns[table]; ok {
 		return cols, nil
