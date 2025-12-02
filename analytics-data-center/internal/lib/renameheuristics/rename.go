@@ -74,7 +74,7 @@ func DetectRenameCandidate(ctx context.Context, cfg DetectorConfig) (*RenameCand
 	}
 
 	missing, added := diffEventColumns(cfg.ActualDWHColumns, cfg.AfterEvent)
-	missing, added = filterByBefore(cfg.BeforeEvent, missing, added)
+	missing, added = filterByBefore(cfg.BeforeEvent, cfg.ExpectedColumns, missing, added)
 
 	return pickCandidate(missing, added, expectedTypes, nil, "cdc-heuristic", log), nil
 }
@@ -170,21 +170,37 @@ func diffEventColumns(actual map[string]struct{}, after map[string]interface{}) 
 	return missing, added
 }
 
-func filterByBefore(before map[string]interface{}, missing, added []string) ([]string, []string) {
-	if len(before) == 0 {
+func filterByBefore(before map[string]interface{}, expected []models.Column, missing, added []string) ([]string, []string) {
+	// Debezium в наших событиях не заполняет before, поэтому используем его, если он есть,
+	// а в противном случае — список колонок из схемы (expected).
+	beforeColumns := make(map[string]struct{})
+	for col := range before {
+		beforeColumns[col] = struct{}{}
+	}
+
+	if len(beforeColumns) == 0 {
+		for _, col := range expected {
+			if col.Name == "" {
+				continue
+			}
+			beforeColumns[col.Name] = struct{}{}
+		}
+	}
+
+	if len(beforeColumns) == 0 {
 		return missing, added
 	}
 
 	var filteredMissing []string
 	for _, m := range missing {
-		if _, ok := before[m]; ok {
+		if _, ok := beforeColumns[m]; ok {
 			filteredMissing = append(filteredMissing, m)
 		}
 	}
 
 	var filteredAdded []string
 	for _, a := range added {
-		if _, ok := before[a]; !ok {
+		if _, ok := beforeColumns[a]; !ok {
 			filteredAdded = append(filteredAdded, a)
 		}
 	}
