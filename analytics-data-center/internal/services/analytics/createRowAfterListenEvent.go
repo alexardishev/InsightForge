@@ -32,18 +32,18 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 		return err
 	}
 	a.checkColumnInTables(ctx, evtData.Before, after, databaseEvt, schemaEvt, tableEvt, schemaIds)
-	for _, schemaId := range schemaIds {
-		schema, err := a.SchemaProvider.GetView(ctx, int64(schemaId))
-		if err != nil {
-			if errors.Is(err, storage.ErrSchemaNotFound) {
-				log.Warn("view not found", slog.String("error", err.Error()))
-				return fmt.Errorf("%s: %s", op, ErrInvalidSchemID)
+        for _, schemaId := range schemaIds {
+                schema, err := a.SchemaProvider.GetView(ctx, int64(schemaId))
+                if err != nil {
+                        if errors.Is(err, storage.ErrSchemaNotFound) {
+                                log.Warn("view not found", slog.String("error", err.Error()))
+                                return fmt.Errorf("%s: %s", op, ErrInvalidSchemID)
 			}
 			log.Warn("ошибка получения схемы", slog.String("error", err.Error()))
 			return fmt.Errorf("%s: %s", op, err)
-		}
-		schems = append(schems, schema)
-	}
+                }
+                schems = append(schems, schema)
+        }
 
 	for _, schema := range schems {
 		for _, source := range schema.Sources {
