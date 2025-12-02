@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
+
 	"github.com/adrg/strutil/metrics"
 )
 
@@ -73,14 +74,14 @@ func pickCandidate(
 		return nil
 	}
 
-    // В простых случаях с одной пропавшей колонкой позволяем более мягкое
-    // сравнение, т.к. эвристика с Jaro-Winkler может не сработать на коротких
-    // или сильно отличающихся названиях вроде name -> title. Даже если
-    // добавленных колонок несколько, мы ищем «лучшего кандидата» среди них.
-    minSimilarity := 0.82
-    if len(missing) == 1 {
-            minSimilarity = 0.6
-    }
+	// В простых случаях с одной пропавшей колонкой позволяем более мягкое
+	// сравнение, т.к. эвристика с Jaro-Winkler может не сработать на коротких
+	// или сильно отличающихся названиях вроде name -> title. Даже если
+	// добавленных колонок несколько, мы ищем «лучшего кандидата» среди них.
+	minSimilarity := 0.82
+	if len(missing) == 1 {
+		minSimilarity = 0.6
+	}
 
 	type candidateScore struct {
 		old   string
