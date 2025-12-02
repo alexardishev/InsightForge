@@ -91,6 +91,15 @@ func pickCandidate(
 		return nil
 	}
 
+    // В простых случаях с одной пропавшей колонкой позволяем более мягкое
+    // сравнение, т.к. эвристика с Jaro-Winkler может не сработать на коротких
+    // или сильно отличающихся названиях вроде name -> title. Даже если
+    // добавленных колонок несколько, мы ищем «лучшего кандидата» среди них.
+    minSimilarity := 0.82
+    if len(missing) == 1 {
+            minSimilarity = 0.6
+    }
+
 	type candidateScore struct {
 		old   string
 		new   string
@@ -115,7 +124,7 @@ func pickCandidate(
 				similarity += 0.1 // bonus for matching types
 			}
 
-			if similarity < 0.82 { // too low semantic similarity
+			if similarity < minSimilarity { // too low semantic similarity
 				continue
 			}
 
