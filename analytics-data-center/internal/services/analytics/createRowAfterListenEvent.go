@@ -191,7 +191,7 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 	}
 
 	columns, err := a.DWHProvider.GetColumnsTables(ctx, dwhSchemaName, strings.ToLower(dwhTableName))
-	log.Info("DWH FOR SQL", slog.Any("KEY", dwhTableName))
+	log.Info("DWH FOR SQL", slog.Any("KEY", columns))
 	if err != nil {
 		log.Error("ошибка получения колонок", slog.String("error", err.Error()))
 		return err

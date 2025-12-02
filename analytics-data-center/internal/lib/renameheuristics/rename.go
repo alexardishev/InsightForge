@@ -47,6 +47,9 @@ func DetectRenameCandidate(ctx context.Context, cfg DetectorConfig) (*RenameCand
 
 	if len(expectedTypes) > 0 {
 		missing, added := diffSets(cfg.ActualDWHColumns, expectedTypes)
+		log.Info("", slog.Any("DWH", cfg.ActualDWHColumns))
+		log.Info("", slog.Any("OLTP", expectedTypes))
+
 		if candidate := pickCandidate(missing, added, expectedTypes, expectedTypes, "view-schema", log); candidate != nil {
 			return candidate, nil
 		}
