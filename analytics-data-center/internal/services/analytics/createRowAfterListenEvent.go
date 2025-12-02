@@ -147,17 +147,10 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 	const op = "checkColumnInTables"
 	log := a.log.With(slog.String("op", op))
 
-	// Получаем список колонок из БД
-	columns, err := a.DWHProvider.GetColumnsTables(ctx, schemaEvt, tableEvt)
-	if err != nil {
-		log.Error("ошибка получения колонок", slog.String("error", err.Error()))
-		return err
-	}
-	// Преобразуем список в map для быстрого поиска
-	actualCols := make(map[string]struct{}, len(columns))
-	for _, col := range columns {
-		actualCols[col] = struct{}{}
-	}
+	// В DWH таблицы и схемы могут отличаться от событий OLTP.
+	// Используем имя view как таблицу в DWH, а схему — public по умолчанию.
+	dwhSchemaName := "public"
+	var dwhTableName string
 
 	viewCache := make(map[int]models.View)
 	var expectedColumns []models.Column
@@ -168,6 +161,10 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 			continue
 		}
 		viewCache[schemaId] = view
+
+		if dwhTableName == "" {
+			dwhTableName = view.Name
+		}
 
 		for _, source := range view.Sources {
 			if source.Name != databaseEvt {
@@ -187,6 +184,25 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 		}
 	}
 
+	if dwhTableName == "" {
+		dwhTableName = tableEvt
+		log.Warn("не удалось определить имя таблицы DWH из схемы, используем имя из события", slog.String("table", dwhTableName))
+	}
+
+	columns, err := a.DWHProvider.GetColumnsTables(ctx, dwhSchemaName, dwhTableName)
+	if err != nil {
+		log.Error("ошибка получения колонок", slog.String("error", err.Error()))
+		return err
+	}
+
+	log.Debug("используются таблица и схема DWH", slog.String("schema", dwhSchemaName), slog.String("table", dwhTableName))
+
+	// Преобразуем список в map для быстрого поиска
+	actualCols := make(map[string]struct{}, len(columns))
+	for _, col := range columns {
+		actualCols[col] = struct{}{}
+	}
+
 	renameCandidate, err := renameheuristics.DetectRenameCandidate(ctx, renameheuristics.DetectorConfig{
 		ActualDWHColumns:      actualCols,
 		BeforeEvent:           before,
@@ -196,7 +212,6 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 		Table:                 tableEvt,
 		RenameHeuristicEnable: a.RenameHeuristicEnabled,
 		ExpectedColumns:       expectedColumns,
-		OLTPFactory:           a.OLTPFactory,
 		Logger:                a.log.Logger,
 	})
 	if err != nil {
@@ -205,7 +220,7 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 
 	if renameCandidate != nil {
 		log.Info("обнаружено переименование колонки", slog.String("from", renameCandidate.OldName), slog.String("to", renameCandidate.NewName), slog.String("strategy", renameCandidate.Strategy))
-		renameQuery, err := sqlgenerator.GenerateRenameColumnQuery(a.DWHDbName, schemaEvt, tableEvt, renameCandidate.OldName, renameCandidate.NewName)
+		renameQuery, err := sqlgenerator.GenerateRenameColumnQuery(a.DWHDbName, dwhSchemaName, dwhTableName, renameCandidate.OldName, renameCandidate.NewName)
 		if err != nil {
 			log.Error("не удалось сгенерировать запрос переименования", slog.String("error", err.Error()))
 		} else {
