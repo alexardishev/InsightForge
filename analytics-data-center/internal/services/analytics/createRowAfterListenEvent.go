@@ -212,7 +212,6 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 		Table:                 tableEvt,
 		RenameHeuristicEnable: a.RenameHeuristicEnabled,
 		ExpectedColumns:       expectedColumns,
-		OLTPFactory:           a.OLTPFactory,
 		Logger:                a.log.Logger,
 	})
 	if err != nil {
