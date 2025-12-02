@@ -32,7 +32,7 @@ func RegisterPostgresConnector(connectURL string, name string, pgConn string) er
 	}
 
 	connector := DebeziumConnectorConfig{
-		Name: name,
+		Name: fmt.Sprintf("conn_%s", name),
 		Config: map[string]interface{}{
 			"connector.class":                "io.debezium.connector.postgresql.PostgresConnector",
 			"plugin.name":                    "pgoutput",
@@ -47,7 +47,8 @@ func RegisterPostgresConnector(connectURL string, name string, pgConn string) er
 			"tombstones.on.delete":           "false",
 			"include.schema.changes":         "false",
 			"decimal.handling.mode":          "double",
-			"snapshot.mode":                  "always", // получаем снепшот БД чтобы создались все топики в кафке
+			"snapshot.mode":                  "never",
+			"snapshot.new.tables":            "parallel",
 			"key.converter":                  "org.apache.kafka.connect.json.JsonConverter",
 			"value.converter":                "org.apache.kafka.connect.json.JsonConverter",
 			"key.converter.schemas.enable":   "false",

@@ -48,7 +48,16 @@ services:
       STATUS_STORAGE_TOPIC: connect_statuses
     ports:
       - "8083:8083"
-
+  kafdrop:
+    image: obsidiandynamics/kafdrop:latest
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BROKERCONNECT: "kafka:9092"
+      JVM_OPTS: "-Xms32M -Xmx64M"
+      SERVER_SERVLET_CONTEXTPATH: "/"
+    ports:
+      - "9000:9000"
   backend:
     build:
       context: .
@@ -62,6 +71,7 @@ services:
       - kafka-connect
     ports:
       - "8888:8888"
+      - "13890:13890"
 
   frontend:
     build:

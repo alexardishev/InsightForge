@@ -1,20 +1,40 @@
-FROM golang:1.22-alpine AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o server ./analytics-data-center/cmd/analytics-data-center
-RUN CGO_ENABLED=0 GOOS=linux go build -o migrator ./analytics-data-center/cmd/migrator
+# ---------- STAGE 1: builder ----------
+FROM golang:1.23.3 AS builder
 
-FROM alpine:3.19
 WORKDIR /app
+
+# go.mod / go.sum
+COPY go.mod go.sum ./
+
+# vendor с зависимостями (снаружи уже делал: go mod vendor)
+COPY vendor ./vendor
+
+# остальной код
+COPY . .
+
+# confluent-kafka-go требует CGO, модули берём только из vendor
+ENV CGO_ENABLED=1 \
+    GOFLAGS=-mod=vendor
+
+RUN go build -o server ./analytics-data-center/cmd/analytics-data-center
+RUN go build -o migrator ./analytics-data-center/cmd/migrator
+
+
+# ---------- STAGE 2: runtime ----------
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
 COPY --from=builder /app/server /usr/local/bin/server
 COPY --from=builder /app/migrator /usr/local/bin/migrator
 COPY analytics-data-center/migrations ./migrations
 COPY analytics-data-center/config ./config
 COPY docker/backend-entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh \
+    && chmod +x /usr/local/bin/entrypoint.sh
+
 ENV CONFIG_PATH=/app/config/docker.yaml
+
 EXPOSE 8888
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-

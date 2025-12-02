@@ -5,9 +5,9 @@ dwh_db: "postgres"
 dwh_db_path: "postgresql://postgres:password@postgres:5432/postgres_copy?sslmode=disable"
 oltp_db: "postgres"
 oltp_connections:
-  - name: postgres
-    connection_string: "postgresql://postgres:password@postgres:5432/postgres?sslmode=disable"
-    connection_string_kafka: "postgresql://postgres:password@postgres:5432/postgres?sslmode=disable"
+  - name: postgres_oltp
+    connection_string: "postgresql://postgres:password@postgres:5432/postgres_oltp?sslmode=disable"
+    connection_string_kafka: "postgresql://postgres:password@postgres:5432/postgres_oltp?sslmode=disable"
 smtp_setting:
     host: "smtp.example.com"
     port: 587
