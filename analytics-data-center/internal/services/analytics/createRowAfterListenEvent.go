@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 )
 
 func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.Context, evtData models.CDCEventData) error {
@@ -189,7 +190,8 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 		log.Warn("не удалось определить имя таблицы DWH из схемы, используем имя из события", slog.String("table", dwhTableName))
 	}
 
-	columns, err := a.DWHProvider.GetColumnsTables(ctx, dwhSchemaName, dwhTableName)
+	columns, err := a.DWHProvider.GetColumnsTables(ctx, dwhSchemaName, strings.ToLower(dwhTableName))
+	log.Info("DWH FOR SQL", slog.Any("KEY", dwhTableName))
 	if err != nil {
 		log.Error("ошибка получения колонок", slog.String("error", err.Error()))
 		return err
