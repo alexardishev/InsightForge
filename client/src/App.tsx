@@ -10,6 +10,7 @@ import TransformBuilderPage from './features/viewBuilder/TransformBuilderPage';
 import SummaryPage from './features/summary/SummaryPage';
 import DatabaseViewerPage from './features/dbViewer/DatabaseViewerPage';
 import TasksPage from './features/tasks/TasksPage';
+import ColumnRenameSuggestionsPage from './features/columnRenameSuggestions/ColumnRenameSuggestionsPage';
 
 const App: React.FC = () => {
   return (
@@ -23,6 +24,7 @@ const App: React.FC = () => {
         <Route path="/db-viewer" element={<DatabaseViewerPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/tasks" element={<TasksPage />} />
+        <Route path="/column-rename-suggestions" element={<ColumnRenameSuggestionsPage />} />
         <Route path='/builder' element={<ViewBuilderPage/>}></Route>
         <Route path='/joins' element={<JoinBuilderPage/>}></Route>
         <Route path='/transforms' element={<TransformBuilderPage/>}></Route>
