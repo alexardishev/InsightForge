@@ -5,12 +5,7 @@ export const useHttp = () => {
   const [error, setError] = useState<string | null>(null);
 
   const request = useCallback(
-    async <T = any>(
-      url: string,
-      method = 'GET',
-      body: any = null,
-      headers = { 'Content-Type': 'application/json' }
-    ): Promise<T> => {
+    async (url: string, method = 'GET', body: any = null, headers = { 'Content-Type': 'application/json' }) => {
       setLoading(true);
       setError(null);
       try {
@@ -25,7 +20,7 @@ export const useHttp = () => {
         }
 
         const data = await response.json();
-        return data as T;
+        return data;
       } catch (e: any) {
         setError(e.message);
         throw e;
