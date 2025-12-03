@@ -26,6 +26,8 @@ type mockDWH struct {
 	mergeErr     error
 	indexCalls   []string
 	indexErr     error
+	renameCalls  []string
+	renameErr    error
 }
 
 func (m *mockDWH) CreateTempTable(_ context.Context, _ string, name string) error {
@@ -53,7 +55,10 @@ func (m *mockDWH) InsertDataToDWH(_ context.Context, query string) error {
 	m.insertCalls = append(m.insertCalls, query)
 	return m.insertErr
 }
-func (m *mockDWH) RenameColumn(context.Context, string) error { return nil }
+func (m *mockDWH) RenameColumn(_ context.Context, query string) error {
+	m.renameCalls = append(m.renameCalls, query)
+	return m.renameErr
+}
 func (m *mockDWH) GetColumnsTables(_ context.Context, _ string, table string) ([]string, error) {
 	if cols, ok := m.columns[table]; ok {
 		return cols, nil
@@ -77,6 +82,8 @@ type mockOLTP struct {
 	selectErr    error
 	indexResult  models.Indexes
 	indexErr     error
+	columns      []models.Column
+	columnsErr   error
 }
 
 func (m *mockOLTP) GetCountInsertData(context.Context, string) (int64, error) {
@@ -101,7 +108,10 @@ func (m *mockOLTP) GetConstraint(context.Context, string, string) (models.Constr
 	return models.Constraints{}, nil
 }
 func (m *mockOLTP) GetColumns(context.Context, string, string) ([]models.Column, error) {
-	return []models.Column{}, nil
+	if m.columnsErr != nil {
+		return nil, m.columnsErr
+	}
+	return m.columns, nil
 }
 
 func (m *mockOLTP) GetSchemas(context.Context, string) ([]models.Schema, error) {

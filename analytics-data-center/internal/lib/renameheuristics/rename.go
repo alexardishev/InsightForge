@@ -22,6 +22,7 @@ type DetectorConfig struct {
 	ActualDWHColumns      map[string]struct{}
 	BeforeEvent           map[string]interface{}
 	AfterEvent            map[string]interface{}
+	ColumnTypes           map[string]string
 	Database              string
 	Schema                string
 	Table                 string
@@ -37,12 +38,22 @@ func DetectRenameCandidate(ctx context.Context, cfg DetectorConfig) (*RenameCand
 		log = slog.Default()
 	}
 
+	allTypes := make(map[string]string)
+	for name, t := range cfg.ColumnTypes {
+		allTypes[strings.ToLower(name)] = normalizeType(t)
+	}
+
 	expectedTypes := make(map[string]string)
 	for _, col := range cfg.ExpectedColumns {
 		if col.Name == "" {
 			continue
 		}
-		expectedTypes[col.Name] = normalizeType(col.Type)
+		normName := strings.ToLower(col.Name)
+		normType := normalizeType(col.Type)
+		expectedTypes[normName] = normType
+		if _, ok := allTypes[normName]; !ok {
+			allTypes[normName] = normType
+		}
 	}
 
 	if len(expectedTypes) > 0 {
@@ -50,7 +61,7 @@ func DetectRenameCandidate(ctx context.Context, cfg DetectorConfig) (*RenameCand
 		log.Info("", slog.Any("DWH", cfg.ActualDWHColumns))
 		log.Info("", slog.Any("OLTP", expectedTypes))
 
-		if candidate := pickCandidate(missing, added, expectedTypes, expectedTypes, "view-schema", log); candidate != nil {
+		if candidate := pickCandidate(missing, added, allTypes, expectedTypes, "view-schema", log); candidate != nil {
 			return candidate, nil
 		}
 	}
@@ -62,13 +73,13 @@ func DetectRenameCandidate(ctx context.Context, cfg DetectorConfig) (*RenameCand
 	missing, added := diffEventColumns(cfg.ActualDWHColumns, cfg.AfterEvent)
 	missing, added = filterByBefore(cfg.BeforeEvent, cfg.ExpectedColumns, missing, added)
 
-	return pickCandidate(missing, added, expectedTypes, nil, "cdc-heuristic", log), nil
+	return pickCandidate(missing, added, allTypes, expectedTypes, "cdc-heuristic", log), nil
 }
 
 func pickCandidate(
 	missing []string,
 	added []string,
-	expectedTypes map[string]string,
+	oldTypes map[string]string,
 	newTypes map[string]string,
 	strategy string,
 	log *slog.Logger,
@@ -83,7 +94,7 @@ func pickCandidate(
 	// добавленных колонок несколько, мы ищем «лучшего кандидата» среди них.
 	minSimilarity := 0.82
 	if len(missing) == 1 {
-		minSimilarity = 0.6
+		minSimilarity = 0.45
 	}
 
 	type candidateScore struct {
@@ -96,9 +107,9 @@ func pickCandidate(
 	var best *candidateScore
 
 	for _, oldCol := range missing {
-		expectedType := expectedTypes[oldCol]
+		expectedType := oldTypes[strings.ToLower(oldCol)]
 		for _, newCol := range added {
-			newType := normalizeType(newTypes[newCol])
+			newType := normalizeType(newTypes[strings.ToLower(newCol)])
 			if expectedType != "" && newType != "" && expectedType != newType {
 				// Тип изменился — вероятнее новая колонка, а не rename.
 				log.Info("skip rename candidate due to type mismatch", slog.String("old", oldCol), slog.String("new", newCol), slog.String("expectedType", expectedType), slog.String("newType", newType))
