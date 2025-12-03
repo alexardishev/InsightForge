@@ -104,3 +104,13 @@ func (a *AnalyticsDataCenterService) GetTasks(ctx context.Context, filters model
 	}
 	return tasks, nil
 }
+
+func (a *AnalyticsDataCenterService) ListColumnRenameSuggestions(ctx context.Context, filter models.ColumnRenameSuggestionFilter) ([]models.ColumnRenameSuggestion, error) {
+	suggestions, err := a.RenameSuggestionStorage.ListSuggestions(ctx, filter)
+	if err != nil {
+		a.log.Error("Ошибка работы с базой данных")
+		return nil, err
+	}
+
+	return suggestions, nil
+}

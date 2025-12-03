@@ -2,7 +2,6 @@ package serviceanalytics
 
 import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
-	sqlgenerator "analyticDataCenter/analytics-data-center/internal/lib/SQLGenerator"
 	renameheuristics "analyticDataCenter/analytics-data-center/internal/lib/renameheuristics"
 	"analyticDataCenter/analytics-data-center/internal/storage"
 	"context"
@@ -18,7 +17,11 @@ import (
 
 func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.Context, evtData models.CDCEventData) error {
 	const op = "createRowAfterListenEventInDWH"
-	var schems []models.View
+	type viewInfo struct {
+		id   int
+		view models.View
+	}
+	var schems []viewInfo
 
 	log := a.log.With(slog.String("op", op))
 
@@ -52,18 +55,29 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 			log.Warn("ошибка получения схемы", slog.String("error", err.Error()))
 			return fmt.Errorf("%s: %s", op, err)
 		}
-		schems = append(schems, schema)
+		schems = append(schems, viewInfo{id: schemaId, view: schema})
 	}
 
 	// 4. Для КАЖДОЙ view отдельно собираем finalRow и conflictKeys
 	for _, schema := range schems {
-		viewName := schema.Name
+		viewName := schema.view.Name
+
+		hasSuggestion, err := a.RenameSuggestionStorage.HasSuggestion(ctx, int64(schema.id), databaseEvt, schemaEvt, tableEvt)
+		if err != nil {
+			log.Error("ошибка проверки предложений переименования", slog.String("error", err.Error()), slog.String("view", viewName))
+			return err
+		}
+
+		if hasSuggestion {
+			log.Warn("Пропускаю вставку — есть предложение по переименованию", slog.String("view", viewName), slog.String("table", tableEvt))
+			continue
+		}
 
 		finalRow := make(map[string]interface{})
 		conflictKeys := make(map[string]struct{})
 		hasData := false
 
-		for _, source := range schema.Sources {
+		for _, source := range schema.view.Sources {
 			if source.Name != databaseEvt {
 				continue
 			}
@@ -320,27 +334,22 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 				slog.String("strategy", renameCandidate.Strategy),
 				slog.String("view", viewName))
 
-			renameQuery, err := sqlgenerator.GenerateRenameColumnQuery(
-				a.DWHDbName,
-				dwhSchemaName,
-				strings.ToLower(dwhTableName),
-				renameCandidate.OldName,
-				renameCandidate.NewName,
-			)
-			if err != nil {
-				log.Error("не удалось сгенерировать запрос переименования",
-					slog.String("error", err.Error()),
-					slog.String("view", viewName))
-			} else {
-				if err := a.DWHProvider.RenameColumn(ctx, renameQuery); err != nil {
-					log.Error("ошибка применения переименования в DWH",
-						slog.String("error", err.Error()),
-						slog.String("view", viewName))
-				} else {
-					delete(actualCols, strings.ToLower(renameCandidate.OldName))
-					actualCols[strings.ToLower(renameCandidate.NewName)] = struct{}{}
-				}
+			suggestion := models.ColumnRenameSuggestion{
+				SchemaID:      int64(schemaId),
+				DatabaseName:  databaseEvt,
+				SchemaName:    schemaEvt,
+				TableName:     tableEvt,
+				OldColumnName: renameCandidate.OldName,
+				NewColumnName: renameCandidate.NewName,
+				Strategy:      renameCandidate.Strategy,
 			}
+
+			if err := a.RenameSuggestionStorage.CreateSuggestion(ctx, suggestion); err != nil {
+				log.Error("не удалось сохранить предложение переименования", slog.String("error", err.Error()), slog.String("view", viewName))
+			}
+
+			log.Warn("view пропущен из-за предложения переименования", slog.String("view", viewName))
+			continue
 		}
 
 		// 5. Обновляем сам view: имена колонок и is_deleted
@@ -364,14 +373,6 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 
 					for ci := range table.Columns {
 						column := &table.Columns[ci]
-
-						// глобальный rename (из DWH-эвристики)
-						if renameCandidate != nil && strings.EqualFold(column.Name, renameCandidate.OldName) {
-							column.Name = renameCandidate.NewName
-							column.IsDeleted = false
-							changed = true
-							continue
-						}
 
 						// локальный rename (view ↔ OLTP)
 						if newName, ok := findRenameTarget(tableRenames, column.Name); ok {
