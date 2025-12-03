@@ -30,7 +30,7 @@ func TestPrepareAndInsertData(t *testing.T) {
 			}},
 		}},
 	}
-	svc := &AnalyticsDataCenterService{log: getTestLogger(), OLTPFactory: factory, DWHProvider: dwh}
+	svc := &AnalyticsDataCenterService{log: getTestLogger(), OLTPFactory: factory, DWHProvider: dwh, DWHDbName: DbPostgres, OLTPDbName: DbPostgres}
 	data := []models.CountInsertData{{TableName: "users", Count: 1, DataBaseName: "db1", TempTableName: "tmp_users"}}
 
 	ok, err := svc.prepareAndInsertData(context.Background(), &data, view)
