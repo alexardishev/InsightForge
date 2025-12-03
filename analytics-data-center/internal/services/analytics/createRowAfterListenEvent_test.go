@@ -110,6 +110,26 @@ func (m *mockSchemaProvider) HasSuggestion(_ context.Context, schemaID int64, da
 	return false, nil
 }
 
+func (m *mockSchemaProvider) UpsertMismatchGroup(ctx context.Context, group models.ColumnMismatchGroup, items []models.ColumnMismatchItem) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockSchemaProvider) HasOpenMismatchGroup(ctx context.Context, schemaID int64, database, schema, table string) (bool, error) {
+	return false, nil
+}
+
+func (m *mockSchemaProvider) ListMismatchGroups(ctx context.Context, filter models.ColumnMismatchGroupFilter) ([]models.ColumnMismatchGroup, error) {
+	return nil, nil
+}
+
+func (m *mockSchemaProvider) GetMismatchGroupByID(ctx context.Context, id int64) (models.ColumnMismatchGroup, []models.ColumnMismatchItem, error) {
+	return models.ColumnMismatchGroup{}, nil, nil
+}
+
+func (m *mockSchemaProvider) ResolveMismatchGroup(ctx context.Context, id int64, status string) error {
+	return nil
+}
+
 func TestCheckColumnInTables_RenameFromOLTP(t *testing.T) {
 	ctx := context.Background()
 

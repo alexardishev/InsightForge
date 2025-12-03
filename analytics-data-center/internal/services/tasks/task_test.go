@@ -87,6 +87,26 @@ func (m *mockSysDB) HasSuggestion(ctx context.Context, schemaID int64, database,
 	return true, nil
 }
 
+func (m *mockSysDB) UpsertMismatchGroup(ctx context.Context, group models.ColumnMismatchGroup, items []models.ColumnMismatchItem) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockSysDB) HasOpenMismatchGroup(ctx context.Context, schemaID int64, database, schema, table string) (bool, error) {
+	return false, nil
+}
+
+func (m *mockSysDB) ListMismatchGroups(ctx context.Context, filter models.ColumnMismatchGroupFilter) ([]models.ColumnMismatchGroup, error) {
+	return nil, nil
+}
+
+func (m *mockSysDB) GetMismatchGroupByID(ctx context.Context, id int64) (models.ColumnMismatchGroup, []models.ColumnMismatchItem, error) {
+	return models.ColumnMismatchGroup{}, nil, nil
+}
+
+func (m *mockSysDB) ResolveMismatchGroup(ctx context.Context, id int64, status string) error {
+	return nil
+}
+
 func TestCreateTaskValidation(t *testing.T) {
 	db := &mockSysDB{}
 	svc := New(testLogger(), db, []string{"In progress", "Execution error", "Completed"})

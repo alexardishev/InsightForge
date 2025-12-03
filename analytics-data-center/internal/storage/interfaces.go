@@ -15,6 +15,7 @@ type SysDB interface {
 	TaskProvider
 	SchemaProvider
 	ColumnRenameSuggestionStorage
+	ColumnMismatchGroupStorage
 }
 type DWHDB interface {
 	TableProvider
@@ -79,4 +80,12 @@ type ColumnRenameSuggestionStorage interface {
 	HasSuggestion(ctx context.Context, schemaID int64, database, schema, table string) (bool, error)
 	GetSuggestionByID(ctx context.Context, id int64) (models.ColumnRenameSuggestion, error)
 	DeleteSuggestionByID(ctx context.Context, id int64) error
+}
+
+type ColumnMismatchGroupStorage interface {
+	UpsertMismatchGroup(ctx context.Context, group models.ColumnMismatchGroup, items []models.ColumnMismatchItem) (int64, error)
+	HasOpenMismatchGroup(ctx context.Context, schemaID int64, database, schema, table string) (bool, error)
+	ListMismatchGroups(ctx context.Context, filter models.ColumnMismatchGroupFilter) ([]models.ColumnMismatchGroup, error)
+	GetMismatchGroupByID(ctx context.Context, id int64) (models.ColumnMismatchGroup, []models.ColumnMismatchItem, error)
+	ResolveMismatchGroup(ctx context.Context, id int64, status string) error
 }
