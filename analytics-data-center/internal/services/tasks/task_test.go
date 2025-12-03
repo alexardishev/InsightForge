@@ -64,6 +64,15 @@ func (m *mockSysDB) GetTasks(ctx context.Context, filters models.TaskFilter) (ta
 func testLogger() *loggerpkg.Logger {
 	return loggerpkg.New("test", "ru")
 }
+func (m *mockSysDB) CreateSuggestion(ctx context.Context, s models.ColumnRenameSuggestion) error {
+	return nil
+}
+func (m *mockSysDB) ListSuggestions(ctx context.Context, filter models.ColumnRenameSuggestionFilter) ([]models.ColumnRenameSuggestion, error) {
+	return []models.ColumnRenameSuggestion{}, nil
+}
+func (m *mockSysDB) HasSuggestion(ctx context.Context, schemaID int64, database, schema, table string) (bool, error) {
+	return true, nil
+}
 
 func TestCreateTaskValidation(t *testing.T) {
 	db := &mockSysDB{}

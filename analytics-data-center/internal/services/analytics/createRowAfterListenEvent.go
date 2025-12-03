@@ -246,7 +246,6 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 
 		var expectedColumns []models.Column
 		columnTypes := make(map[string]string)
-		tableRenames := make(map[string]string)
 
 		// 3. Собираем колонки текущего view для нужной таблицы
 		for _, source := range view.Sources {
@@ -262,11 +261,9 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 						continue
 					}
 
-					// кандидаты rename между схемой и OLTP
+					// кандидаты rename между схемой и OLTP — используем ТОЛЬКО
+					// для расчёта expectedColumns, НЕ для изменения view
 					renames, _ := buildSchemaToOLTPCandidates(table.Columns, oltpColumnsMap)
-					for oldName, newName := range renames {
-						tableRenames[oldName] = newName
-					}
 
 					for _, column := range table.Columns {
 						colCopy := column
@@ -276,6 +273,8 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 							columnTypes[originalName] = normalizeColumnType(colCopy.Type)
 						}
 
+						// Для эвристики: если нашли переименование на уровне schema↔OLTP,
+						// в expectedColumns кладём новое имя, НО НЕ меняем сам view.
 						if newName, ok := renames[column.Name]; ok {
 							colCopy.Name = strings.ToLower(newName)
 							if colCopy.Type == "" {
@@ -345,14 +344,17 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 			}
 
 			if err := a.RenameSuggestionStorage.CreateSuggestion(ctx, suggestion); err != nil {
-				log.Error("не удалось сохранить предложение переименования", slog.String("error", err.Error()), slog.String("view", viewName))
+				log.Error("не удалось сохранить предложение переименования",
+					slog.String("error", err.Error()),
+					slog.String("view", viewName))
 			}
 
 			log.Warn("view пропущен из-за предложения переименования", slog.String("view", viewName))
+			// Никаких изменений схемы, просто пропускаем дальнейшую обработку этого view
 			continue
 		}
 
-		// 5. Обновляем сам view: имена колонок и is_deleted
+		// 5. Обновляем сам view: ТОЛЬКО is_deleted, без каких-либо rename по имени
 		changed := false
 
 		for si := range view.Sources {
@@ -361,7 +363,7 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 				continue
 			}
 			for sci := range source.Schemas {
-				schema := &source.Schemas[sci]
+				schema := &view.Sources[si].Schemas[sci]
 				if schema.Name != schemaEvt {
 					continue
 				}
@@ -373,15 +375,6 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 
 					for ci := range table.Columns {
 						column := &table.Columns[ci]
-
-						// локальный rename (view ↔ OLTP)
-						if newName, ok := findRenameTarget(tableRenames, column.Name); ok {
-							if !strings.EqualFold(column.Name, newName) {
-								column.Name = newName
-								changed = true
-							}
-							column.IsDeleted = false
-						}
 
 						normName := strings.ToLower(column.Name)
 						_, existsInOLTP := oltpColumnsMap[normName]
@@ -410,7 +403,7 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 
 		if changed {
 			if err := a.SchemaProvider.UpdateView(ctx, view, schemaId); err != nil {
-				log.Error("ошибка обновления view после is_deleted/rename",
+				log.Error("ошибка обновления view после is_deleted",
 					slog.String("error", err.Error()),
 					slog.String("view", viewName))
 			}
