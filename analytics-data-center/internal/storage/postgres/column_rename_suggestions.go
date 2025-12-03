@@ -2,10 +2,8 @@ package postgres
 
 import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
-	"analyticDataCenter/analytics-data-center/internal/storage"
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -135,53 +133,4 @@ func (p *PostgresSys) HasSuggestion(ctx context.Context, schemaID int64, databas
 	}
 
 	return exists.Valid && exists.Bool, nil
-}
-
-func (p *PostgresSys) GetSuggestionByID(ctx context.Context, id int64) (models.ColumnRenameSuggestion, error) {
-	const op = "storage.PostgreSQL.GetSuggestionByID"
-	log := p.Log.With(slog.String("op", op))
-
-	query := `SELECT id, schema_id, database_name, schema_name, table_name, old_column_name, new_column_name, strategy, task_number, created_at
-FROM column_rename_suggestions WHERE id = $1`
-
-	var suggestion models.ColumnRenameSuggestion
-	if err := p.Db.QueryRowContext(ctx, query, id).Scan(
-		&suggestion.ID,
-		&suggestion.SchemaID,
-		&suggestion.DatabaseName,
-		&suggestion.SchemaName,
-		&suggestion.TableName,
-		&suggestion.OldColumnName,
-		&suggestion.NewColumnName,
-		&suggestion.Strategy,
-		&suggestion.TaskNumber,
-		&suggestion.CreatedAt,
-	); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			log.Warn("suggestion not found", slog.String("error", err.Error()))
-			return models.ColumnRenameSuggestion{}, storage.ErrSuggestionNotFound
-		}
-		log.Error("failed to get suggestion", slog.String("error", err.Error()))
-		return models.ColumnRenameSuggestion{}, err
-	}
-
-	return suggestion, nil
-}
-
-func (p *PostgresSys) DeleteSuggestionByID(ctx context.Context, id int64) error {
-	const op = "storage.PostgreSQL.DeleteSuggestionByID"
-	log := p.Log.With(slog.String("op", op))
-
-	query := `DELETE FROM column_rename_suggestions WHERE id = $1`
-	res, err := p.Db.ExecContext(ctx, query, id)
-	if err != nil {
-		log.Error("failed to delete suggestion", slog.String("error", err.Error()))
-		return err
-	}
-
-	if count, err := res.RowsAffected(); err == nil && count == 0 {
-		return storage.ErrSuggestionNotFound
-	}
-
-	return nil
 }
