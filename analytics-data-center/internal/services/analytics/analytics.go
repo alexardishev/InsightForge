@@ -50,19 +50,20 @@ type TopicNotifier interface {
 }
 
 type AnalyticsDataCenterService struct {
-	log                    *loggerpkg.Logger
-	SchemaProvider         storage.SysDB
-	TaskService            TaskService
-	DWHProvider            storage.DWHDB
-	OLTPFactory            storage.OLTPFactory
-	DWHDbName              string
-	DWHDbPath              string
-	OLTPDbName             string
-	RenameHeuristicEnabled bool
-	jobQueue               chan TaskETL
-	eventQueue             chan models.CDCEvent
-	SMTPClient             smtpsender.SMTP
-	topicNotifier          TopicNotifier
+	log                     *loggerpkg.Logger
+	SchemaProvider          storage.SysDB
+	RenameSuggestionStorage storage.ColumnRenameSuggestionStorage
+	TaskService             TaskService
+	DWHProvider             storage.DWHDB
+	OLTPFactory             storage.OLTPFactory
+	DWHDbName               string
+	DWHDbPath               string
+	OLTPDbName              string
+	RenameHeuristicEnabled  bool
+	jobQueue                chan TaskETL
+	eventQueue              chan models.CDCEvent
+	SMTPClient              smtpsender.SMTP
+	topicNotifier           TopicNotifier
 }
 
 type TaskService interface {
@@ -86,18 +87,19 @@ func New(
 
 ) *AnalyticsDataCenterService {
 	service := &AnalyticsDataCenterService{
-		log:                    log,
-		SchemaProvider:         schemaProvider,
-		TaskService:            taskService,
-		DWHProvider:            dwhProvider,
-		OLTPFactory:            OLTPFactory,
-		DWHDbName:              DWHDbName,
-		DWHDbPath:              DWHDbPath,
-		OLTPDbName:             OLTPDbName,
-		RenameHeuristicEnabled: renameHeuristic,
-		jobQueue:               make(chan TaskETL, 100),
-		eventQueue:             make(chan models.CDCEvent, 100),
-		SMTPClient:             SMTPClient,
+		log:                     log,
+		SchemaProvider:          schemaProvider,
+		RenameSuggestionStorage: schemaProvider,
+		TaskService:             taskService,
+		DWHProvider:             dwhProvider,
+		OLTPFactory:             OLTPFactory,
+		DWHDbName:               DWHDbName,
+		DWHDbPath:               DWHDbPath,
+		OLTPDbName:              OLTPDbName,
+		RenameHeuristicEnabled:  renameHeuristic,
+		jobQueue:                make(chan TaskETL, 100),
+		eventQueue:              make(chan models.CDCEvent, 100),
+		SMTPClient:              SMTPClient,
 	}
 	go service.etlWorker()
 	go service.eventWorker()

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 
 	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 )
@@ -112,4 +114,76 @@ func (d *DBHandlers) UploadSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+}
+
+func (d *DBHandlers) GetColumnRenameSuggestions(w http.ResponseWriter, r *http.Request) {
+	const op = "DBHandlers.GetColumnRenameSuggestions"
+	d.log.With(slog.String("op", op))
+
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "application/json")
+
+	query := r.URL.Query()
+	filter := models.ColumnRenameSuggestionFilter{}
+
+	if schemaIDStr := query.Get("schemaId"); schemaIDStr != "" {
+		schemaID, err := strconv.ParseInt(schemaIDStr, 10, 64)
+		if err != nil {
+			d.log.Error("invalid schemaId", slog.String("error", err.Error()))
+			http.Error(w, "invalid schemaId", http.StatusBadRequest)
+			return
+		}
+		filter.SchemaID = &schemaID
+	}
+
+	if database := query.Get("database"); database != "" {
+		filter.DatabaseName = &database
+	}
+
+	if schema := query.Get("schema"); schema != "" {
+		filter.SchemaName = &schema
+	}
+
+	if table := query.Get("table"); table != "" {
+		filter.TableName = &table
+	}
+
+	limit := 50
+	if limitStr := query.Get("limit"); limitStr != "" {
+		if v, err := strconv.Atoi(limitStr); err == nil && v > 0 {
+			limit = v
+		}
+	}
+	filter.Limit = limit
+
+	if offsetStr := query.Get("offset"); offsetStr != "" {
+		if v, err := strconv.Atoi(offsetStr); err == nil && v >= 0 {
+			filter.Offset = v
+		}
+	}
+
+	sortParam := strings.ToLower(query.Get("sort"))
+	filter.SortByCreatedAtDesc = sortParam == "" || sortParam == "created_at_desc"
+	if sortParam == "created_at_asc" {
+		filter.SortByCreatedAtDesc = false
+	}
+
+	suggestions, err := d.serviceAnalytics.ListColumnRenameSuggestions(ctx, filter)
+	if err != nil {
+		d.log.Error("failed to list suggestions", slog.String("error", err.Error()))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"items":  suggestions,
+		"limit":  filter.Limit,
+		"offset": filter.Offset,
+	}
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		d.log.Error("failed to encode response", slog.String("error", err.Error()))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 }

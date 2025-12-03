@@ -2,6 +2,7 @@ package serviceanalytics
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
@@ -12,10 +13,13 @@ import (
 )
 
 type mockSchemaProvider struct {
-	views     map[int]models.View
-	schems    []int
-	updated   map[int]models.View
-	updateErr error
+	views            map[int]models.View
+	schems           []int
+	updated          map[int]models.View
+	updateErr        error
+	suggestions      []models.ColumnRenameSuggestion
+	hasSuggestions   map[string]bool
+	hasSuggestionErr error
 }
 
 func (m *mockSchemaProvider) CreateTask(context.Context, string, string) error { return nil }
@@ -57,6 +61,34 @@ func (m *mockSchemaProvider) UploadView(context.Context, models.View) (int64, er
 
 func (m *mockSchemaProvider) ListTopics(context.Context) ([]string, error) { return nil, nil }
 
+func (m *mockSchemaProvider) CreateSuggestion(_ context.Context, s models.ColumnRenameSuggestion) error {
+	m.suggestions = append(m.suggestions, s)
+	return nil
+}
+
+func (m *mockSchemaProvider) ListSuggestions(context.Context, models.ColumnRenameSuggestionFilter) ([]models.ColumnRenameSuggestion, error) {
+	return m.suggestions, nil
+}
+
+func (m *mockSchemaProvider) HasSuggestion(_ context.Context, schemaID int64, database, schema, table string) (bool, error) {
+	if m.hasSuggestionErr != nil {
+		return false, m.hasSuggestionErr
+	}
+
+	key := fmt.Sprintf("%d:%s:%s:%s", schemaID, database, schema, table)
+	if m.hasSuggestions != nil {
+		return m.hasSuggestions[key], nil
+	}
+
+	for _, s := range m.suggestions {
+		if s.SchemaID == schemaID && s.DatabaseName == database && s.SchemaName == schema && s.TableName == table {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 func TestCheckColumnInTables_RenameFromOLTP(t *testing.T) {
 	ctx := context.Background()
 
@@ -81,21 +113,25 @@ func TestCheckColumnInTables_RenameFromOLTP(t *testing.T) {
 	smtp := smtpsender.SMTP{EventQueueSMTP: make(chan models.Event, 1)}
 
 	svc := &AnalyticsDataCenterService{
-		log:            getTestLogger(),
-		SchemaProvider: schemaProvider,
-		DWHProvider:    dwh,
-		OLTPFactory:    factory,
-		DWHDbName:      DbPostgres,
-		SMTPClient:     smtp,
+		log:                     getTestLogger(),
+		SchemaProvider:          schemaProvider,
+		RenameSuggestionStorage: schemaProvider,
+		DWHProvider:             dwh,
+		OLTPFactory:             factory,
+		DWHDbName:               DbPostgres,
+		SMTPClient:              smtp,
 	}
 
 	err := svc.checkColumnInTables(ctx, nil, map[string]interface{}{"title": "new"}, "db1", "public", "users", []int{1})
 
 	require.NoError(t, err)
-	require.Len(t, dwh.renameCalls, 1)
-	updated := schemaProvider.updated[1]
-	require.Equal(t, []string{"id", "title", "plan_id"}, columnNames(updated))
-	require.False(t, updated.Sources[0].Schemas[0].Tables[0].Columns[1].IsDeleted)
+	require.Len(t, dwh.renameCalls, 0)
+	require.Empty(t, schemaProvider.updated)
+	require.Len(t, schemaProvider.suggestions, 1)
+	suggestion := schemaProvider.suggestions[0]
+	require.Equal(t, int64(1), suggestion.SchemaID)
+	require.Equal(t, "name", suggestion.OldColumnName)
+	require.Equal(t, "title", suggestion.NewColumnName)
 	require.Len(t, smtp.EventQueueSMTP, 0)
 }
 
@@ -123,12 +159,13 @@ func TestCheckColumnInTables_SetDeletedWhenMissingInOLTP(t *testing.T) {
 	smtp := smtpsender.SMTP{EventQueueSMTP: make(chan models.Event, 1)}
 
 	svc := &AnalyticsDataCenterService{
-		log:            getTestLogger(),
-		SchemaProvider: schemaProvider,
-		DWHProvider:    dwh,
-		OLTPFactory:    factory,
-		DWHDbName:      DbPostgres,
-		SMTPClient:     smtp,
+		log:                     getTestLogger(),
+		SchemaProvider:          schemaProvider,
+		RenameSuggestionStorage: schemaProvider,
+		DWHProvider:             dwh,
+		OLTPFactory:             factory,
+		DWHDbName:               DbPostgres,
+		SMTPClient:              smtp,
 	}
 
 	err := svc.checkColumnInTables(ctx, nil, map[string]interface{}{"plan_id": 1}, "db1", "public", "users", []int{1})

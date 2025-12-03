@@ -14,6 +14,7 @@ import (
 type SysDB interface {
 	TaskProvider
 	SchemaProvider
+	ColumnRenameSuggestionStorage
 }
 type DWHDB interface {
 	TableProvider
@@ -70,4 +71,10 @@ type DataBaseProviderOLTP interface {
 	GetTablesPaginated(ctx context.Context, schema string, limit, offset int) ([]models.Table, error)
 	GetColumns(ctx context.Context, schemaName string, tableName string) ([]models.Column, error)
 	GetColumnInfo(ctx context.Context, tableName string, columnName string) (models.ColumnInfo, error)
+}
+
+type ColumnRenameSuggestionStorage interface {
+	CreateSuggestion(ctx context.Context, s models.ColumnRenameSuggestion) error
+	ListSuggestions(ctx context.Context, filter models.ColumnRenameSuggestionFilter) ([]models.ColumnRenameSuggestion, error)
+	HasSuggestion(ctx context.Context, schemaID int64, database, schema, table string) (bool, error)
 }

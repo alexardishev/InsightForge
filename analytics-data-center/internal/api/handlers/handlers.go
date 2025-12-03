@@ -16,6 +16,7 @@ type HandlersDB interface {
 	GetConnectionsStrings(w http.ResponseWriter, r *http.Request)
 	GetDBInformations(w http.ResponseWriter, r *http.Request)
 	UploadSchema(w http.ResponseWriter, r *http.Request)
+	GetColumnRenameSuggestions(w http.ResponseWriter, r *http.Request)
 }
 
 type HandlersTasks interface {

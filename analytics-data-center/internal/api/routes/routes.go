@@ -40,6 +40,7 @@ func NewRouter(logger *loggerpkg.Logger, serviceAnalytics *serviceanalytics.Anal
 		r.Post("/get-db", handlers.GetDBInformations)
 		r.Post("/upload-schem", handlers.UploadSchema)
 		r.Post("/get-tasks", handlers.GetTasks)
+		r.Get("/column-rename-suggestions", handlers.GetColumnRenameSuggestions)
 	})
 
 	return r
