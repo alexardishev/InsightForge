@@ -30,13 +30,13 @@ const SettingsPage : React.FC = () => {
     const [loading,
         setLoading] = useState(false);
 
-    const url = 'http://localhost:8888';
+    const url = '/api';
 const [rawData, setRawData] = useState<Record<string, string>>({});
 
     const fetchConnections = async() => {
         setLoading(true);
         try {
-            const rawData = await request(`${url}/api/get-connections`);
+            const rawData = await request(`${url}/get-connections`);
             setRawData(rawData);
             const data : string[] = Object.values(rawData);
             setAvailableConnections(data);
@@ -72,7 +72,7 @@ const [rawData, setRawData] = useState<Record<string, string>>({});
             page_size: 20,
         };
         console.log(JSON.stringify(body, null, 2));
-        const dbInfo = await request(`${url}/api/get-db`, "POST", body);
+        const dbInfo = await request(`${url}/get-db`, "POST", body);
             dispatch(setDataForConnection(dbInfo));
             console.log(dbInfo)
             navigate('/builder');

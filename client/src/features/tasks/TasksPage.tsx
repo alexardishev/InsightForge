@@ -14,7 +14,7 @@ const TasksPage: React.FC = () => {
 
   const fetchTasks = async () => {
     try {
-      const data = await request('http://localhost:8888/api/get-tasks', 'POST', {
+      const data = await request('/api/get-tasks', 'POST', {
         page,
         page_size: pageSize,
       });

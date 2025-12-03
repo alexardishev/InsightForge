@@ -13,7 +13,7 @@ const SummaryActions: React.FC<Props> = ({ view }) => {
 
   const handleSend = async () => {
     try {
-      await request('http://localhost:8888/api/upload-schem', 'POST', view);
+      await request('/api/upload-schem', 'POST', view);
       navigate('/settings');
     } catch (e) {
       console.error(e);
