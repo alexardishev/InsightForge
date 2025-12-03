@@ -13,12 +13,15 @@ type Handlers struct {
 }
 
 type HandlersDB interface {
-GetConnectionsStrings(w http.ResponseWriter, r *http.Request)
-GetDBInformations(w http.ResponseWriter, r *http.Request)
-UploadSchema(w http.ResponseWriter, r *http.Request)
-GetColumnRenameSuggestions(w http.ResponseWriter, r *http.Request)
-AcceptColumnRenameSuggestion(w http.ResponseWriter, r *http.Request)
-RejectColumnRenameSuggestion(w http.ResponseWriter, r *http.Request)
+	GetConnectionsStrings(w http.ResponseWriter, r *http.Request)
+	GetDBInformations(w http.ResponseWriter, r *http.Request)
+	UploadSchema(w http.ResponseWriter, r *http.Request)
+	GetColumnRenameSuggestions(w http.ResponseWriter, r *http.Request)
+	AcceptColumnRenameSuggestion(w http.ResponseWriter, r *http.Request)
+	RejectColumnRenameSuggestion(w http.ResponseWriter, r *http.Request)
+	GetColumnMismatchGroups(w http.ResponseWriter, r *http.Request)
+	GetColumnMismatchGroup(w http.ResponseWriter, r *http.Request)
+	ApplyColumnMismatchGroup(w http.ResponseWriter, r *http.Request)
 }
 
 type HandlersTasks interface {

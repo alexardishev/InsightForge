@@ -20,6 +20,8 @@ type mockSchemaProvider struct {
 	suggestions      []models.ColumnRenameSuggestion
 	hasSuggestions   map[string]bool
 	hasSuggestionErr error
+	mismatchGroups   map[int64]models.ColumnMismatchGroupWithItems
+	mismatchSeq      int64
 }
 
 func (m *mockSchemaProvider) CreateTask(context.Context, string, string) error { return nil }
@@ -110,6 +112,61 @@ func (m *mockSchemaProvider) HasSuggestion(_ context.Context, schemaID int64, da
 	return false, nil
 }
 
+func (m *mockSchemaProvider) CreateMismatchGroup(_ context.Context, group models.ColumnMismatchGroup, items []models.ColumnMismatchItem) (int64, error) {
+	if m.mismatchGroups == nil {
+		m.mismatchGroups = make(map[int64]models.ColumnMismatchGroupWithItems)
+	}
+	m.mismatchSeq++
+	group.ID = m.mismatchSeq
+	m.mismatchGroups[group.ID] = models.ColumnMismatchGroupWithItems{Group: group, Items: items}
+	return group.ID, nil
+}
+
+func (m *mockSchemaProvider) ReplaceMismatchItems(_ context.Context, groupID int64, items []models.ColumnMismatchItem) error {
+	g, ok := m.mismatchGroups[groupID]
+	if !ok {
+		return storage.ErrMismatchNotFound
+	}
+	g.Items = items
+	m.mismatchGroups[groupID] = g
+	return nil
+}
+
+func (m *mockSchemaProvider) GetOpenMismatchGroup(_ context.Context, schemaID int64, database, schema, table string) (models.ColumnMismatchGroupWithItems, error) {
+	for _, g := range m.mismatchGroups {
+		if g.Group.SchemaID == schemaID && g.Group.DatabaseName == database && g.Group.SchemaName == schema && g.Group.TableName == table && g.Group.Status == models.ColumnMismatchStatusOpen {
+			return g, nil
+		}
+	}
+	return models.ColumnMismatchGroupWithItems{}, storage.ErrMismatchNotFound
+}
+
+func (m *mockSchemaProvider) ListMismatchGroups(context.Context, models.ColumnMismatchFilter) ([]models.ColumnMismatchGroup, error) {
+	var groups []models.ColumnMismatchGroup
+	for _, g := range m.mismatchGroups {
+		groups = append(groups, g.Group)
+	}
+	return groups, nil
+}
+
+func (m *mockSchemaProvider) GetMismatchGroup(_ context.Context, id int64) (models.ColumnMismatchGroupWithItems, error) {
+	g, ok := m.mismatchGroups[id]
+	if !ok {
+		return models.ColumnMismatchGroupWithItems{}, storage.ErrMismatchNotFound
+	}
+	return g, nil
+}
+
+func (m *mockSchemaProvider) ResolveMismatchGroup(_ context.Context, id int64) error {
+	g, ok := m.mismatchGroups[id]
+	if !ok {
+		return storage.ErrMismatchNotFound
+	}
+	g.Group.Status = models.ColumnMismatchStatusResolved
+	m.mismatchGroups[id] = g
+	return nil
+}
+
 func TestCheckColumnInTables_RenameFromOLTP(t *testing.T) {
 	ctx := context.Background()
 
@@ -137,6 +194,7 @@ func TestCheckColumnInTables_RenameFromOLTP(t *testing.T) {
 		log:                     getTestLogger(),
 		SchemaProvider:          schemaProvider,
 		RenameSuggestionStorage: schemaProvider,
+		ColumnMismatchStorage:   schemaProvider,
 		DWHProvider:             dwh,
 		OLTPFactory:             factory,
 		DWHDbName:               DbPostgres,
@@ -146,14 +204,12 @@ func TestCheckColumnInTables_RenameFromOLTP(t *testing.T) {
 	err := svc.checkColumnInTables(ctx, nil, map[string]interface{}{"title": "new"}, "db1", "public", "users", []int{1})
 
 	require.NoError(t, err)
-	require.Len(t, dwh.renameCalls, 0)
-	require.Empty(t, schemaProvider.updated)
-	require.Len(t, schemaProvider.suggestions, 1)
-	suggestion := schemaProvider.suggestions[0]
-	require.Equal(t, int64(1), suggestion.SchemaID)
-	require.Equal(t, "name", suggestion.OldColumnName)
-	require.Equal(t, "title", suggestion.NewColumnName)
-	require.Len(t, smtp.EventQueueSMTP, 0)
+	require.Len(t, schemaProvider.mismatchGroups, 1)
+	for _, group := range schemaProvider.mismatchGroups {
+		require.Equal(t, models.ColumnMismatchStatusOpen, group.Group.Status)
+		require.Len(t, group.Items, 1)
+		require.Equal(t, models.ColumnMismatchTypeSchemaOnly, group.Items[0].Type)
+	}
 }
 
 func TestCheckColumnInTables_SetDeletedWhenMissingInOLTP(t *testing.T) {
@@ -183,6 +239,7 @@ func TestCheckColumnInTables_SetDeletedWhenMissingInOLTP(t *testing.T) {
 		log:                     getTestLogger(),
 		SchemaProvider:          schemaProvider,
 		RenameSuggestionStorage: schemaProvider,
+		ColumnMismatchStorage:   schemaProvider,
 		DWHProvider:             dwh,
 		OLTPFactory:             factory,
 		DWHDbName:               DbPostgres,
@@ -192,10 +249,12 @@ func TestCheckColumnInTables_SetDeletedWhenMissingInOLTP(t *testing.T) {
 	err := svc.checkColumnInTables(ctx, nil, map[string]interface{}{"plan_id": 1}, "db1", "public", "users", []int{1})
 
 	require.NoError(t, err)
-	require.Len(t, dwh.renameCalls, 0)
-	updated := schemaProvider.updated[1]
-	require.True(t, updated.Sources[0].Schemas[0].Tables[0].Columns[1].IsDeleted)
-	require.Len(t, smtp.EventQueueSMTP, 1)
+	require.Len(t, schemaProvider.mismatchGroups, 1)
+	for _, group := range schemaProvider.mismatchGroups {
+		require.Equal(t, models.ColumnMismatchStatusOpen, group.Group.Status)
+		require.Len(t, group.Items, 1)
+		require.Equal(t, models.ColumnMismatchTypeSchemaOnly, group.Items[0].Type)
+	}
 }
 
 func columnNames(view models.View) []string {
