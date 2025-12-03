@@ -41,55 +41,51 @@ func (a *AnalyticsDataCenterService) ApplyColumnMismatchResolution(ctx context.C
 		return err
 	}
 
-	hasSchemaChanges := len(resolution.Renames) > 0 || len(resolution.Deletes) > 0
-	var view models.View
-	if hasSchemaChanges {
-		view, err = a.SchemaProvider.GetView(ctx, group.Group.SchemaID)
+	view, err := a.SchemaProvider.GetView(ctx, group.Group.SchemaID)
+	if err != nil {
+		if errors.Is(err, storage.ErrSchemaNotFound) {
+			return err
+		}
+		log.Error("ошибка получения view", slog.String("error", err.Error()))
+		return err
+	}
+
+	tableName := view.Name
+
+	for _, decision := range resolution.Renames {
+		renameQuery, err := sqlgenerator.GenerateRenameColumnQuery(a.DWHDbName, "public", tableName, decision.OldName, decision.NewName)
 		if err != nil {
-			if errors.Is(err, storage.ErrSchemaNotFound) {
-				return err
-			}
-			log.Error("ошибка получения view", slog.String("error", err.Error()))
+			log.Error("не удалось подготовить запрос переименования", slog.String("error", err.Error()))
 			return err
 		}
 
-		tableName := view.Name
-
-		for _, decision := range resolution.Renames {
-			renameQuery, err := sqlgenerator.GenerateRenameColumnQuery(a.DWHDbName, "public", tableName, decision.OldName, decision.NewName)
-			if err != nil {
-				log.Error("не удалось подготовить запрос переименования", slog.String("error", err.Error()))
-				return err
-			}
-
-			if err := a.DWHProvider.RenameColumn(ctx, renameQuery); err != nil {
-				log.Error("не удалось переименовать колонку в DWH", slog.String("error", err.Error()))
-				return err
-			}
-
-			if err := renameColumnInView(&view, models.ColumnRenameSuggestion{
-				DatabaseName:  group.Group.DatabaseName,
-				SchemaName:    group.Group.SchemaName,
-				TableName:     group.Group.TableName,
-				OldColumnName: decision.OldName,
-				NewColumnName: decision.NewName,
-			}); err != nil {
-				log.Error("не удалось переименовать колонку в view", slog.String("error", err.Error()))
-				return err
-			}
-		}
-
-		if len(resolution.Deletes) > 0 {
-			if err := removeColumnsFromView(&view, group.Group.DatabaseName, group.Group.SchemaName, group.Group.TableName, resolution.Deletes); err != nil {
-				log.Error("не удалось удалить колонки из view", slog.String("error", err.Error()))
-				return err
-			}
-		}
-
-		if err := a.SchemaProvider.UpdateView(ctx, view, int(group.Group.SchemaID)); err != nil {
-			log.Error("не удалось обновить view", slog.String("error", err.Error()))
+		if err := a.DWHProvider.RenameColumn(ctx, renameQuery); err != nil {
+			log.Error("не удалось переименовать колонку в DWH", slog.String("error", err.Error()))
 			return err
 		}
+
+		if err := renameColumnInView(&view, models.ColumnRenameSuggestion{
+			DatabaseName:  group.Group.DatabaseName,
+			SchemaName:    group.Group.SchemaName,
+			TableName:     group.Group.TableName,
+			OldColumnName: decision.OldName,
+			NewColumnName: decision.NewName,
+		}); err != nil {
+			log.Error("не удалось переименовать колонку в view", slog.String("error", err.Error()))
+			return err
+		}
+	}
+
+	if len(resolution.Deletes) > 0 {
+		if err := removeColumnsFromView(&view, group.Group.DatabaseName, group.Group.SchemaName, group.Group.TableName, resolution.Deletes); err != nil {
+			log.Error("не удалось удалить колонки из view", slog.String("error", err.Error()))
+			return err
+		}
+	}
+
+	if err := a.SchemaProvider.UpdateView(ctx, view, int(group.Group.SchemaID)); err != nil {
+		log.Error("не удалось обновить view", slog.String("error", err.Error()))
+		return err
 	}
 
 	if err := a.ColumnMismatchStorage.ResolveMismatchGroup(ctx, id); err != nil {

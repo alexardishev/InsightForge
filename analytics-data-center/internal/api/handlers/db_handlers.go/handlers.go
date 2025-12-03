@@ -125,7 +125,7 @@ func (d *DBHandlers) GetColumnMismatchGroups(w http.ResponseWriter, r *http.Requ
 
 	ctx := r.Context()
 	query := r.URL.Query()
-	filter := models.ColumnMismatchFilter{Limit: 50, Offset: 0}
+	filter := models.ColumnMismatchFilter{}
 
 	if schemaIDStr := query.Get("schemaId"); schemaIDStr != "" {
 		if id, err := strconv.ParseInt(schemaIDStr, 10, 64); err == nil {
@@ -169,12 +169,7 @@ func (d *DBHandlers) GetColumnMismatchGroups(w http.ResponseWriter, r *http.Requ
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	response := map[string]interface{}{
-		"items":  groups,
-		"limit":  filter.Limit,
-		"offset": filter.Offset,
-	}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	if err := json.NewEncoder(w).Encode(groups); err != nil {
 		log.Error("failed to encode response", slog.String("error", err.Error()))
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -240,13 +235,7 @@ func (d *DBHandlers) ApplyColumnMismatchGroup(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
-		log.Error("failed to encode response", slog.String("error", err.Error()))
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
 }
 
 func (d *DBHandlers) GetColumnRenameSuggestions(w http.ResponseWriter, r *http.Request) {
