@@ -88,12 +88,14 @@ func pickCandidate(
 		return nil
 	}
 
-	// В простых случаях с одной пропавшей колонкой позволяем более мягкое
-	// сравнение, т.к. эвристика с Jaro-Winkler может не сработать на коротких
-	// или сильно отличающихся названиях вроде name -> title. Даже если
-	// добавленных колонок несколько, мы ищем «лучшего кандидата» среди них.
+	// Базовый порог
 	minSimilarity := 0.82
-	if len(missing) == 1 {
+
+	// В простых случаях:
+	// - либо ровно одна пропавшая колонка (как раньше),
+	// - либо ровно одна добавленная колонка (кейс rmp_param_join: одна new, много missing),
+	// допускаем более мягкий порог (например name -> title).
+	if len(missing) == 1 || len(added) == 1 {
 		minSimilarity = 0.45
 	}
 
@@ -111,17 +113,20 @@ func pickCandidate(
 		for _, newCol := range added {
 			newType := normalizeType(newTypes[strings.ToLower(newCol)])
 			if expectedType != "" && newType != "" && expectedType != newType {
-				// Тип изменился — вероятнее новая колонка, а не rename.
-				log.Info("skip rename candidate due to type mismatch", slog.String("old", oldCol), slog.String("new", newCol), slog.String("expectedType", expectedType), slog.String("newType", newType))
+				log.Info("skip rename candidate due to type mismatch",
+					slog.String("old", oldCol),
+					slog.String("new", newCol),
+					slog.String("expectedType", expectedType),
+					slog.String("newType", newType))
 				continue
 			}
 
 			similarity := jw.Compare(normalizeName(oldCol), normalizeName(newCol))
 			if expectedType != "" && newType != "" && expectedType == newType {
-				similarity += 0.1 // bonus for matching types
+				similarity += 0.1 // бонус за совпадение типов
 			}
 
-			if similarity < minSimilarity { // too low semantic similarity
+			if similarity < minSimilarity {
 				continue
 			}
 
@@ -135,7 +140,11 @@ func pickCandidate(
 		return nil
 	}
 
-	return &RenameCandidate{OldName: best.old, NewName: best.new, Strategy: strategy}
+	return &RenameCandidate{
+		OldName:  best.old,
+		NewName:  best.new,
+		Strategy: strategy,
+	}
 }
 
 func diffSets(actual map[string]struct{}, expected map[string]string) ([]string, []string) {

@@ -19,10 +19,9 @@ import (
 func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.Context, evtData models.CDCEventData) error {
 	const op = "createRowAfterListenEventInDWH"
 	var schems []models.View
-	finalRow := make(map[string]interface{})
-	conflictKeys := make(map[string]struct{})
 
 	log := a.log.With(slog.String("op", op))
+
 	after := evtData.After
 	databaseEvt := evtData.Source.DB
 	schemaEvt := evtData.Source.Schema
@@ -30,14 +29,19 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 
 	log.Info("Начинаю создание новой строки", slog.String("op", evtData.Op))
 
+	// 1. Находим все схемы (view), привязанные к этой таблице
 	schemaIds, err := a.SchemaProvider.GetSchems(ctx, databaseEvt, schemaEvt, tableEvt)
 	if err != nil {
 		log.Error("ошибка получения схемы", slog.Any("ошибка", err))
 		return err
 	}
+
+	// 2. Проверяем/переименовываем колонки (по каждой вьюхе внутри)
 	if err := a.checkColumnInTables(ctx, evtData.Before, after, databaseEvt, schemaEvt, tableEvt, schemaIds); err != nil {
 		return err
 	}
+
+	// 3. Забираем сами view
 	for _, schemaId := range schemaIds {
 		schema, err := a.SchemaProvider.GetView(ctx, int64(schemaId))
 		if err != nil {
@@ -51,7 +55,14 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 		schems = append(schems, schema)
 	}
 
+	// 4. Для КАЖДОЙ view отдельно собираем finalRow и conflictKeys
 	for _, schema := range schems {
+		viewName := schema.Name
+
+		finalRow := make(map[string]interface{})
+		conflictKeys := make(map[string]struct{})
+		hasData := false
+
 		for _, source := range schema.Sources {
 			if source.Name != databaseEvt {
 				continue
@@ -64,11 +75,13 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 					if table.Name != tableEvt {
 						continue
 					}
+
 					for _, column := range table.Columns {
-						val, ok := evtData.After[column.Name]
+						val, ok := after[column.Name]
 						if !ok {
 							continue
 						}
+						hasData = true
 
 						// всегда кладём по имени колонки
 						finalRow[column.Name] = val
@@ -81,7 +94,7 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 								conflictKeys[column.ViewKey] = struct{}{}
 							}
 						}
-						// Переделать на вызов функций
+
 						// === FieldTransform ===
 						if column.Transform != nil && column.Transform.Type == "FieldTransform" && column.Transform.Mapping != nil {
 							rawStr := fmt.Sprintf("%v", val)
@@ -98,13 +111,18 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 						if column.Transform != nil && column.Transform.Type == "JSON" && column.Transform.Mapping != nil {
 							valStr, ok := val.(string)
 							if !ok {
-								log.Warn("Ожидалась строка JSON, но получено другое", slog.String("column", column.Name))
+								log.Warn("Ожидалась строка JSON, но получено другое",
+									slog.String("column", column.Name),
+									slog.String("view", viewName))
 								continue
 							}
 
 							var jsonMap map[string]interface{}
 							if err := json.Unmarshal([]byte(valStr), &jsonMap); err != nil {
-								log.Warn("Ошибка парсинга JSON-строки", slog.String("column", column.Name), slog.String("error", err.Error()))
+								log.Warn("Ошибка парсинга JSON-строки",
+									slog.String("column", column.Name),
+									slog.String("view", viewName),
+									slog.String("error", err.Error()))
 								continue
 							}
 
@@ -117,27 +135,35 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 							}
 						}
 					}
-
-					var conflictColumns []string
-					for k := range conflictKeys {
-						conflictColumns = append(conflictColumns, k)
-					}
-
-					err := a.DWHProvider.InsertOrUpdateTransactional(
-						ctx,
-						schema.Name, // имя таблицы = имя view
-						finalRow,
-						conflictColumns)
-					if err != nil {
-						log.Error("ошибка вставки/обновления", slog.String("error", err.Error()))
-						return err
-					}
 				}
 			}
 		}
+
+		if !hasData {
+			log.Info("для view нет колонок по этому событию, вставка пропущена",
+				slog.String("view", viewName))
+			continue
+		}
+
+		var conflictColumns []string
+		for k := range conflictKeys {
+			conflictColumns = append(conflictColumns, k)
+		}
+
+		if err := a.DWHProvider.InsertOrUpdateTransactional(
+			ctx,
+			viewName, // таблица в DWH = имя view
+			finalRow,
+			conflictColumns,
+		); err != nil {
+			log.Error("ошибка вставки/обновления",
+				slog.String("error", err.Error()),
+				slog.String("view", viewName))
+			return err
+		}
 	}
 
-	log.Info("Успешная вставка в таблицу")
+	log.Info("Успешная вставка в таблицы DWH по всем view")
 	return nil
 }
 
@@ -153,26 +179,9 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 	const op = "checkColumnInTables"
 	log := a.log.With(slog.String("op", op))
 
-	// Алгоритм сверки колонок теперь идёт по цепочке «OLTP → схема → DWH».
-	// Пример: в OLTP колонка переименована из name в title.
-	//  1. Читаем фактические колонки из OLTP (увидим title).
-	//  2. Сопоставляем с колонками из схемы: если в схеме ещё прописан name,
-	//     то фиксируем rename-кандидат name→title и подставляем новое имя в expectedColumns.
-	//  3. Сравниваем expectedColumns с DWH: если в DWH ещё есть name, а title нет,
-	//     пытаемся переименовать столбец; после успешного rename обновляем карту actualCols.
-	//  4. Если колонки из схемы нет в OLTP вовсе (колонку удалили), ставим is_deleted=true
-	//     и отправляем уведомление, но при простом переименовании is_deleted не ставится.
-
-	// В DWH таблицы и схемы могут отличаться от событий OLTP.
-	// Используем имя view как таблицу в DWH, а схему — public по умолчанию.
 	dwhSchemaName := "public"
-	var dwhTableName string
 
-	viewCache := make(map[int]models.View)
-	var expectedColumns []models.Column
-	columnTypes := make(map[string]string)
-	schemaRenames := make(map[int]map[string]string)
-
+	// 1. Колонки из OLTP — "истина" для этой таблицы
 	oltpStorage, err := a.OLTPFactory.GetOLTPStorage(ctx, databaseEvt)
 	if err != nil {
 		log.Error("ошибка получения OLTP", slog.String("error", err.Error()))
@@ -185,47 +194,74 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 	}
 	oltpColumnsMap := normalizeColumnsToMap(oltpColumns)
 
+	// 2. Обрабатываем КАЖДЫЙ view (schemaId) отдельно
 	for _, schemaId := range schemaIds {
 		view, err := a.SchemaProvider.GetView(ctx, int64(schemaId))
 		if err != nil {
-			log.Warn("не удалось получить view", slog.String("error", err.Error()))
+			log.Warn("не удалось получить view", slog.String("error", err.Error()), slog.Int("schemaId", schemaId))
 			continue
 		}
-		viewCache[schemaId] = view
 
+		viewName := view.Name
+		dwhTableName := viewName
 		if dwhTableName == "" {
-			dwhTableName = view.Name
+			dwhTableName = tableEvt
+			log.Warn("не удалось определить имя таблицы DWH из схемы, используем имя из события",
+				slog.String("table", dwhTableName),
+				slog.String("view", viewName))
 		}
 
+		// 2.1. Колонки таблицы DWH для ЭТОГО view
+		columns, err := a.DWHProvider.GetColumnsTables(ctx, dwhSchemaName, strings.ToLower(dwhTableName))
+		if err != nil {
+			log.Error("ошибка получения колонок DWH",
+				slog.String("error", err.Error()),
+				slog.String("view", viewName))
+			return err
+		}
+
+		actualCols := make(map[string]struct{}, len(columns))
+		for _, col := range columns {
+			actualCols[strings.ToLower(col)] = struct{}{}
+		}
+
+		log.Debug("используются таблица и схема DWH для view",
+			slog.String("schema", dwhSchemaName),
+			slog.String("table", dwhTableName),
+			slog.String("view", viewName))
+
+		var expectedColumns []models.Column
+		columnTypes := make(map[string]string)
+		tableRenames := make(map[string]string)
+
+		// 3. Собираем колонки текущего view для нужной таблицы
 		for _, source := range view.Sources {
 			if source.Name != databaseEvt {
 				continue
 			}
-			for _, schema := range source.Schemas {
-				if schema.Name != schemaEvt {
+			for _, sch := range source.Schemas {
+				if sch.Name != schemaEvt {
 					continue
 				}
-				for _, table := range schema.Tables {
+				for _, table := range sch.Tables {
 					if table.Name != tableEvt {
 						continue
 					}
 
+					// кандидаты rename между схемой и OLTP
 					renames, _ := buildSchemaToOLTPCandidates(table.Columns, oltpColumnsMap)
-					if len(renames) > 0 {
-						if _, ok := schemaRenames[schemaId]; !ok {
-							schemaRenames[schemaId] = make(map[string]string)
-						}
-						for oldName, newName := range renames {
-							schemaRenames[schemaId][oldName] = newName
-						}
+					for oldName, newName := range renames {
+						tableRenames[oldName] = newName
 					}
 
 					for _, column := range table.Columns {
 						colCopy := column
 						originalName := strings.ToLower(column.Name)
+
 						if colCopy.Type != "" {
 							columnTypes[originalName] = normalizeColumnType(colCopy.Type)
 						}
+
 						if newName, ok := renames[column.Name]; ok {
 							colCopy.Name = strings.ToLower(newName)
 							if colCopy.Type == "" {
@@ -241,83 +277,74 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 								}
 							}
 						}
+
 						if _, ok := columnTypes[strings.ToLower(colCopy.Name)]; !ok {
 							columnTypes[strings.ToLower(colCopy.Name)] = normalizeColumnType(colCopy.Type)
 						}
+
 						expectedColumns = append(expectedColumns, colCopy)
 					}
 				}
 			}
 		}
-	}
 
-	if dwhTableName == "" {
-		dwhTableName = tableEvt
-		log.Warn("не удалось определить имя таблицы DWH из схемы, используем имя из события", slog.String("table", dwhTableName))
-	}
+		log.Info("снимок колонок для view",
+			slog.String("view", viewName),
+			slog.Any("oltp", sortedMapKeys(oltpColumnsMap)),
+			slog.Any("schema", collectColumnNames(expectedColumns)),
+			slog.Any("dwh", lowerCaseColumns(columns)))
 
-	columns, err := a.DWHProvider.GetColumnsTables(ctx, dwhSchemaName, strings.ToLower(dwhTableName))
-	if err != nil {
-		log.Error("ошибка получения колонок", slog.String("error", err.Error()))
-		return err
-	}
-
-	log.Debug("используются таблица и схема DWH", slog.String("schema", dwhSchemaName), slog.String("table", dwhTableName))
-
-	// Преобразуем список в map для быстрого поиска
-	actualCols := make(map[string]struct{}, len(columns))
-	for _, col := range columns {
-		actualCols[strings.ToLower(col)] = struct{}{}
-	}
-
-	log.Info("снимок колонок", slog.Any("oltp", sortedMapKeys(oltpColumnsMap)), slog.Any("schema", collectColumnNames(expectedColumns)), slog.Any("dwh", lowerCaseColumns(columns)))
-
-	renameCandidate, err := renameheuristics.DetectRenameCandidate(ctx, renameheuristics.DetectorConfig{
-		ActualDWHColumns:      actualCols,
-		BeforeEvent:           before,
-		AfterEvent:            after,
-		Database:              databaseEvt,
-		Schema:                schemaEvt,
-		Table:                 tableEvt,
-		ColumnTypes:           columnTypes,
-		RenameHeuristicEnable: a.RenameHeuristicEnabled,
-		ExpectedColumns:       expectedColumns,
-		Logger:                a.log.Logger,
-	})
-	if err != nil {
-		log.Warn("ошибка определения переименования", slog.String("error", err.Error()))
-	}
-
-	if renameCandidate != nil {
-		log.Info("обнаружено переименование колонки", slog.String("from", renameCandidate.OldName), slog.String("to", renameCandidate.NewName), slog.String("strategy", renameCandidate.Strategy))
-		renameQuery, err := sqlgenerator.GenerateRenameColumnQuery(a.DWHDbName, dwhSchemaName, dwhTableName, renameCandidate.OldName, renameCandidate.NewName)
+		// 4. Пытаемся найти rename-кандидат ДЛЯ ЭТОГО view
+		renameCandidate, err := renameheuristics.DetectRenameCandidate(ctx, renameheuristics.DetectorConfig{
+			ActualDWHColumns:      actualCols,
+			BeforeEvent:           before,
+			AfterEvent:            after,
+			Database:              databaseEvt,
+			Schema:                schemaEvt,
+			Table:                 tableEvt,
+			ColumnTypes:           columnTypes,
+			RenameHeuristicEnable: a.RenameHeuristicEnabled,
+			ExpectedColumns:       expectedColumns,
+			Logger:                a.log.Logger,
+		})
 		if err != nil {
-			log.Error("не удалось сгенерировать запрос переименования", slog.String("error", err.Error()))
-		} else {
-			if err := a.DWHProvider.RenameColumn(ctx, renameQuery); err != nil {
-				log.Error("ошибка применения переименования в DWH", slog.String("error", err.Error()))
-				// даже если DWH не обновился, продолжаем помечать is_deleted, чтобы не пропустить проблему
-			} else {
-				delete(actualCols, strings.ToLower(renameCandidate.OldName))
-				actualCols[strings.ToLower(renameCandidate.NewName)] = struct{}{}
-			}
+			log.Warn("ошибка определения переименования",
+				slog.String("error", err.Error()),
+				slog.String("view", viewName))
 		}
-	}
 
-	// Перебираем все связанные схемы
-	for _, schemaId := range schemaIds {
-		view, ok := viewCache[schemaId]
-		if !ok {
-			fetchedView, err := a.SchemaProvider.GetView(ctx, int64(schemaId))
+		if renameCandidate != nil {
+			log.Info("обнаружено переименование колонки",
+				slog.String("from", renameCandidate.OldName),
+				slog.String("to", renameCandidate.NewName),
+				slog.String("strategy", renameCandidate.Strategy),
+				slog.String("view", viewName))
+
+			renameQuery, err := sqlgenerator.GenerateRenameColumnQuery(
+				a.DWHDbName,
+				dwhSchemaName,
+				strings.ToLower(dwhTableName),
+				renameCandidate.OldName,
+				renameCandidate.NewName,
+			)
 			if err != nil {
-				log.Warn("не удалось получить view", slog.String("error", err.Error()))
-				continue
+				log.Error("не удалось сгенерировать запрос переименования",
+					slog.String("error", err.Error()),
+					slog.String("view", viewName))
+			} else {
+				if err := a.DWHProvider.RenameColumn(ctx, renameQuery); err != nil {
+					log.Error("ошибка применения переименования в DWH",
+						slog.String("error", err.Error()),
+						slog.String("view", viewName))
+				} else {
+					delete(actualCols, strings.ToLower(renameCandidate.OldName))
+					actualCols[strings.ToLower(renameCandidate.NewName)] = struct{}{}
+				}
 			}
-			viewCache[schemaId] = fetchedView
-			view = fetchedView
 		}
+
+		// 5. Обновляем сам view: имена колонок и is_deleted
 		changed := false
-		tableRenames := schemaRenames[schemaId]
 
 		for si := range view.Sources {
 			source := &view.Sources[si]
@@ -334,9 +361,11 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 					if table.Name != tableEvt {
 						continue
 					}
+
 					for ci := range table.Columns {
 						column := &table.Columns[ci]
 
+						// глобальный rename (из DWH-эвристики)
 						if renameCandidate != nil && strings.EqualFold(column.Name, renameCandidate.OldName) {
 							column.Name = renameCandidate.NewName
 							column.IsDeleted = false
@@ -344,6 +373,7 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 							continue
 						}
 
+						// локальный rename (view ↔ OLTP)
 						if newName, ok := findRenameTarget(tableRenames, column.Name); ok {
 							if !strings.EqualFold(column.Name, newName) {
 								column.Name = newName
@@ -363,10 +393,10 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 							continue
 						}
 
-						_, exists := actualCols[normName]
-						if column.IsDeleted == exists {
+						_, existsInDWH := actualCols[normName]
+						if column.IsDeleted == existsInDWH {
 							// Был is_deleted=false, а колонки нет — ставим true. Или наоборот.
-							column.IsDeleted = !exists
+							column.IsDeleted = !existsInDWH
 							changed = true
 							if column.IsDeleted {
 								a.sendColumnRemovedEvent(table.Name, column.Name)
@@ -376,14 +406,19 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 				}
 			}
 		}
+
 		if changed {
 			if err := a.SchemaProvider.UpdateView(ctx, view, schemaId); err != nil {
-				log.Error("ошибка обновления view после is_deleted", slog.String("error", err.Error()))
+				log.Error("ошибка обновления view после is_deleted/rename",
+					slog.String("error", err.Error()),
+					slog.String("view", viewName))
 			}
 		} else {
-			log.Info("view не изменился, обновление не требуется")
+			log.Info("view не изменился, обновление не требуется",
+				slog.String("view", viewName))
 		}
 	}
+
 	return nil
 }
 
