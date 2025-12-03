@@ -3,14 +3,17 @@ package dbhandlers
 import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
 	"analyticDataCenter/analytics-data-center/internal/lib/validate"
+	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 	serviceanalytics "analyticDataCenter/analytics-data-center/internal/services/analytics"
+	"analyticDataCenter/analytics-data-center/internal/storage"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 
-	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
+	"github.com/go-chi/chi/v5"
 )
 
 type DBHandlers struct {
@@ -183,6 +186,72 @@ func (d *DBHandlers) GetColumnRenameSuggestions(w http.ResponseWriter, r *http.R
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		d.log.Error("failed to encode response", slog.String("error", err.Error()))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (d *DBHandlers) AcceptColumnRenameSuggestion(w http.ResponseWriter, r *http.Request) {
+	const op = "DBHandlers.AcceptColumnRenameSuggestion"
+	log := d.log.With(slog.String("op", op))
+
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "application/json")
+
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		log.Error("invalid suggestion id", slog.String("error", err.Error()))
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	if err := d.serviceAnalytics.AcceptColumnRenameSuggestion(ctx, id); err != nil {
+		if errors.Is(err, storage.ErrSuggestionNotFound) {
+			http.Error(w, "suggestion not found", http.StatusNotFound)
+			return
+		}
+		log.Error("failed to accept suggestion", slog.String("error", err.Error()))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
+		log.Error("failed to encode response", slog.String("error", err.Error()))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (d *DBHandlers) RejectColumnRenameSuggestion(w http.ResponseWriter, r *http.Request) {
+	const op = "DBHandlers.RejectColumnRenameSuggestion"
+	log := d.log.With(slog.String("op", op))
+
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "application/json")
+
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		log.Error("invalid suggestion id", slog.String("error", err.Error()))
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	if err := d.serviceAnalytics.RejectColumnRenameSuggestion(ctx, id); err != nil {
+		if errors.Is(err, storage.ErrSuggestionNotFound) {
+			http.Error(w, "suggestion not found", http.StatusNotFound)
+			return
+		}
+		log.Error("failed to reject suggestion", slog.String("error", err.Error()))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
+		log.Error("failed to encode response", slog.String("error", err.Error()))
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
