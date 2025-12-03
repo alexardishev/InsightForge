@@ -12,9 +12,10 @@ import (
 //		QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 //	}
 type SysDB interface {
-	TaskProvider
-	SchemaProvider
-	ColumnRenameSuggestionStorage
+        TaskProvider
+        SchemaProvider
+        ColumnRenameSuggestionStorage
+        ColumnMismatchStorage
 }
 type DWHDB interface {
 	TableProvider
@@ -74,9 +75,18 @@ type DataBaseProviderOLTP interface {
 }
 
 type ColumnRenameSuggestionStorage interface {
-	CreateSuggestion(ctx context.Context, s models.ColumnRenameSuggestion) error
-	ListSuggestions(ctx context.Context, filter models.ColumnRenameSuggestionFilter) ([]models.ColumnRenameSuggestion, error)
-	HasSuggestion(ctx context.Context, schemaID int64, database, schema, table string) (bool, error)
-	GetSuggestionByID(ctx context.Context, id int64) (models.ColumnRenameSuggestion, error)
-	DeleteSuggestionByID(ctx context.Context, id int64) error
+        CreateSuggestion(ctx context.Context, s models.ColumnRenameSuggestion) error
+        ListSuggestions(ctx context.Context, filter models.ColumnRenameSuggestionFilter) ([]models.ColumnRenameSuggestion, error)
+        HasSuggestion(ctx context.Context, schemaID int64, database, schema, table string) (bool, error)
+        GetSuggestionByID(ctx context.Context, id int64) (models.ColumnRenameSuggestion, error)
+        DeleteSuggestionByID(ctx context.Context, id int64) error
+}
+
+type ColumnMismatchStorage interface {
+        CreateMismatchGroup(ctx context.Context, group models.ColumnMismatchGroup, items []models.ColumnMismatchItem) (int64, error)
+        ReplaceMismatchItems(ctx context.Context, groupID int64, items []models.ColumnMismatchItem) error
+        GetOpenMismatchGroup(ctx context.Context, schemaID int64, database, schema, table string) (models.ColumnMismatchGroupWithItems, error)
+        ListMismatchGroups(ctx context.Context, filter models.ColumnMismatchFilter) ([]models.ColumnMismatchGroup, error)
+        GetMismatchGroup(ctx context.Context, id int64) (models.ColumnMismatchGroupWithItems, error)
+        ResolveMismatchGroup(ctx context.Context, id int64) error
 }
