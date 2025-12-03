@@ -43,6 +43,9 @@ func NewRouter(logger *loggerpkg.Logger, serviceAnalytics *serviceanalytics.Anal
 		r.Get("/column-rename-suggestions", handlers.GetColumnRenameSuggestions)
 		r.Post("/column-rename-suggestions/{id}/accept", handlers.AcceptColumnRenameSuggestion)
 		r.Post("/column-rename-suggestions/{id}/reject", handlers.RejectColumnRenameSuggestion)
+		r.Get("/column-mismatch-groups", handlers.GetColumnMismatchGroups)
+		r.Get("/column-mismatch-groups/{id}", handlers.GetColumnMismatchGroup)
+		r.Post("/column-mismatch-groups/{id}/apply", handlers.ApplyColumnMismatchGroup)
 	})
 
 	return r

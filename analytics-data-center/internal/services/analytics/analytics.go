@@ -50,12 +50,13 @@ type TopicNotifier interface {
 }
 
 type AnalyticsDataCenterService struct {
-	log                     *loggerpkg.Logger
-	SchemaProvider          storage.SysDB
-	RenameSuggestionStorage storage.ColumnRenameSuggestionStorage
-	TaskService             TaskService
-	DWHProvider             storage.DWHDB
-	OLTPFactory             storage.OLTPFactory
+        log                     *loggerpkg.Logger
+        SchemaProvider          storage.SysDB
+        RenameSuggestionStorage storage.ColumnRenameSuggestionStorage
+        ColumnMismatchStorage   storage.ColumnMismatchStorage
+        TaskService             TaskService
+        DWHProvider             storage.DWHDB
+        OLTPFactory             storage.OLTPFactory
 	DWHDbName               string
 	DWHDbPath               string
 	OLTPDbName              string
@@ -86,11 +87,12 @@ func New(
 	SMTPClient smtpsender.SMTP,
 
 ) *AnalyticsDataCenterService {
-	service := &AnalyticsDataCenterService{
-		log:                     log,
-		SchemaProvider:          schemaProvider,
-		RenameSuggestionStorage: schemaProvider,
-		TaskService:             taskService,
+        service := &AnalyticsDataCenterService{
+                log:                     log,
+                SchemaProvider:          schemaProvider,
+                RenameSuggestionStorage: schemaProvider,
+                ColumnMismatchStorage:   schemaProvider,
+                TaskService:             taskService,
 		DWHProvider:             dwhProvider,
 		OLTPFactory:             OLTPFactory,
 		DWHDbName:               DWHDbName,

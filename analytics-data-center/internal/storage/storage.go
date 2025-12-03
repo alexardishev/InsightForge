@@ -7,12 +7,13 @@ import (
 )
 
 var (
-	ErrUserExists         = errors.New("пользователь уже существует")
-	ErrUserNotFound       = errors.New("пользователь не найден")
-	ErrAppNotFound        = errors.New("приложение не найдено")
-	ErrSessionNotFound    = errors.New("сессия не найдена")
-	ErrSchemaNotFound     = errors.New("схема не найдена")
-	ErrSuggestionNotFound = errors.New("предложение не найдено")
+        ErrUserExists         = errors.New("пользователь уже существует")
+        ErrUserNotFound       = errors.New("пользователь не найден")
+        ErrAppNotFound        = errors.New("приложение не найдено")
+        ErrSessionNotFound    = errors.New("сессия не найдена")
+        ErrSchemaNotFound     = errors.New("схема не найдена")
+        ErrSuggestionNotFound = errors.New("предложение не найдено")
+        ErrMismatchNotFound   = errors.New("группа несоответствий не найдена")
 )
 
 type Storage struct {

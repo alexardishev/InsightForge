@@ -5,34 +5,26 @@ import (
 	"log/slog"
 	"strings"
 
-	"analyticDataCenter/analytics-data-center/internal/domain/models"
-
 	"github.com/adrg/strutil/metrics"
 )
 
-// RenameCandidate describes the most probable rename pair.
+// RenameCandidate describes the most probable rename pair with similarity score.
 type RenameCandidate struct {
-	OldName  string
-	NewName  string
-	Strategy string
+	OldName string
+	NewName string
+	Score   float64
 }
 
 // DetectorConfig aggregates inputs needed to detect rename patterns between схемой сервиса и DWH.
 type DetectorConfig struct {
-	ActualDWHColumns      map[string]struct{}
-	BeforeEvent           map[string]interface{}
-	AfterEvent            map[string]interface{}
-	ColumnTypes           map[string]string
-	Database              string
-	Schema                string
-	Table                 string
-	RenameHeuristicEnable bool
-	ExpectedColumns       []models.Column
-	Logger                *slog.Logger
+	OldCandidates []string
+	NewCandidates []string
+	ColumnTypes   map[string]string
+	Logger        *slog.Logger
 }
 
-// DetectRenameCandidate tries to infer a column rename using view-schema diff and CDC heuristics.
-func DetectRenameCandidate(ctx context.Context, cfg DetectorConfig) (*RenameCandidate, error) {
+// DetectRenameCandidate tries to infer rename pairs based on provided candidate sets.
+func DetectRenameCandidate(ctx context.Context, cfg DetectorConfig) ([]RenameCandidate, error) {
 	log := cfg.Logger
 	if log == nil {
 		log = slog.Default()
@@ -43,77 +35,29 @@ func DetectRenameCandidate(ctx context.Context, cfg DetectorConfig) (*RenameCand
 		allTypes[strings.ToLower(name)] = normalizeType(t)
 	}
 
-	expectedTypes := make(map[string]string)
-	for _, col := range cfg.ExpectedColumns {
-		if col.Name == "" {
-			continue
-		}
-		normName := strings.ToLower(col.Name)
-		normType := normalizeType(col.Type)
-		expectedTypes[normName] = normType
-		if _, ok := allTypes[normName]; !ok {
-			allTypes[normName] = normType
-		}
-	}
-
-	if len(expectedTypes) > 0 {
-		missing, added := diffSets(cfg.ActualDWHColumns, expectedTypes)
-		log.Info("", slog.Any("DWH", cfg.ActualDWHColumns))
-		log.Info("", slog.Any("OLTP", expectedTypes))
-
-		if candidate := pickCandidate(missing, added, allTypes, expectedTypes, "view-schema", log); candidate != nil {
-			return candidate, nil
-		}
-	}
-
-	if !cfg.RenameHeuristicEnable {
-		return nil, nil
-	}
-
-	missing, added := diffEventColumns(cfg.ActualDWHColumns, cfg.AfterEvent)
-	missing, added = filterByBefore(cfg.BeforeEvent, cfg.ExpectedColumns, missing, added)
-
-	return pickCandidate(missing, added, allTypes, expectedTypes, "cdc-heuristic", log), nil
+	return pickCandidates(cfg.OldCandidates, cfg.NewCandidates, allTypes, log), nil
 }
 
-func pickCandidate(
-	missing []string,
-	added []string,
-	oldTypes map[string]string,
-	newTypes map[string]string,
-	strategy string,
+func pickCandidates(
+	oldCandidates []string,
+	newCandidates []string,
+	types map[string]string,
 	log *slog.Logger,
-) *RenameCandidate {
-	if len(missing) == 0 || len(added) == 0 {
+) []RenameCandidate {
+	if len(oldCandidates) == 0 || len(newCandidates) == 0 {
 		return nil
 	}
 
-	// Базовый порог
-	minSimilarity := 0.82
-
-	// В простых случаях:
-	// - либо ровно одна пропавшая колонка (как раньше),
-	// - либо ровно одна добавленная колонка (кейс rmp_param_join: одна new, много missing),
-	// допускаем более мягкий порог (например name -> title).
-	if len(missing) == 1 || len(added) == 1 {
-		minSimilarity = 0.45
-	}
-
-	type candidateScore struct {
-		old   string
-		new   string
-		score float64
-	}
-
+	minSimilarity := 0.45
 	jw := metrics.NewJaroWinkler()
-	var best *candidateScore
+	var results []RenameCandidate
 
-	for _, oldCol := range missing {
-		expectedType := oldTypes[strings.ToLower(oldCol)]
-		for _, newCol := range added {
-			newType := normalizeType(newTypes[strings.ToLower(newCol)])
+	for _, oldCol := range oldCandidates {
+		expectedType := types[strings.ToLower(oldCol)]
+		for _, newCol := range newCandidates {
+			newType := normalizeType(types[strings.ToLower(newCol)])
 			if expectedType != "" && newType != "" && expectedType != newType {
-				log.Info("skip rename candidate due to type mismatch",
+				log.Debug("skip rename candidate due to type mismatch",
 					slog.String("old", oldCol),
 					slog.String("new", newCol),
 					slog.String("expectedType", expectedType),
@@ -130,97 +74,11 @@ func pickCandidate(
 				continue
 			}
 
-			if best == nil || similarity > best.score {
-				best = &candidateScore{old: oldCol, new: newCol, score: similarity}
-			}
+			results = append(results, RenameCandidate{OldName: oldCol, NewName: newCol, Score: similarity})
 		}
 	}
 
-	if best == nil {
-		return nil
-	}
-
-	return &RenameCandidate{
-		OldName:  best.old,
-		NewName:  best.new,
-		Strategy: strategy,
-	}
-}
-
-func diffSets(actual map[string]struct{}, expected map[string]string) ([]string, []string) {
-	var missing []string
-	var added []string
-
-	for col := range actual {
-		if _, ok := expected[col]; !ok {
-			missing = append(missing, col)
-		}
-	}
-
-	for col := range expected {
-		if _, ok := actual[col]; !ok {
-			added = append(added, col)
-		}
-	}
-
-	return missing, added
-}
-
-func diffEventColumns(actual map[string]struct{}, after map[string]interface{}) ([]string, []string) {
-	var missing []string
-	var added []string
-
-	for col := range actual {
-		if _, ok := after[col]; !ok {
-			missing = append(missing, col)
-		}
-	}
-
-	for col := range after {
-		if _, ok := actual[col]; !ok {
-			added = append(added, col)
-		}
-	}
-
-	return missing, added
-}
-
-func filterByBefore(before map[string]interface{}, expected []models.Column, missing, added []string) ([]string, []string) {
-	// Debezium в наших событиях не заполняет before, поэтому используем его, если он есть,
-	// а в противном случае — список колонок из схемы (expected).
-	beforeColumns := make(map[string]struct{})
-	for col := range before {
-		beforeColumns[col] = struct{}{}
-	}
-
-	if len(beforeColumns) == 0 {
-		for _, col := range expected {
-			if col.Name == "" {
-				continue
-			}
-			beforeColumns[col.Name] = struct{}{}
-		}
-	}
-
-	if len(beforeColumns) == 0 {
-		return missing, added
-	}
-
-	var filteredMissing []string
-	for _, m := range missing {
-		if _, ok := beforeColumns[m]; ok {
-			filteredMissing = append(filteredMissing, m)
-		}
-	}
-
-	var filteredAdded []string
-	for _, a := range added {
-		if _, ok := beforeColumns[a]; !ok {
-			filteredAdded = append(filteredAdded, a)
-		}
-	}
-
-	return filteredMissing, filteredAdded
+	return results
 }
 
 func normalizeName(s string) string {
