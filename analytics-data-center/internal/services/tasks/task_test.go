@@ -61,6 +61,19 @@ func (m *mockSysDB) ListTopics(ctx context.Context) ([]string, error)           
 func (m *mockSysDB) GetTasks(ctx context.Context, filters models.TaskFilter) (tasks []models.Task, err error) {
 	return []models.Task{}, nil
 }
+func (m *mockSysDB) CreateSuggestion(ctx context.Context, s models.ColumnRenameSuggestion) error {
+	return nil
+}
+func (m *mockSysDB) ListSuggestions(ctx context.Context, filter models.ColumnRenameSuggestionFilter) ([]models.ColumnRenameSuggestion, error) {
+	return nil, nil
+}
+func (m *mockSysDB) HasSuggestion(ctx context.Context, schemaID int64, database, schema, table string) (bool, error) {
+	return false, nil
+}
+func (m *mockSysDB) GetSuggestionByID(ctx context.Context, id int64) (models.ColumnRenameSuggestion, error) {
+	return models.ColumnRenameSuggestion{}, nil
+}
+func (m *mockSysDB) DeleteSuggestionByID(ctx context.Context, id int64) error { return nil }
 func testLogger() *loggerpkg.Logger {
 	return loggerpkg.New("test", "ru")
 }

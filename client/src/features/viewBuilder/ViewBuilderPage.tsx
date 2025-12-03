@@ -26,7 +26,7 @@ const ViewBuilderPage: React.FC = () => {
   const { selectedDb, selectedSchema, selectedTables, selectedColumns } =
     useSelector((state: RootState) => state.viewBuilder);
   const { request } = useHttp();
-  const url = 'http://localhost:8888';
+  const url = '/api';
 
   const [tablesState, setTablesState] = useState<any[]>([]);
   const [page, setPage] = useState(1);
@@ -61,7 +61,7 @@ const ViewBuilderPage: React.FC = () => {
         page: nextPage,
         page_size: pageSize,
       };
-      const dbInfo = await request(`${url}/api/get-db`, 'POST', body);
+      const dbInfo = await request(`${url}/get-db`, 'POST', body);
       const db = dbInfo.find((d: any) => d.name === selectedDb);
       const schema = db?.schemas?.find((s: any) => s.name === selectedSchema);
       const newTables = schema?.tables || [];

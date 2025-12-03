@@ -77,4 +77,6 @@ type ColumnRenameSuggestionStorage interface {
 	CreateSuggestion(ctx context.Context, s models.ColumnRenameSuggestion) error
 	ListSuggestions(ctx context.Context, filter models.ColumnRenameSuggestionFilter) ([]models.ColumnRenameSuggestion, error)
 	HasSuggestion(ctx context.Context, schemaID int64, database, schema, table string) (bool, error)
+	GetSuggestionByID(ctx context.Context, id int64) (models.ColumnRenameSuggestion, error)
+	DeleteSuggestionByID(ctx context.Context, id int64) error
 }

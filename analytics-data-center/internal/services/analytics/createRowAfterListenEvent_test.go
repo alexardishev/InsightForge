@@ -70,6 +70,27 @@ func (m *mockSchemaProvider) ListSuggestions(context.Context, models.ColumnRenam
 	return m.suggestions, nil
 }
 
+func (m *mockSchemaProvider) GetSuggestionByID(_ context.Context, id int64) (models.ColumnRenameSuggestion, error) {
+	for _, suggestion := range m.suggestions {
+		if suggestion.ID == id {
+			return suggestion, nil
+		}
+	}
+
+	return models.ColumnRenameSuggestion{}, storage.ErrSuggestionNotFound
+}
+
+func (m *mockSchemaProvider) DeleteSuggestionByID(_ context.Context, id int64) error {
+	for idx, suggestion := range m.suggestions {
+		if suggestion.ID == id {
+			m.suggestions = append(m.suggestions[:idx], m.suggestions[idx+1:]...)
+			return nil
+		}
+	}
+
+	return storage.ErrSuggestionNotFound
+}
+
 func (m *mockSchemaProvider) HasSuggestion(_ context.Context, schemaID int64, database, schema, table string) (bool, error) {
 	if m.hasSuggestionErr != nil {
 		return false, m.hasSuggestionErr
