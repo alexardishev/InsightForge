@@ -124,42 +124,56 @@ func (d *DBHandlers) GetColumnMismatchGroups(w http.ResponseWriter, r *http.Requ
 	log := d.log.With(slog.String("op", op))
 
 	ctx := r.Context()
+	w.Header().Set("Content-Type", "application/json")
+
 	query := r.URL.Query()
 	filter := models.ColumnMismatchFilter{}
 
+	// schemaId (опционально)
 	if schemaIDStr := query.Get("schemaId"); schemaIDStr != "" {
 		if id, err := strconv.ParseInt(schemaIDStr, 10, 64); err == nil {
 			filter.SchemaID = &id
+		} else {
+			log.Error("invalid schemaId", slog.String("error", err.Error()))
+			http.Error(w, "invalid schemaId", http.StatusBadRequest)
+			return
 		}
 	}
 
+	// database / schema / table
 	if database := query.Get("database"); database != "" {
 		filter.DatabaseName = &database
 	}
-
 	if schema := query.Get("schema"); schema != "" {
 		filter.SchemaName = &schema
 	}
-
 	if table := query.Get("table"); table != "" {
 		filter.TableName = &table
 	}
 
-	if status := query.Get("status"); status != "" {
+	// status: open | resolved | all
+	// если all — статус не фильтруем
+	if status := query.Get("status"); status != "" && status != "all" {
 		filter.Status = &status
 	}
 
+	// limit (по умолчанию 50)
+	limit := 50
 	if limitStr := query.Get("limit"); limitStr != "" {
-		if v, err := strconv.Atoi(limitStr); err == nil {
-			filter.Limit = v
+		if v, err := strconv.Atoi(limitStr); err == nil && v > 0 {
+			limit = v
 		}
 	}
+	filter.Limit = limit
 
+	// offset (по умолчанию 0)
+	offset := 0
 	if offsetStr := query.Get("offset"); offsetStr != "" {
-		if v, err := strconv.Atoi(offsetStr); err == nil {
-			filter.Offset = v
+		if v, err := strconv.Atoi(offsetStr); err == nil && v >= 0 {
+			offset = v
 		}
 	}
+	filter.Offset = offset
 
 	groups, err := d.serviceAnalytics.ListColumnMismatchGroups(ctx, filter)
 	if err != nil {
@@ -168,8 +182,13 @@ func (d *DBHandlers) GetColumnMismatchGroups(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(groups); err != nil {
+	resp := map[string]interface{}{
+		"items":  groups,
+		"limit":  filter.Limit,
+		"offset": filter.Offset,
+	}
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		log.Error("failed to encode response", slog.String("error", err.Error()))
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -235,7 +254,14 @@ func (d *DBHandlers) ApplyColumnMismatchGroup(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
+		log.Error("failed to encode response", slog.String("error", err.Error()))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (d *DBHandlers) GetColumnRenameSuggestions(w http.ResponseWriter, r *http.Request) {

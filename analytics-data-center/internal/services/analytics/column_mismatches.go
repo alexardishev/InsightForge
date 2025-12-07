@@ -50,7 +50,7 @@ func (a *AnalyticsDataCenterService) ApplyColumnMismatchResolution(ctx context.C
 		return err
 	}
 
-	tableName := view.Name
+	tableName := strings.ToLower(view.Name)
 
 	for _, decision := range resolution.Renames {
 		renameQuery, err := sqlgenerator.GenerateRenameColumnQuery(a.DWHDbName, "public", tableName, decision.OldName, decision.NewName)

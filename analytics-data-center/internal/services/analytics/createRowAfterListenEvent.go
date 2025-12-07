@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
 
 func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.Context, evtData models.CDCEventData) error {
@@ -94,6 +96,35 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 							continue
 						}
 						hasData = true
+						log.Info("ТЕКУЩАЯ БД", slog.String("postgres", a.DWHDbName))
+						log.Info("TYPE VALUE", slog.String("тип", column.Type))
+						log.Info("TYPE check", slog.Bool("тип", isTimeType(column.Type)))
+
+						if a.DWHDbName == "postgres" &&
+							(isTimeType(column.Type)) {
+
+							switch v := val.(type) {
+							case int64:
+								micros := v
+								val = time.Unix(0, micros*int64(time.Microsecond))
+							case float64:
+								micros := int64(v)
+								val = time.Unix(0, micros*int64(time.Microsecond))
+							case string:
+								if micros, err := strconv.ParseInt(v, 10, 64); err == nil {
+									val = time.Unix(0, micros*int64(time.Microsecond))
+								} else {
+									log.Warn("не могу сконвертировать time-поле",
+										slog.String("column", column.Name),
+										slog.String("value", v),
+										slog.String("error", err.Error()))
+								}
+							default:
+								log.Warn("неожиданный тип для time-поля",
+									slog.String("column", column.Name),
+									slog.String("type", fmt.Sprintf("%T", val)))
+							}
+						}
 
 						// всегда кладём по имени колонки
 						finalRow[column.Name] = val
@@ -196,6 +227,7 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 
 	dwhSchemaName := "public"
 
+	// 1. Колонки из OLTP
 	oltpStorage, err := a.OLTPFactory.GetOLTPStorage(ctx, databaseEvt)
 	if err != nil {
 		log.Error("ошибка получения OLTP", slog.String("error", err.Error()))
@@ -206,8 +238,9 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 		log.Error("ошибка получения колонок OLTP", slog.String("error", err.Error()))
 		return err
 	}
-	oltpColumnsMap := normalizeColumnsToMap(oltpColumns)
+	oltpColumnsMap := normalizeColumnsToMap(oltpColumns) // ключи в lower-case
 
+	// 2. Обрабатываем каждый view отдельно
 	for _, schemaId := range schemaIds {
 		view, err := a.SchemaProvider.GetView(ctx, int64(schemaId))
 		if err != nil {
@@ -224,6 +257,7 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 				slog.String("view", viewName))
 		}
 
+		// 2.1. Колонки в DWH для этого view
 		columns, err := a.DWHProvider.GetColumnsTables(ctx, dwhSchemaName, strings.ToLower(dwhTableName))
 		if err != nil {
 			log.Error("ошибка получения колонок DWH",
@@ -242,6 +276,7 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 			slog.String("table", dwhTableName),
 			slog.String("view", viewName))
 
+		// 2.2. Колонки схемы (view) для этой таблицы
 		var expectedColumns []models.Column
 		columnTypes := make(map[string]string)
 
@@ -288,16 +323,22 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 			slog.Any("schema", collectColumnNames(expectedColumns)),
 			slog.Any("dwh", lowerCaseColumns(columns)))
 
+		// 2.3. Приводим схему к map[name]Column
 		schemaCols := make(map[string]models.Column)
 		for _, col := range expectedColumns {
-			schemaCols[col.Name] = col
+			schemaCols[col.Name] = col // уже lower-case
 		}
 
+		// --- 3. Базовые несоответствия ---
+
+		// schema_only: есть в схеме, но нет в OLTP
 		schemaOnly := make([]string, 0)
+
+		// missing_in_dwh: есть в схеме и OLTP, но нет в DWH
 		missingInDWH := make([]string, 0)
+
+		// dwh_only: есть в DWH, но нет в схеме
 		dwhOnly := make([]string, 0)
-		oldCandidates := make([]string, 0)
-		newCandidates := make([]string, 0)
 
 		for name := range schemaCols {
 			if _, ok := oltpColumnsMap[name]; !ok {
@@ -319,16 +360,27 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 			}
 		}
 
+		// --- 4. Кандидаты на переименование ---
+
+		// Старые имена: есть в схеме и DWH, но НЕТ в OLTP
+		oldCandidates := make([]string, 0)
 		for name := range schemaCols {
-			if _, inDWH := actualCols[name]; inDWH {
-				if _, inOLTP := oltpColumnsMap[name]; !inOLTP {
-					oldCandidates = append(oldCandidates, name)
-				}
+			_, inDWH := actualCols[name]
+			_, inOLTP := oltpColumnsMap[name]
+			if inDWH && !inOLTP {
+				oldCandidates = append(oldCandidates, name)
 			}
 		}
 
-		for _, name := range missingInDWH {
-			newCandidates = append(newCandidates, name)
+		// Новые имена: есть в OLTP, но НЕТ ни в схеме, ни в DWH
+		// (классическое "старую колонку переименовали в новую")
+		newCandidates := make([]string, 0)
+		for name := range oltpColumnsMap {
+			_, inSchema := schemaCols[name]
+			_, inDWH := actualCols[name]
+			if !inSchema && !inDWH {
+				newCandidates = append(newCandidates, name)
+			}
 		}
 
 		renameCandidates, err := renameheuristics.DetectRenameCandidate(ctx, renameheuristics.DetectorConfig{
@@ -343,21 +395,32 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 				slog.String("view", viewName))
 		}
 
+		// --- 5. Формируем items для UI / хранения ---
+
 		var items []models.ColumnMismatchItem
 
 		for _, name := range schemaOnly {
 			n := name
-			items = append(items, models.ColumnMismatchItem{OldColumnName: &n, Type: models.ColumnMismatchTypeSchemaOnly})
+			items = append(items, models.ColumnMismatchItem{
+				OldColumnName: &n,
+				Type:          models.ColumnMismatchTypeSchemaOnly,
+			})
 		}
 
 		for _, name := range missingInDWH {
 			n := name
-			items = append(items, models.ColumnMismatchItem{NewColumnName: &n, Type: models.ColumnMismatchTypeMissingInDWH})
+			items = append(items, models.ColumnMismatchItem{
+				NewColumnName: &n,
+				Type:          models.ColumnMismatchTypeMissingInDWH,
+			})
 		}
 
 		for _, name := range dwhOnly {
 			n := name
-			items = append(items, models.ColumnMismatchItem{OldColumnName: &n, Type: models.ColumnMismatchTypeDWHOnly})
+			items = append(items, models.ColumnMismatchItem{
+				OldColumnName: &n,
+				Type:          models.ColumnMismatchTypeDWHOnly,
+			})
 		}
 
 		for _, candidate := range renameCandidates {
@@ -376,6 +439,8 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 			log.Info("несоответствий не найдено", slog.String("view", viewName))
 			continue
 		}
+
+		// --- 6. Создаём/обновляем группу рассинхронов ---
 
 		openGroup, err := a.ColumnMismatchStorage.GetOpenMismatchGroup(ctx, int64(schemaId), databaseEvt, schemaEvt, tableEvt)
 		if err != nil {
@@ -477,4 +542,12 @@ func (a *AnalyticsDataCenterService) sendColumnRemovedEvent(tableName, columnNam
 	default:
 		a.log.Warn("очередь уведомлений переполнена, событие TableChanged пропущено")
 	}
+}
+
+func isTimeType(t string) bool {
+	tt := strings.ToUpper(strings.TrimSpace(t))
+
+	return strings.HasPrefix(tt, "TIMESTAMP") ||
+		strings.HasPrefix(tt, "TIME") ||
+		tt == "DATE"
 }

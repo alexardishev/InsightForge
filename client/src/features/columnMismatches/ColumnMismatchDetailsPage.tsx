@@ -22,7 +22,7 @@ import {
 } from '@chakra-ui/react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useHttp } from '../../hooks/http.hook';
-import { ColumnMismatchGroup } from './ColumnMismatchListPage';
+import type { ColumnMismatchGroup } from './ColumnMismatchListPage';
 
 export interface ColumnMismatchItem {
   id: number;
