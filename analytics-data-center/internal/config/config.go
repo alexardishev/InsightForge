@@ -9,20 +9,21 @@ import (
 )
 
 type Config struct {
-	Env             string        `yaml:"env" env-default:"local" json:"env,omitempty"`
-	StoragePath     string        `yaml:"storage_path" env-required:"true" json:"storage_path,omitempty"`
-	OLTPDataBase    string        `yaml:"oltp_db" json:"oltp_db,omitempty"`
-	OLTPStoragePath string        `yaml:"oltp_db_path" json:"oltp_db_path,omitempty"`
-	DWHDataBase     string        `yaml:"dwh_db" json:"dwh_db,omitempty"`
-	DWHStoragePath  string        `yaml:"dwh_db_path" json:"dwh_db_path,omitempty"`
-	RenameHeuristic bool          `yaml:"rename_heuristic" env:"ENABLE_RENAME_HEURISTIC" env-default:"true" json:"rename_heuristic,omitempty"`
-	OLTPstorages    []OLTPstorage `yaml:"oltp_connections" json:"olt_pstorages,omitempty"`
-	TokenTTL        time.Duration `yaml:"token_ttl,omitempty" json:"token_ttl,omitempty"`
-	LogLang         string        `yaml:"log_lang" env-default:"ru" json:"log_lang,omitempty"`
-	GRPC            GRPCSetting   `yaml:"grpc" json:"grpc,omitempty"`
-	Kafka           KafkaSetting  `yaml:"kafka" json:"kafka,omitempty"`
-	KafkaConnect    string        `yaml:"kafka_connect" json:"kafka_connect,omitempty"`
-	SMTP            SMTPSetting   `yaml:"smtp_setting" json:"smtp_setting,omitempty"`
+	Env                       string        `yaml:"env" env-default:"local" json:"env,omitempty"`
+	StoragePath               string        `yaml:"storage_path" env-required:"true" json:"storage_path,omitempty"`
+	OLTPDataBase              string        `yaml:"oltp_db" json:"oltp_db,omitempty"`
+	OLTPStoragePath           string        `yaml:"oltp_db_path" json:"oltp_db_path,omitempty"`
+	DWHDataBase               string        `yaml:"dwh_db" json:"dwh_db,omitempty"`
+	DWHStoragePath            string        `yaml:"dwh_db_path" json:"dwh_db_path,omitempty"`
+	RenameHeuristic           bool          `yaml:"rename_heuristic" env:"ENABLE_RENAME_HEURISTIC" env-default:"true" json:"rename_heuristic,omitempty"`
+	OLTPstorages              []OLTPstorage `yaml:"oltp_connections" json:"olt_pstorages,omitempty"`
+	TokenTTL                  time.Duration `yaml:"token_ttl,omitempty" json:"token_ttl,omitempty"`
+	LogLang                   string        `yaml:"log_lang" env-default:"ru" json:"log_lang,omitempty"`
+	GRPC                      GRPCSetting   `yaml:"grpc" json:"grpc,omitempty"`
+	Kafka                     KafkaSetting  `yaml:"kafka" json:"kafka,omitempty"`
+	KafkaConnect              string        `yaml:"kafka_connect" json:"kafka_connect,omitempty"`
+	TopicSubscriptionInterval time.Duration `yaml:"topic_subscription_interval" env-default:"5s" json:"topic_subscription_interval,omitempty"`
+	SMTP                      SMTPSetting   `yaml:"smtp_setting" json:"smtp_setting,omitempty"`
 }
 
 type SMTPSetting struct {

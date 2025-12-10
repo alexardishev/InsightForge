@@ -29,7 +29,7 @@ func main() {
 	logg := logger.New(cfg.Env, cfg.LogLang)
 	logg.InfoMsg(logger.MsgAnalyticsServerStart)
 
-	application := app.New(logg, cfg.GRPC.Port, cfg.StoragePath, cfg.OLTPStoragePath, cfg.DWHStoragePath, cfg.OLTPDataBase, cfg.DWHDataBase, cfg.DWHStoragePath, cfg.RenameHeuristic, cfg.TokenTTL, cfg.OLTPstorages, cfg.Kafka.BootstrapServers, cfg.Kafka.GroupId, cfg.Kafka.AutoOffsetReset, cfg.Kafka.EnableAutoCommit, cfg.Kafka.SessionTimeoutMs, cfg.Kafka.ClientId, cfg.KafkaConnect, cfg.SMTP.Host, cfg.SMTP.Port, cfg.SMTP.UserName, cfg.SMTP.Password, cfg.SMTP.AdminEmail, cfg.SMTP.FromEmail)
+	application := app.New(logg, cfg.GRPC.Port, cfg.StoragePath, cfg.OLTPStoragePath, cfg.DWHStoragePath, cfg.OLTPDataBase, cfg.DWHDataBase, cfg.DWHStoragePath, cfg.RenameHeuristic, cfg.TokenTTL, cfg.OLTPstorages, cfg.Kafka.BootstrapServers, cfg.Kafka.GroupId, cfg.Kafka.AutoOffsetReset, cfg.Kafka.EnableAutoCommit, cfg.Kafka.SessionTimeoutMs, cfg.Kafka.ClientId, cfg.KafkaConnect, cfg.TopicSubscriptionInterval, cfg.SMTP.Host, cfg.SMTP.Port, cfg.SMTP.UserName, cfg.SMTP.Password, cfg.SMTP.AdminEmail, cfg.SMTP.FromEmail)
 
 	go application.GRPCSrv.Run()
 	go func() {
@@ -49,6 +49,9 @@ func main() {
 	)
 
 	application.GRPCSrv.Stop()
+	if application.TopicCron != nil {
+		application.TopicCron.Stop()
+	}
 	if err := application.Kafka.Close(); err != nil {
 		logg.Error("Kafka close failed", slog.String("error", err.Error()))
 	}

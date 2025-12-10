@@ -10,6 +10,7 @@ import (
 	"analyticDataCenter/analytics-data-center/internal/services/debezium"
 	smtpsender "analyticDataCenter/analytics-data-center/internal/services/smtrsender"
 	tasksserivce "analyticDataCenter/analytics-data-center/internal/services/tasks"
+	"analyticDataCenter/analytics-data-center/internal/services/topicsubscription"
 	"analyticDataCenter/analytics-data-center/internal/storage"
 	clickhousedwh "analyticDataCenter/analytics-data-center/internal/storage/clickhouseDWH"
 	"analyticDataCenter/analytics-data-center/internal/storage/postgres"
@@ -34,12 +35,13 @@ type App struct {
 	OLTPFactory *storage.InstanceOLTPFactory
 	Kafka       *kafka.Consumer
 	Router      http.Handler
+	TopicCron   *topicsubscription.Cron
 }
 
 func New(log *loggerpkg.Logger, grpcPort int,
 	storagePath string, connectionStringOLTP string, connectionStringDWH string, OLTPName string, DWHName string, DWHPath string,
 	renameHeuristic bool,
-	tokenTTL time.Duration, factoryOLTP []config.OLTPstorage, BootstrapServers string, GroupId string, AutoOffsetReset string, EnableAutoCommit string, SessionTimeoutMs string, ClientId string, KafkaConnect string, hostSMTP string, portSMTP int, userNameSMTP string, passwordSMTP string, adminEmailSMTP string, fromEmailSMTP string) *App {
+	tokenTTL time.Duration, factoryOLTP []config.OLTPstorage, BootstrapServers string, GroupId string, AutoOffsetReset string, EnableAutoCommit string, SessionTimeoutMs string, ClientId string, KafkaConnect string, topicSubscriptionInterval time.Duration, hostSMTP string, portSMTP int, userNameSMTP string, passwordSMTP string, adminEmailSMTP string, fromEmailSMTP string) *App {
 	// TO DO переделать на cfg
 	statusEnum := []string{"In progress", "Execution error", "Completed"}
 	// var storageOLTP storage.OLTPDB
@@ -93,6 +95,8 @@ func New(log *loggerpkg.Logger, grpcPort int,
 		panic("Не удалось подключиться к Kafka")
 	}
 	analyticsService.SetTopicNotifier(kafkaEngine)
+	topicCron := topicsubscription.NewCron(log, storage.DbSys, kafkaEngine, topicSubscriptionInterval)
+	topicCron.Start()
 	kafkaConsumer := kafkaEngine.Consumer()
 	cdcListener := cdc.NewListener(kafkaConsumer, log, func(data []byte) {
 		cdc.Dispatch(data, log, analyticsService)
@@ -104,5 +108,6 @@ func New(log *loggerpkg.Logger, grpcPort int,
 		OLTPFactory: oltpFactory,
 		Kafka:       kafkaConsumer,
 		Router:      r,
+		TopicCron:   topicCron,
 	}
 }

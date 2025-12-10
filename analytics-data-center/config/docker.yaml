@@ -16,6 +16,7 @@ smtp_setting:
     admin_email: "admin@example.com"
     from_email: "noreply@example.com"
 token_ttl: 1h
+topic_subscription_interval: 5s
 kafka:
     bootstrap.servers: "kafka:9092"
     acks: "all"

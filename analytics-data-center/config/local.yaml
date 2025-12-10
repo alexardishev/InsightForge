@@ -19,6 +19,7 @@ smtp_setting:
     admin_email: "************@yandex.ru"
     from_email: "**********@rambler.ru"
 token_ttl: 1h
+topic_subscription_interval: 5s
 kafka:
     bootstrap.servers: "localhost:9092"
     acks: "all"
