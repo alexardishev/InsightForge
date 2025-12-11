@@ -1,120 +1,207 @@
-# ⚡ InsightForge
+# English
 
-*English documentation*  |  [Русская версия](README-ru.md)  |  [中文版](README-zh.md)
+## 1. Overview
+InsightForge is a self-service DWH builder that lets data teams design marts, connect operational PostgreSQL sources, and stream them into analytical storages (Postgres or ClickHouse) in real time. The platform combines a visual mart constructor, CDC via Debezium + Kafka, multi-threaded ETL workers, and an adaptive schema-evolution engine that keeps target schemas synchronized without stopping ingestion.
 
-InsightForge is a powerful tool for building analytical views from various data sources. It allows you to gather tables, merge data from different services, apply transformations and store the result in a data warehouse (DWH).
+## 2. Key Features
+- **Visual mart builder UI**: pick databases/schemas/tables, choose columns, configure joins, and name the view directly in the browser UI (Chakra UI + Redux state).【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L1-L117】【F:client/src/features/viewBuilder/JoinBuilderPage.tsx†L1-L118】
+- **Safe join definition**: guided join setup between selected tables with explicit key selection to avoid accidental cartesian joins; join metadata is persisted into the view model.【F:client/src/features/viewBuilder/JoinBuilderPage.tsx†L19-L117】【F:analytics-data-center/internal/domain/models/view.go†L34-L57】
+- **Transformation engine**: per-column transforms support field remapping (value → alias) and JSON flattening into columns, with view_key support for surrogate keys and conflict handling.【F:client/src/features/viewBuilder/TransformBuilderPage.tsx†L1-L118】【F:analytics-data-center/internal/domain/models/view.go†L22-L45】【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L87-L175】
+- **Real-time CDC pipeline**: Debezium connectors register automatically for each OLTP source, stream through Kafka, and are consumed by the CDC listener to upsert into DWH tables derived from marts.【F:analytics-data-center/internal/app/app.go†L34-L105】【F:analytics-data-center/internal/services/debezium/registrar.go†L1-L98】【F:analytics-data-center/internal/services/cdc/listener.go†L1-L36】
+- **Postgres OLTP source support**: schema discovery, pagination across large table lists, column metadata, indexes, and constraints are fetched to drive the UI and ETL logic.【F:analytics-data-center/internal/storage/postgresOLTP/tables.go†L1-L89】【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L28-L75】【F:analytics-data-center/internal/storage/postgresOLTP/columns.go†L1-L93】
+- **DWH adapters for Postgres and ClickHouse**: temp table creation, index/constraint generation, upserts, replica identity handling, and merge operations are generated per engine.【F:analytics-data-center/internal/app/app.go†L34-L85】【F:analytics-data-center/internal/lib/SQLGenerator/createTempTableQueryClickHouse.go†L1-L98】【F:analytics-data-center/internal/lib/SQLGenerator/createTempTableQueryPostgreSQL.go†L1-L103】
+- **Schema evolution detection**: rename heuristic suggestions using string similarity and type checks, automatic mismatch grouping, and apply/skip flows that keep marts aligned with source changes.【F:analytics-data-center/internal/lib/renameheuristics/rename.go†L1-L64】【F:analytics-data-center/internal/services/analytics/column_rename_suggestions.go†L1-L79】【F:analytics-data-center/internal/services/analytics/column_mismatches.go†L1-L77】
+- **Column deletion and notification workflow**: mismatch groups surface in UI for review and can be resolved (rename/delete) while DWH schema updates and view definitions are synchronized; SMTP worker sends admin notifications on table changes.【F:client/src/features/columnMismatches/ColumnMismatchListPage.tsx†L1-L82】【F:analytics-data-center/internal/services/analytics/column_mismatches.go†L17-L78】【F:analytics-data-center/internal/services/smtrsender/smtp.go†L1-L65】
+- **Auto-mapping and smart suggestions**: rename heuristics, mismatch grouping, and per-view checks prevent writes when unresolved suggestions exist, minimizing data drift.【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L39-L74】【F:analytics-data-center/internal/lib/renameheuristics/rename.go†L17-L61】
+- **Multi-threaded processing**: buffered job/event queues with dedicated ETL and CDC workers process tens of concurrent tasks and Kafka messages in parallel.【F:analytics-data-center/internal/services/analytics/analytics.go†L43-L75】【F:analytics-data-center/internal/services/cdc/listener.go†L16-L33】
+- **Large-data readiness**: pagination for table discovery, bulk SQL generation for temp tables/merges, and streaming upserts handle wide tables and high-volume CDC streams without pausing ingestion.【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L36-L73】【F:analytics-data-center/internal/lib/SQLGenerator/selectInsertDataQuery.go†L1-L93】
+- **GRPC + REST APIs**: HTTP router exposes CRUD for views/tasks/DB info; gRPC server wraps analytics service for programmatic control.【F:analytics-data-center/internal/app/app.go†L87-L104】【F:analytics-data-center/internal/api/routes/routes.go†L1-L56】【F:analytics-data-center/internal/grpc/analytics-data-center/server.go†L1-L49】
 
-## ❓ Problems solved
-Modern applications scatter data across multiple microservices and databases. Analysts often have to manually stitch those pieces together with ad-hoc ETL scripts. InsightForge automates this workflow by consolidating heterogeneous sources into a unified view, applying transformations on the fly and keeping the result up to date. This removes the pain of hand-written ETL pipelines and inconsistent mappings.
+## 3. Architecture
+- **UI**: React + Vite + Chakra UI with Redux slices for settings, view builder, tasks, rename suggestions, and column mismatch dashboards.【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L1-L117】【F:client/src/features/columnMismatches/ColumnMismatchListPage.tsx†L1-L82】
+- **Backend**: Go services orchestrating schema storage, ETL, CDC processing, and task tracking with structured slog logging.【F:analytics-data-center/internal/app/app.go†L1-L105】【F:analytics-data-center/internal/services/analytics/analytics.go†L1-L75】
+- **Debezium Kafka Listener**: Kafka consumer polls CDC topics, dispatching messages to analytics service for application into DWH.【F:analytics-data-center/internal/services/cdc/listener.go†L1-L36】【F:analytics-data-center/internal/services/cdc/dispatcher.go†L1-L75】
+- **Storage Adapters**: OLTP factory for Postgres sources; DWH adapters for Postgres and ClickHouse implementing temp table creation, merges, and column ops.【F:analytics-data-center/internal/storage/OLTPFactory.go†L1-L73】【F:analytics-data-center/internal/storage/postgresDWH/postgresDWH.go†L1-L110】【F:analytics-data-center/internal/storage/clickhouseDWH/clickhouseDWH.go†L1-L109】
+- **DWH Writers**: SQL generators build insert/merge, index, constraint, and view creation queries tailored per engine and schema definition.【F:analytics-data-center/internal/lib/SQLGenerator/insertDataGenerateQuery.go†L1-L92】【F:analytics-data-center/internal/lib/SQLGenerator/createConstraintTableQuery.go†L1-L91】
+- **Schema Evolution Engine**: rename heuristics, column mismatch groups, and suggestion storage block unsafe writes, update view definitions, and propagate rename/delete decisions into DWH.【F:analytics-data-center/internal/lib/renameheuristics/rename.go†L17-L61】【F:analytics-data-center/internal/services/analytics/column_mismatches.go†L17-L78】
+- **Transformation Engine**: per-column transforms (FieldTransform, JSON) applied during CDC ingestion to generate derived columns before upsert.【F:analytics-data-center/internal/domain/models/view.go†L22-L45】【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L114-L175】
+- **Multi-threading Engine**: goroutine workers for ETL tasks, Kafka listener, SMTP sender, and topic subscription cron manage concurrent workloads.【F:analytics-data-center/internal/services/analytics/analytics.go†L57-L75】【F:analytics-data-center/internal/services/topicsubscription/cron.go†L1-L58】【F:analytics-data-center/internal/services/smtrsender/smtp.go†L18-L59】
 
-## 🚀 Features
-- 📦 Integration with external OLTP systems via API and events
-- 🛠 View builder with tables, columns, joins and transformations
-- 💾 PostgreSQL support as both source and DWH; ClickHouse supported as DWH
-- 🔄 Automatic data updates using CDC (Debezium) or events
-- 🧠 Data transforms: enums, alias mapping, JSON field extraction and more
-- 🧪 Asynchronous ETL processing with task status tracking
-- 📊 Logging and metrics (OpenTelemetry-ready)
-- ⚠️ The UI is under active development. Full backend functionality is already available via configuration files.
+## 4. How It Works
+1. **Create a mart**: pick DB/schema/tables, select columns, define joins, and name the view in the UI. The definition is saved to the system storage and exposed via API.【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L1-L117】【F:analytics-data-center/internal/domain/models/view.go†L1-L45】
+2. **Connect to source**: backend auto-registers Debezium Postgres connectors (slot/publication) per configured OLTP path and waits for RUNNING state.【F:analytics-data-center/internal/app/app.go†L45-L81】【F:analytics-data-center/internal/services/debezium/registrar.go†L1-L98】
+3. **Connect to DWH**: choose Postgres or ClickHouse; DWH adapter prepares temp tables, indexes, and replica identity as needed.【F:analytics-data-center/internal/app/app.go†L34-L83】【F:analytics-data-center/internal/storage/clickhouseDWH/clickhouseDWH.go†L1-L109】
+4. **CDC processing**: Kafka listener consumes Debezium events, dispatches them to analytics service, which maps columns, applies transforms, and upserts into mart tables.【F:analytics-data-center/internal/services/cdc/listener.go†L16-L34】【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L39-L175】
+5. **Schema change detection**: before writes, service checks for renamed/missing columns, generates suggestions/mismatch groups, and can pause writes until resolved.【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L39-L82】【F:analytics-data-center/internal/services/analytics/column_rename_suggestions.go†L1-L70】
+6. **Automatic mapping**: rename heuristics and view_key settings remap incoming fields to target columns, keeping conflict keys aligned for upserts.【F:analytics-data-center/internal/lib/renameheuristics/rename.go†L17-L61】【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L114-L151】
+7. **Transformations**: FieldTransform maps discrete values; JSON mappings parse nested payloads into flat columns with typed output.【F:client/src/features/viewBuilder/TransformBuilderPage.tsx†L59-L117】【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L133-L175】
+8. **Update propagation**: successful ingestion updates DWH tables (per-view table names) and tasks statuses; temp tables are merged/cleaned per engine.【F:analytics-data-center/internal/services/analytics/analytics.go†L91-L159】【F:analytics-data-center/internal/lib/SQLGenerator/selectInsertDataQuery.go†L1-L93】
 
-## 🧱 Architecture
-- `analytics-view-service` – core service for assembling and refreshing views
-- `task-service` – tracks ETL job status
-- `sql-generator` – builds SQL scripts (CREATE TABLE, INSERT, etc.)
-- `cdc-listener` (optional) – listens to Kafka and reacts to changes
-- `config-loader` – loads and validates view configuration (YAML/JSON)
+## 5. Supported Databases
+- **OLTP Sources**: PostgreSQL via Debezium connectors.【F:analytics-data-center/internal/services/debezium/registrar.go†L1-L98】
+- **DWH Targets**: PostgreSQL and ClickHouse adapters with engine-specific SQL generators.【F:analytics-data-center/internal/app/app.go†L34-L83】【F:analytics-data-center/internal/lib/SQLGenerator/createViewQueryClickHouse.go†L1-L92】
 
-## 📂 Project structure
-```
-analytics-data-center/
-├── cmd/                      # Entry points
-├── internal/
-│   ├── app/                  # Application initialization
-│   ├── config/               # Configuration loader
-│   ├── domain/models/        # Domain entities
-│   ├── services/             # Business logic
-│   ├── storage/              # Database layer
-│   └── lib/                  # Utilities (SQL generator, validation)
-├── config/                   # YAML configs
-├── go.mod
-└── README.md
-```
+## 6. Installation
+- **Docker Compose (recommended)**: `docker-compose up --build` brings up Postgres, Zookeeper, Kafka, Debezium Connect, backend (ports 8888/13890), frontend (port 3000), and Kafka UI (Kafdrop).【F:docker-compose.yml†L1-L63】
+- **Backend config**: sample configs at `analytics-data-center/config/{docker.yaml,local.yaml}`; environment variables inject storage paths and SMTP/Kafka settings (see `Dockerfile.backend`).【F:analytics-data-center/config/docker.yaml†L1-L40】【F:Dockerfile.backend†L1-L36】
+- **Frontend**: Vite build served via Nginx in Docker; for local dev run `npm install && npm run dev` in `client/` (uses `/api` proxy).【F:client/package.json†L1-L45】【F:Dockerfile.frontend†L1-L39】
+- **Dependencies**: Go modules in `analytics-data-center` (see `go.mod`) cover Kafka, ClickHouse, Postgres drivers, and slog logging.【F:go.mod†L1-L35】
 
-The front‑end resides in `client/` and is built with React, TypeScript and Vite.
+## 7. Usage Examples
+- **Building a mart**: use the UI flow View Builder → Join Builder → Transformations → Summary to save a view definition with selected columns, joins, and transforms.【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L1-L117】【F:client/src/features/viewBuilder/TransformBuilderPage.tsx†L1-L118】
+- **Transformation mapping**: configure FieldTransform JSON like `{ "1": "Active", "0": "Inactive" }` or JSON mapping `[ { "type_field": "int", "mapping": { "json_field": "out_col" } } ]` to flatten nested payloads.【F:client/src/features/viewBuilder/TransformBuilderPage.tsx†L61-L117】【F:analytics-data-center/internal/domain/models/view.go†L22-L45】
+- **Column mismatch handling**: monitor `/api/column-mismatch-groups` in the UI to review open groups and apply rename/delete resolutions; backend will propagate changes to DWH and view definitions.【F:client/src/features/columnMismatches/ColumnMismatchListPage.tsx†L1-L82】【F:analytics-data-center/internal/services/analytics/column_mismatches.go†L17-L78】
+- **Notifications**: configure SMTP settings so the event worker sends table change alerts to administrators when schema drift is detected.【F:analytics-data-center/internal/services/smtrsender/smtp.go†L1-L65】
 
-## 📦 Configuration
-Runtime settings are defined in `analytics-data-center/config/local.yaml` and parsed by `internal/config`. The main entry point (`cmd/analytics-data-center/main.go`) launches both an HTTP server (port 8888) and a gRPC server (port specified in the config).
+## 8. Roadmap
+- Add additional join types beyond inner joins for broader modeling flexibility.【F:analytics-data-center/internal/domain/models/view.go†L34-L45】
+- Refine configuration loading to remove inline constructor wiring and align with config structs.【F:analytics-data-center/internal/app/app.go†L40-L47】
+- Implement periodic temp-table cleanup worker for long-running ETL sessions.【F:analytics-data-center/internal/services/analytics/auxiliary.go†L43-L47】
+- Inject DWH schema selection through config instead of hardcoded defaults.【F:analytics-data-center/internal/services/analytics/auxiliary.go†L375-L380】
+- Replace placeholder typings in UI summary components with strict models.【F:client/src/features/summary/components/SummaryActions.tsx†L1-L8】【F:client/src/features/summary/components/ViewPreview.tsx†L1-L8】
 
-## 🐳 Docker Compose
-The repository contains a `docker-compose.yml` that starts all required services:
-PostgreSQL, Kafka with Kafka Connect, the Go back‑end and the React front‑end served by Nginx. The back‑end container automatically runs migrations for the system database on start.
-Run the stack with:
+## 9. License
+MIT License.【F:LICENSE†L1-L5】
 
-```bash
-docker compose up --build
-```
+## 10. Contributors
+- Alexander Ardyzhev and InsightForge contributors (per project copyright).【F:LICENSE†L1-L4】
 
-After the build completes the UI will be available on [http://localhost:3000](http://localhost:3000).
+---
 
-If you already run PostgreSQL, Kafka and Kafka Connect externally, start only the application containers using:
+# Русский
 
-```bash
-docker compose -f docker-compose.app.yml up --build
-```
-Update `analytics-data-center/config/docker.yaml` with the addresses of your existing services.
+## 1. Обзор
+InsightForge — это конструктор DWH самообслуживания: пользователи создают витрины, подключают транзакционный PostgreSQL и в реальном времени загружают данные в аналитические хранилища (Postgres или ClickHouse). Платформа объединяет визуальный конструктор витрин, CDC на Debezium + Kafka, многопоточные ETL-воркеры и движок эволюции схем, который синхронизирует целевые схемы без остановки стриминга.
 
-## 🏗 Example view (JSON)
-See `README-ru.md` for a detailed JSON example of a view definition. You can also
-find the same file in `examples/user_basic_info.json`.
+## 2. Ключевые возможности
+- **Визуальный конструктор витрин**: выбор баз/схем/таблиц, отметка колонок, настройка join и имени витрины прямо в браузере (Chakra UI + Redux).【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L1-L117】【F:client/src/features/viewBuilder/JoinBuilderPage.tsx†L1-L118】
+- **Безопасная настройка join**: пошаговое добавление связей с явным выбором ключей, чтобы избегать неверных JOIN; метаданные сохраняются в модели витрины.【F:client/src/features/viewBuilder/JoinBuilderPage.tsx†L19-L117】【F:analytics-data-center/internal/domain/models/view.go†L34-L57】
+- **Движок трансформаций**: для каждой колонки доступны преобразования значений (FieldTransform) и разворачивание JSON в поля, поддерживается view_key для суррогатных ключей и конфликтов upsert.【F:client/src/features/viewBuilder/TransformBuilderPage.tsx†L1-L118】【F:analytics-data-center/internal/domain/models/view.go†L22-L45】【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L87-L175】
+- **Реалтайм CDC**: Debezium-коннекторы автоматически регистрируются для каждого OLTP, события через Kafka обрабатываются слушателем и применяются в DWH-таблицах витрин (upsert).【F:analytics-data-center/internal/app/app.go†L34-L105】【F:analytics-data-center/internal/services/debezium/registrar.go†L1-L98】【F:analytics-data-center/internal/services/cdc/listener.go†L1-L36】
+- **Поддержка PostgreSQL как источника**: сбор схем, пагинация таблиц, метаданные колонок, индексов и ограничений используются в UI и ETL-логике.【F:analytics-data-center/internal/storage/postgresOLTP/tables.go†L1-L89】【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L28-L75】【F:analytics-data-center/internal/storage/postgresOLTP/columns.go†L1-L93】
+- **Адаптеры DWH для Postgres и ClickHouse**: создание временных таблиц, индексов, ограничений, upsert/merge, настройка replica identity под каждый движок.【F:analytics-data-center/internal/app/app.go†L34-L85】【F:analytics-data-center/internal/lib/SQLGenerator/createTempTableQueryClickHouse.go†L1-L98】【F:analytics-data-center/internal/lib/SQLGenerator/createTempTableQueryPostgreSQL.go†L1-L103】
+- **Отслеживание эволюции схемы**: подсказки переименований на основе похожести строк и типов, автоматическое формирование групп рассинхронов, прием/отклонение изменений держит витрины в актуальном состоянии.【F:analytics-data-center/internal/lib/renameheuristics/rename.go†L1-L64】【F:analytics-data-center/internal/services/analytics/column_rename_suggestions.go†L1-L79】【F:analytics-data-center/internal/services/analytics/column_mismatches.go†L1-L77】
+- **Уведомления об удалении колонок**: группы рассинхронов отображаются в UI, решения (переименовать/удалить) автоматически вносятся в DWH и определения витрин; SMTP-воркер отправляет письма об изменениях таблиц.【F:client/src/features/columnMismatches/ColumnMismatchListPage.tsx†L1-L82】【F:analytics-data-center/internal/services/analytics/column_mismatches.go†L17-L78】【F:analytics-data-center/internal/services/smtrsender/smtp.go†L1-L65】
+- **Автомаппинг и подсказки**: эвристики переименования и проверки рассинхронов блокируют запись при нерешенных конфликтах, снижая риск дрейфа данных.【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L39-L74】【F:analytics-data-center/internal/lib/renameheuristics/rename.go†L17-L61】
+- **Многопоточность**: буферизированные очереди задач/событий, воркеры ETL и CDC обрабатывают десятки заданий и Kafka-сообщений параллельно.【F:analytics-data-center/internal/services/analytics/analytics.go†L43-L75】【F:analytics-data-center/internal/services/cdc/listener.go†L16-L33】
+- **Готовность к большим данным**: пагинация списка таблиц, генерация bulk-SQL для временных таблиц/merge и стриминговые upsert позволяют работать с широкими таблицами и высокочастотным CDC без пауз.【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L36-L73】【F:analytics-data-center/internal/lib/SQLGenerator/selectInsertDataQuery.go†L1-L93】
+- **GRPC + REST API**: HTTP-маршруты управляют витринами, задачами и метаданными БД; gRPC-сервер дает программный доступ к сервису аналитики.【F:analytics-data-center/internal/app/app.go†L87-L104】【F:analytics-data-center/internal/api/routes/routes.go†L1-L56】【F:analytics-data-center/internal/grpc/analytics-data-center/server.go†L1-L49】
 
-## 🔍 Schema fields
-- **`view_name`** – name of the resulting analytical view (table).
-- **`main_table`** – main table for joins; defaults to the first table if not set.
-- **`sources`** – list of data sources:
-  - **`name`** – source name (usually a database name or alias).
-  - **`schemas`** – schemas to read tables from.
-  - **`tables`** – participating tables:
-    - **`columns`** – columns inside a table:
-      - **`name`** – column name in the source table.
-      - **`type`** – data type.
-      - **`view_key`** – key column name in the resulting view used to update rows.
-      - **`is_update_key`** – whether column participates in update logic.
-      - **`is_primary_key`** – whether column forms the primary key of the view.
-      - **`is_nullable`** – whether NULL values are allowed.
-      - **`is_deleted`** – marks column as removed in the source but kept as NULL in the view.
-      - **`alias`** – custom name of the column in the view.
-      - **`reference`** – pointer to another table (`source`, `schema`, `table`, `column`).
-      - **`transform`** – transformation rules:
-        - **`type`** – transformation type (`JSON`, `FieldTransform`, ...).
-        - **`mode`** – transformation mode (e.g. `Mapping`).
-        - **`output_column`** – name of the generated column.
-        - **`mapping`** – transformation mapping:
-          - **`type_map`** – how mapping is described (`JSON` or `FieldTransform`).
-          - **`mapping`** – value-to-value mapping.
-          - **`alias_new_column_transform`** – new column name when creating from mapping.
-          - **`type_field`** – data type for JSON processing.
-          - **`mapping_json`** – list of mappings `json field → view column`.
-- **`joins`** – table joins:
-  - **`inner`** – inner join specification:
-    - **`source`**, **`schema`**, **`table`** – location of the joined table.
-    - **`column_first`** – column from the main table.
-    - **`column_second`** – column from the joined table.
+## 3. Архитектура
+- **UI**: React + Vite + Chakra UI, Redux-слайсы для настроек, конструктора витрин, задач, подсказок переименования и панели рассинхронов.【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L1-L117】【F:client/src/features/columnMismatches/ColumnMismatchListPage.tsx†L1-L82】
+- **Backend**: Go-сервисы управляют хранилищем схем, ETL, CDC и задачами с логированием через slog.【F:analytics-data-center/internal/app/app.go†L1-L105】【F:analytics-data-center/internal/services/analytics/analytics.go†L1-L75】
+- **Debezium Kafka Listener**: Kafka-консьюмер читает CDC-топики и отдает сообщения диспетчеру/сервису аналитики для применения в DWH.【F:analytics-data-center/internal/services/cdc/listener.go†L1-L36】【F:analytics-data-center/internal/services/cdc/dispatcher.go†L1-L75】
+- **Storage Adapters**: фабрика OLTP для PostgreSQL; DWH-адаптеры Postgres/ClickHouse с операциями временных таблиц, merge и управления колонками.【F:analytics-data-center/internal/storage/OLTPFactory.go†L1-L73】【F:analytics-data-center/internal/storage/postgresDWH/postgresDWH.go†L1-L110】【F:analytics-data-center/internal/storage/clickhouseDWH/clickhouseDWH.go†L1-L109】
+- **DWH Writers**: SQL-генераторы формируют запросы insert/merge, индексы, ограничения и создание view под конкретный движок и схему.【F:analytics-data-center/internal/lib/SQLGenerator/insertDataGenerateQuery.go†L1-L92】【F:analytics-data-center/internal/lib/SQLGenerator/createConstraintTableQuery.go†L1-L91】
+- **Движок эволюции схемы**: эвристики переименования, группы рассинхронов и хранилище подсказок блокируют опасные записи, обновляют определения витрин и DWH при переименовании/удалении колонок.【F:analytics-data-center/internal/lib/renameheuristics/rename.go†L17-L61】【F:analytics-data-center/internal/services/analytics/column_mismatches.go†L17-L78】
+- **Движок трансформаций**: трансформации FieldTransform/JSON применяются во время CDC, создавая производные колонки перед upsert в DWH.【F:analytics-data-center/internal/domain/models/view.go†L22-L45】【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L114-L175】
+- **Многопоточная обработка**: отдельные горутины для ETL-задач, Kafka-слушателя, SMTP-воркера и cron-подписок на топики управляют параллельными нагрузками.【F:analytics-data-center/internal/services/analytics/analytics.go†L57-L75】【F:analytics-data-center/internal/services/topicsubscription/cron.go†L1-L58】【F:analytics-data-center/internal/services/smtrsender/smtp.go†L18-L59】
 
-## 🧩 PostgreSQL CDC setup
-To enable CDC via Debezium for each OLTP PostgreSQL source:
-1. Enable WAL logging (`wal_level = logical`) and replication slots.
-2. Create a replication user and grant SELECT permissions.
-3. Set `REPLICA IDENTITY FULL` for tracked tables.
+## 4. Как работает
+1. **Создание витрины**: выберите БД/схему/таблицы, отметьте колонки, задайте join и имя витрины в UI; определение сохраняется в системное хранилище и доступно через API.【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L1-L117】【F:analytics-data-center/internal/domain/models/view.go†L1-L45】
+2. **Подключение к источнику**: backend регистрирует Debezium-коннекторы Postgres (slot/publication) по конфигу и дожидается статуса RUNNING.【F:analytics-data-center/internal/app/app.go†L45-L81】【F:analytics-data-center/internal/services/debezium/registrar.go†L1-L98】
+3. **Подключение к DWH**: выбирается Postgres или ClickHouse; адаптер создает временные таблицы, индексы и replica identity по необходимости.【F:analytics-data-center/internal/app/app.go†L34-L83】【F:analytics-data-center/internal/storage/clickhouseDWH/clickhouseDWH.go†L1-L109】
+4. **Обработка CDC**: Kafka-слушатель читает события, сервис аналитики мапит поля, применяет трансформации и выполняет upsert в таблицы витрин DWH.【F:analytics-data-center/internal/services/cdc/listener.go†L16-L34】【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L39-L175】
+5. **Детект изменений схемы**: перед записью сервис проверяет переименованные/отсутствующие колонки, формирует подсказки/группы рассинхронов и может приостановить запись до решения.【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L39-L82】【F:analytics-data-center/internal/services/analytics/column_rename_suggestions.go†L1-L70】
+6. **Автоматическое сопоставление**: эвристики переименования и view_key переназначают входные поля на целевые колонки, удерживая конфликтные ключи для upsert.【F:analytics-data-center/internal/lib/renameheuristics/rename.go†L17-L61】【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L114-L151】
+7. **Трансформации**: FieldTransform сопоставляет значения; JSON-разворачивание парсит вложенные payload в плоские колонки с сохранением типов.【F:client/src/features/viewBuilder/TransformBuilderPage.tsx†L59-L117】【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L133-L175】
+8. **Применение обновлений**: успешная загрузка обновляет таблицы DWH (имя = имя витрины) и статусы задач; временные таблицы мёржатся и очищаются по логике движка.【F:analytics-data-center/internal/services/analytics/analytics.go†L91-L159】【F:analytics-data-center/internal/lib/SQLGenerator/selectInsertDataQuery.go†L1-L93】
 
-```sql
-ALTER TABLE public.users REPLICA IDENTITY FULL;
-ALTER TABLE public.profiles REPLICA IDENTITY FULL;
-```
+## 5. Поддерживаемые базы данных
+- **OLTP-источники**: PostgreSQL через Debezium-коннекторы.【F:analytics-data-center/internal/services/debezium/registrar.go†L1-L98】
+- **DWH-цели**: PostgreSQL и ClickHouse с адаптерами и SQL-генераторами под каждую СУБД.【F:analytics-data-center/internal/app/app.go†L34-L83】【F:analytics-data-center/internal/lib/SQLGenerator/createViewQueryClickHouse.go†L1-L92】
 
-## 🛰 Kafka event flow
-During initialization the `cdc-listener` component connects to your Kafka cluster. Debezium via Kafka Connect captures changes from the OLTP database and publishes them to topics. Once a new schema is created in the `Schemas` table, the application automatically subscribes to the relevant topics and starts consuming events.
+## 6. Установка
+- **Docker Compose (рекомендуется)**: `docker-compose up --build` поднимает Postgres, Zookeeper, Kafka, Debezium Connect, backend (порты 8888/13890), frontend (порт 3000) и Kafdrop для просмотра топиков.【F:docker-compose.yml†L1-L63】
+- **Настройки backend**: примеры конфигов `analytics-data-center/config/{docker.yaml,local.yaml}`; переменные окружения задают пути хранилищ, SMTP и Kafka (см. `Dockerfile.backend`).【F:analytics-data-center/config/docker.yaml†L1-L40】【F:Dockerfile.backend†L1-L36】
+- **Frontend**: сборка Vite отдаётся через Nginx в Docker; для локальной разработки выполните `npm install && npm run dev` в `client/` (используется прокси на `/api`).【F:client/package.json†L1-L45】【F:Dockerfile.frontend†L1-L39】
+- **Зависимости**: Go-модули в `analytics-data-center` (см. `go.mod`) включают драйверы Kafka, ClickHouse, Postgres и slog-логирование.【F:go.mod†L1-L35】
 
-The listener first reads all existing messages, so after enabling a schema there may be a short delay while the backlog is processed. As offsets catch up, new changes arrive almost in real time. Kafka guarantees ordered delivery within a partition and the consumer tracks offsets to avoid missing updates.
+## 7. Примеры использования
+- **Сборка витрины**: пройдите UI-поток «Конструктор → Join → Трансформации → Сводка», чтобы сохранить определение с выбранными колонками, joins и трансформациями.【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L1-L117】【F:client/src/features/viewBuilder/TransformBuilderPage.tsx†L1-L118】
+- **Настройка трансформаций**: задайте FieldTransform JSON вида `{ "1": "Active", "0": "Inactive" }` или JSON-мэппинг `[ { "type_field": "int", "mapping": { "json_field": "out_col" } } ]` для разворота вложенных данных.【F:client/src/features/viewBuilder/TransformBuilderPage.tsx†L61-L117】【F:analytics-data-center/internal/domain/models/view.go†L22-L45】
+- **Работа с рассинхронами**: следите за `/api/column-mismatch-groups` в UI, чтобы просматривать открытые группы и применять решения; backend синхронизирует изменения с DWH и определениями витрин.【F:client/src/features/columnMismatches/ColumnMismatchListPage.tsx†L1-L82】【F:analytics-data-center/internal/services/analytics/column_mismatches.go†L17-L78】
+- **Уведомления**: настройте SMTP, чтобы воркер отправлял письма администратору при обнаружении изменений в таблицах или колонках.【F:analytics-data-center/internal/services/smtrsender/smtp.go†L1-L65】
 
+## 8. Дорожная карта
+- Добавить другие типы join помимо inner для более гибкого моделирования.【F:analytics-data-center/internal/domain/models/view.go†L34-L45】
+- Упорядочить загрузку конфигурации и убрать ручное связывание зависимостей в конструкторе приложения.【F:analytics-data-center/internal/app/app.go†L40-L47】
+- Реализовать периодический воркер очистки временных таблиц для долгих ETL-сессий.【F:analytics-data-center/internal/services/analytics/auxiliary.go†L43-L47】
+- Параметризовать выбор схемы DWH через конфиг вместо захардкоженных значений.【F:analytics-data-center/internal/services/analytics/auxiliary.go†L375-L380】
+- Заменить временные типы any в UI-«Сводке» строгими моделями.【F:client/src/features/summary/components/SummaryActions.tsx†L1-L8】【F:client/src/features/summary/components/ViewPreview.tsx†L1-L8】
 
-InsightForge is licensed under the MIT License.
+## 9. Лицензия
+MIT License.【F:LICENSE†L1-L5】
+
+## 10. Контрибьюторы
+- Александр Ардышев и команда InsightForge (по данным лицензии проекта).【F:LICENSE†L1-L4】
+
+---
+
+# 中文
+
+## 1. 概述
+InsightForge 是一款自助式数仓构建器，帮助团队在浏览器中设计数据集市、连接事务型 PostgreSQL 源，并将数据实时写入分析型存储（Postgres 或 ClickHouse）。平台集成可视化集市构建器、Debezium + Kafka CDC 管道、多线程 ETL 工人以及能够无停机同步目标模式的自适应 Schema 演进引擎。
+
+## 2. 关键功能
+- **可视化集市构建器 UI**：在前端选择数据库/模式/表、勾选列、配置 join 并命名视图（Chakra UI + Redux 状态）。【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L1-L117】【F:client/src/features/viewBuilder/JoinBuilderPage.tsx†L1-L118】
+- **安全的 join 定义**：引导式配置 join，显式选择键以避免错误的 JOIN；元数据写入视图模型。【F:client/src/features/viewBuilder/JoinBuilderPage.tsx†L19-L117】【F:analytics-data-center/internal/domain/models/view.go†L34-L57】
+- **转换引擎**：按列支持 FieldTransform（值映射）与 JSON 展开，并支持 view_key 处理冲突键和衍生列。【F:client/src/features/viewBuilder/TransformBuilderPage.tsx†L1-L118】【F:analytics-data-center/internal/domain/models/view.go†L22-L45】【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L87-L175】
+- **实时 CDC**：为每个 OLTP 自动注册 Debezium 连接器，经 Kafka 传递并由监听器消费，最终以 upsert 写入 DWH 集市表。【F:analytics-data-center/internal/app/app.go†L34-L105】【F:analytics-data-center/internal/services/debezium/registrar.go†L1-L98】【F:analytics-data-center/internal/services/cdc/listener.go†L1-L36】
+- **PostgreSQL 源支持**：获取模式、分页浏览大表列表、列/索引/约束元数据以驱动 UI 与 ETL 逻辑。【F:analytics-data-center/internal/storage/postgresOLTP/tables.go†L1-L89】【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L28-L75】【F:analytics-data-center/internal/storage/postgresOLTP/columns.go†L1-L93】
+- **Postgres 与 ClickHouse DWH 适配器**：创建临时表、索引与约束，执行 upsert/merge，并在需要时配置 replica identity，兼容各引擎。【F:analytics-data-center/internal/app/app.go†L34-L85】【F:analytics-data-center/internal/lib/SQLGenerator/createTempTableQueryClickHouse.go†L1-L98】【F:analytics-data-center/internal/lib/SQLGenerator/createTempTableQueryPostgreSQL.go†L1-L103】
+- **Schema 演进检测**：基于相似度与类型的重命名建议、自动列不一致分组，接受/拒绝流程确保集市与源表保持一致。【F:analytics-data-center/internal/lib/renameheuristics/rename.go†L1-L64】【F:analytics-data-center/internal/services/analytics/column_rename_suggestions.go†L1-L79】【F:analytics-data-center/internal/services/analytics/column_mismatches.go†L1-L77】
+- **列删除与通知流程**：UI 展示不一致分组，支持重命名/删除并同步到 DWH 与视图定义；SMTP 工人会在表变化时向管理员发送邮件提醒。【F:client/src/features/columnMismatches/ColumnMismatchListPage.tsx†L1-L82】【F:analytics-data-center/internal/services/analytics/column_mismatches.go†L17-L78】【F:analytics-data-center/internal/services/smtrsender/smtp.go†L1-L65】
+- **自动映射与智能建议**：重命名启发式与不一致检查在存在未解决建议时阻断写入，减少数据漂移风险。【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L39-L74】【F:analytics-data-center/internal/lib/renameheuristics/rename.go†L17-L61】
+- **多线程处理**：缓冲任务/事件队列，ETL 与 CDC 工人并行处理大量任务和 Kafka 消息。【F:analytics-data-center/internal/services/analytics/analytics.go†L43-L75】【F:analytics-data-center/internal/services/cdc/listener.go†L16-L33】
+- **大数据准备度**：表清单分页、批量 SQL 生成与流式 upsert 支撑宽表和高吞吐 CDC，而无需暂停摄取。【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L36-L73】【F:analytics-data-center/internal/lib/SQLGenerator/selectInsertDataQuery.go†L1-L93】
+- **GRPC + REST API**：HTTP 路由提供视图/任务/数据库信息管理；gRPC 服务器暴露分析服务以供集成调用。【F:analytics-data-center/internal/app/app.go†L87-L104】【F:analytics-data-center/internal/api/routes/routes.go†L1-L56】【F:analytics-data-center/internal/grpc/analytics-data-center/server.go†L1-L49】
+
+## 3. 架构
+- **UI**：基于 React + Vite + Chakra UI，使用 Redux 管理设置、集市构建、任务、重命名建议与列不一致面板状态。【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L1-L117】【F:client/src/features/columnMismatches/ColumnMismatchListPage.tsx†L1-L82】
+- **后端**：Go 服务负责模式存储、ETL、CDC 处理与任务管理，并使用 slog 结构化日志。【F:analytics-data-center/internal/app/app.go†L1-L105】【F:analytics-data-center/internal/services/analytics/analytics.go†L1-L75】
+- **Debezium Kafka Listener**：Kafka 消费者轮询 CDC 主题并分发给分析服务写入 DWH。【F:analytics-data-center/internal/services/cdc/listener.go†L1-L36】【F:analytics-data-center/internal/services/cdc/dispatcher.go†L1-L75】
+- **存储适配器**：PostgreSQL OLTP 工厂；Postgres/ClickHouse DWH 适配器实现临时表、合并及列操作。【F:analytics-data-center/internal/storage/OLTPFactory.go†L1-L73】【F:analytics-data-center/internal/storage/postgresDWH/postgresDWH.go†L1-L110】【F:analytics-data-center/internal/storage/clickhouseDWH/clickhouseDWH.go†L1-L109】
+- **DWH 写入器**：SQL 生成器根据引擎与模式定义构造 insert/merge、索引、约束与视图创建语句。【F:analytics-data-center/internal/lib/SQLGenerator/insertDataGenerateQuery.go†L1-L92】【F:analytics-data-center/internal/lib/SQLGenerator/createConstraintTableQuery.go†L1-L91】
+- **Schema 演进引擎**：重命名启发式、列不一致分组与建议存储阻止不安全写入，并在重命名/删除时更新视图和 DWH。【F:analytics-data-center/internal/lib/renameheuristics/rename.go†L17-L61】【F:analytics-data-center/internal/services/analytics/column_mismatches.go†L17-L78】
+- **转换引擎**：FieldTransform/JSON 转换在 CDC 阶段应用，先生成衍生列再 upsert 到 DWH。【F:analytics-data-center/internal/domain/models/view.go†L22-L45】【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L114-L175】
+- **多线程引擎**：ETL 任务、Kafka 监听、SMTP 发送与主题订阅 cron 各用 goroutine 处理并发工作负载。【F:analytics-data-center/internal/services/analytics/analytics.go†L57-L75】【F:analytics-data-center/internal/services/topicsubscription/cron.go†L1-L58】【F:analytics-data-center/internal/services/smtrsender/smtp.go†L18-L59】
+
+## 4. 工作流程
+1. **创建集市**：在 UI 中选择数据库/模式/表并勾选列、配置 join 与视图名；定义被保存到系统存储并通过 API 提供。【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L1-L117】【F:analytics-data-center/internal/domain/models/view.go†L1-L45】
+2. **连接源库**：后端按配置为 Postgres 注册 Debezium 连接器（slot/publication）并等待 RUNNING。【F:analytics-data-center/internal/app/app.go†L45-L81】【F:analytics-data-center/internal/services/debezium/registrar.go†L1-L98】
+3. **连接 DWH**：选择 Postgres 或 ClickHouse；适配器创建临时表、索引并在需要时开启 replica identity。【F:analytics-data-center/internal/app/app.go†L34-L83】【F:analytics-data-center/internal/storage/clickhouseDWH/clickhouseDWH.go†L1-L109】
+4. **CDC 处理**：Kafka 监听器消费事件，分析服务映射字段、执行转换并以 upsert 写入以视图名命名的 DWH 表。【F:analytics-data-center/internal/services/cdc/listener.go†L16-L34】【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L39-L175】
+5. **Schema 变更检测**：写入前检查重命名/缺失列，生成建议或不一致分组，必要时暂停写入直至解决。【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L39-L82】【F:analytics-data-center/internal/services/analytics/column_rename_suggestions.go†L1-L70】
+6. **自动映射**：重命名启发式与 view_key 将输入字段重新映射到目标列，保持 upsert 冲突键一致。【F:analytics-data-center/internal/lib/renameheuristics/rename.go†L17-L61】【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L114-L151】
+7. **转换执行**：FieldTransform 对值做映射；JSON 展开解析嵌套载荷为扁平列并写入目标表。【F:client/src/features/viewBuilder/TransformBuilderPage.tsx†L59-L117】【F:analytics-data-center/internal/services/analytics/createRowAfterListenEvent.go†L133-L175】
+8. **更新传播**：成功摄取后更新 DWH 表（表名即视图名）与任务状态；临时表按引擎逻辑 merge/清理。【F:analytics-data-center/internal/services/analytics/analytics.go†L91-L159】【F:analytics-data-center/internal/lib/SQLGenerator/selectInsertDataQuery.go†L1-L93】
+
+## 5. 支持的数据库
+- **OLTP 源**：通过 Debezium 连接器的 PostgreSQL。【F:analytics-data-center/internal/services/debezium/registrar.go†L1-L98】
+- **DWH 目标**：PostgreSQL 与 ClickHouse，均有专用适配器与 SQL 生成器。【F:analytics-data-center/internal/app/app.go†L34-L83】【F:analytics-data-center/internal/lib/SQLGenerator/createViewQueryClickHouse.go†L1-L92】
+
+## 6. 安装
+- **推荐：Docker Compose**：执行 `docker-compose up --build` 启动 Postgres、Zookeeper、Kafka、Debezium Connect、后端（端口 8888/13890）、前端（端口 3000）以及 Kafdrop。【F:docker-compose.yml†L1-L63】
+- **后端配置**：示例配置位于 `analytics-data-center/config/{docker.yaml,local.yaml}`；环境变量用于注入存储路径、SMTP 与 Kafka 设置（见 `Dockerfile.backend`）。【F:analytics-data-center/config/docker.yaml†L1-L40】【F:Dockerfile.backend†L1-L36】
+- **前端**：Vite 构建通过 Docker 内的 Nginx 提供；本地开发在 `client/` 运行 `npm install && npm run dev`（代理 `/api`）。【F:client/package.json†L1-L45】【F:Dockerfile.frontend†L1-L39】
+- **依赖**：`analytics-data-center` 的 Go 模块（参见 `go.mod`）涵盖 Kafka、ClickHouse、Postgres 驱动与 slog 日志库。【F:go.mod†L1-L35】
+
+## 7. 使用示例
+- **创建集市**：按 UI 流程「构建器 → Join → 转换 → 汇总」保存包含列、join 与转换的视图定义。【F:client/src/features/viewBuilder/ViewBuilderPage.tsx†L1-L117】【F:client/src/features/viewBuilder/TransformBuilderPage.tsx†L1-L118】
+- **转换配置**：配置 FieldTransform JSON（如 `{ "1": "Active", "0": "Inactive" }`）或 JSON 映射（如 `[ { "type_field": "int", "mapping": { "json_field": "out_col" } } ]`）以展开嵌套字段。【F:client/src/features/viewBuilder/TransformBuilderPage.tsx†L61-L117】【F:analytics-data-center/internal/domain/models/view.go†L22-L45】
+- **列不一致处理**：在 UI 的 `/api/column-mismatch-groups` 查看未解决分组并执行重命名/删除，后端会同步更新 DWH 与视图定义。【F:client/src/features/columnMismatches/ColumnMismatchListPage.tsx†L1-L82】【F:analytics-data-center/internal/services/analytics/column_mismatches.go†L17-L78】
+- **通知**：配置 SMTP，事件工人会在检测到表或列变化时向管理员发送邮件提醒。【F:analytics-data-center/internal/services/smtrsender/smtp.go†L1-L65】
+
+## 8. 路线图
+- 增加除 inner 以外的 join 类型，提升建模灵活性。【F:analytics-data-center/internal/domain/models/view.go†L34-L45】
+- 优化配置加载，移除应用构造器中的手动依赖绑定。【F:analytics-data-center/internal/app/app.go†L40-L47】
+- 实现定期清理长时间 ETL 会话产生的临时表的 worker。【F:analytics-data-center/internal/services/analytics/auxiliary.go†L43-L47】
+- 通过配置注入 DWH schema 选择，替代硬编码默认值。【F:analytics-data-center/internal/services/analytics/auxiliary.go†L375-L380】
+- 用严格模型替换 UI 汇总组件中的 `any` 占位类型。【F:client/src/features/summary/components/SummaryActions.tsx†L1-L8】【F:client/src/features/summary/components/ViewPreview.tsx†L1-L8】
+
+## 9. 许可证
+MIT License.【F:LICENSE†L1-L5】
+
+## 10. 贡献者
+- Alexander Ardyzhev 及 InsightForge 团队（依据项目许可证声明）。【F:LICENSE†L1-L4】
