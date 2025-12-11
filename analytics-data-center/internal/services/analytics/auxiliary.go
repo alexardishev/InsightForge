@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
-	"runtime"
 	"strings"
 	"sync"
 )
@@ -114,38 +113,57 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 	var wg sync.WaitGroup
 	var hasError bool
 	var mu sync.Mutex
-	runtime.GOMAXPROCS(2)
+
+	// Максимум одновременно работающих горутин
+	const maxConcurrentWorkers = 2
+	sem := make(chan struct{}, maxConcurrentWorkers)
 
 	for _, tempTableInsert := range *countData {
 		log.Info("запуск вставки и подготовки данных", slog.String("Таблица", tempTableInsert.TableName))
 		tempTbl = append(tempTbl, tempTableInsert.TempTableName)
+
 		oltpStorage, err := a.OLTPFactory.GetOLTPStorage(ctx, tempTableInsert.DataBaseName)
 		if err != nil {
 			log.Error("Невозможно подключиться к OLTP хранилищу", slog.String("error", err.Error()))
 			return false, err
 		}
-		procCount := a.calculateWorkerCount(tempTableInsert.Count)
-		if runtime.NumCPU() <= 1 {
-			procCount = 1
-		}
+
 		if tempTableInsert.Count <= 0 {
 			continue
 		}
-		chunkSize := (tempTableInsert.Count + procCount - 1) / procCount // Округление вверх
+
+		procCount := a.calculateWorkerCount(tempTableInsert.Count)
+		if procCount < 1 {
+			procCount = 1
+		}
+
+		chunkSize := (tempTableInsert.Count + procCount - 1) / procCount // округление вверх
+
 		for i := int64(0); i < procCount; i++ {
 			start := i * chunkSize
 			end := (i + 1) * chunkSize
 			if end > tempTableInsert.Count {
 				end = tempTableInsert.Count
 			}
+			if start >= end {
+				continue
+			}
+
 			tableName := tempTableInsert.TableName
 			sourceName := tempTableInsert.DataBaseName
 			tempTableName := tempTableInsert.TempTableName
 
 			wg.Add(1)
-			go func(start, end int64, tableName, sourceName string, tempTableName string) {
-				log.Info("Горутина запущена", slog.String("Для таблицы", tableName))
+
+			sem <- struct{}{}
+
+			go func(start, end int64, tableName, sourceName, tempTableName string, oltpStorage storage.OLTPDB) {
 				defer wg.Done()
+
+				defer func() { <-sem }()
+
+				log.Info("Горутина запущена", slog.String("Для таблицы", tableName))
+
 				query, err := sqlgenerator.GenerateSelectInsertDataQuery(*viewSchema, start, end, tableName, log.Logger, a.OLTPDbName)
 				if err != nil {
 					log.Error("ошибка генерации SQL", slog.String("error", err.Error()))
@@ -154,6 +172,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 					mu.Unlock()
 					return
 				}
+
 				insertData, err := oltpStorage.SelectDataToInsert(ctx, query.Query)
 				if err != nil {
 					log.Error("ошибка при SELECT из OLTP", slog.String("error", err.Error()))
@@ -162,8 +181,10 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 					mu.Unlock()
 					return
 				}
-				log.Info("получены данные", slog.Any("rows", len(insertData)))
+
+				log.Info("получены данные", slog.Int("rows", len(insertData)))
 				log.Info("Запрос для таблицы", slog.String("таблица", tempTableName))
+
 				queryInsert, err := sqlgenerator.GenerateInsertDataQuery(*viewSchema, insertData, tempTableName, log.Logger, a.DWHDbName)
 				if err != nil {
 					log.Error("ошибка при генерации INSERT запроса", slog.String("error", err.Error()))
@@ -174,28 +195,30 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 				}
 
 				log.Info("Запрос готов")
+
 				err = a.DWHProvider.InsertDataToDWH(ctx, queryInsert.Query)
 				if err != nil {
-					log.Error("ошибка при вставки данных в таблицу", slog.String("error", err.Error()))
+					log.Error("ошибка при вставке данных в таблицу", slog.String("error", err.Error()))
 					mu.Lock()
 					hasError = true
 					mu.Unlock()
 					return
 				}
+
 				log.Info("Вставка данных завершена")
 
-			}(start, end, tableName, sourceName, tempTableName)
+			}(start, end, tableName, sourceName, tempTableName, oltpStorage)
 
 		}
-
 	}
+
 	wg.Wait()
 
 	if hasError {
 		a.DeleteTempTables(ctx, tempTbl)
 		return false, fmt.Errorf("одна или несколько горутин завершились с ошибкой")
 	}
-	// TO DO сделать возможность указывать схему гибко через YAML
+
 	viewJoin, err := a.prepareViewJoin(ctx, tempTbl, "public")
 	if err != nil {
 		a.DeleteTempTables(ctx, tempTbl)
@@ -216,6 +239,8 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 
 func (a *AnalyticsDataCenterService) calculateWorkerCount(totalCount int64) int64 {
 	switch {
+	case totalCount > 30_000000:
+		return 16
 	case totalCount > 500_000:
 		return 8
 	case totalCount > 200_000:
