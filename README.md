@@ -1,7 +1,3 @@
-Вот переписанный README с обычными GitHub-ссылками вместо `【F:...†L..-L..】`. Можешь просто сохранить это как `README.md` / `README-ru.md` / `README-zh.md` (или вытащить нужные куски).
-
----
-
 # English
 
 ## 1. Overview
@@ -241,5 +237,3 @@ MIT License. ([LICENSE](https://github.com/alexardishev/InsightForge/blob/master
 * Alexander Ardyzhev 及 InsightForge 团队（依据项目许可证声明）。 ([LICENSE](https://github.com/alexardishev/InsightForge/blob/master/LICENSE#L1-L4))
 
 ---
-
-Если хочешь, я могу отдельно вынести, например, только английскую версию или только русскую — чтобы проще было вставлять в разные файлы (`README.md`, `README-ru.md`, `README-zh.md`).
