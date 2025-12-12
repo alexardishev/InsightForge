@@ -94,7 +94,7 @@ func (c *Cron) refresh() {
 		c.log.Warn("failed to list topics for subscription", slog.String("error", err.Error()))
 		return
 	}
-
+	c.log.Info("topic subscription refresh", slog.Int("count", len(topics)))
 	if len(topics) == 0 {
 		c.log.Warn("no topics found for subscription refresh")
 		return

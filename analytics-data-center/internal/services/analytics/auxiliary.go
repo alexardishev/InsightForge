@@ -103,22 +103,29 @@ func (a *AnalyticsDataCenterService) getCountInsertData(ctx context.Context, vie
 
 	return sliceCountInsertData, nil
 }
-
 func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, countData *[]models.CountInsertData, viewSchema *models.View) (bool, error) {
 	const op = "analytics.prepareDataForInsert"
-	log := a.log.With(
-		slog.String("op", op),
-	)
-	var tempTbl []string
-	var wg sync.WaitGroup
-	var hasError bool
-	var mu sync.Mutex
+	log := a.log.With(slog.String("op", op))
 
-	// Максимум одновременно работающих горутин
-	const maxConcurrentWorkers = 2
+	var (
+		tempTbl  []string
+		wg       sync.WaitGroup
+		hasError bool
+		mu       sync.Mutex
+	)
+
+	// максимум 3 горутины одновременно
+	const maxConcurrentWorkers = 3
 	sem := make(chan struct{}, maxConcurrentWorkers)
 
+	// размер чанка (универсально для Postgres/ClickHouse)
+	const chunkLimit int64 = 500_000
+
 	for _, tempTableInsert := range *countData {
+		if tempTableInsert.Count <= 0 {
+			continue
+		}
+
 		log.Info("запуск вставки и подготовки данных", slog.String("Таблица", tempTableInsert.TableName))
 		tempTbl = append(tempTbl, tempTableInsert.TempTableName)
 
@@ -128,43 +135,36 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 			return false, err
 		}
 
-		if tempTableInsert.Count <= 0 {
-			continue
-		}
+		tableName := tempTableInsert.TableName
+		sourceName := tempTableInsert.DataBaseName
+		tempTableName := tempTableInsert.TempTableName
+		total := tempTableInsert.Count
 
-		procCount := a.calculateWorkerCount(tempTableInsert.Count)
-		if procCount < 1 {
-			procCount = 1
-		}
-
-		chunkSize := (tempTableInsert.Count + procCount - 1) / procCount // округление вверх
-
-		for i := int64(0); i < procCount; i++ {
-			start := i * chunkSize
-			end := (i + 1) * chunkSize
-			if end > tempTableInsert.Count {
-				end = tempTableInsert.Count
+		// идём по таблице батчами по 500к (или меньше на хвосте)
+		for start := int64(0); start < total; start += chunkLimit {
+			end := start + chunkLimit
+			if end > total {
+				end = total
 			}
-			if start >= end {
+			limit := end - start
+			if limit <= 0 {
 				continue
 			}
 
-			tableName := tempTableInsert.TableName
-			sourceName := tempTableInsert.DataBaseName
-			tempTableName := tempTableInsert.TempTableName
-
 			wg.Add(1)
+			sem <- struct{}{} // занять слот
 
-			sem <- struct{}{}
-
-			go func(start, end int64, tableName, sourceName, tempTableName string, oltpStorage storage.OLTPDB) {
+			go func(start, limit int64, tableName, sourceName, tempTableName string, oltpStorage storage.OLTPDB) {
 				defer wg.Done()
+				defer func() { <-sem }() // освободить слот
 
-				defer func() { <-sem }()
+				log.Info("Горутина запущена",
+					slog.String("Для таблицы", tableName),
+					slog.Int64("offset", start),
+					slog.Int64("limit", limit),
+				)
 
-				log.Info("Горутина запущена", slog.String("Для таблицы", tableName))
-
-				query, err := sqlgenerator.GenerateSelectInsertDataQuery(*viewSchema, start, end, tableName, log.Logger, a.OLTPDbName)
+				query, err := sqlgenerator.GenerateSelectInsertDataQuery(*viewSchema, start, start+limit, tableName, log.Logger, a.OLTPDbName)
 				if err != nil {
 					log.Error("ошибка генерации SQL", slog.String("error", err.Error()))
 					mu.Lock()
@@ -183,7 +183,6 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 				}
 
 				log.Info("получены данные", slog.Int("rows", len(insertData)))
-				log.Info("Запрос для таблицы", slog.String("таблица", tempTableName))
 
 				queryInsert, err := sqlgenerator.GenerateInsertDataQuery(*viewSchema, insertData, tempTableName, log.Logger, a.DWHDbName)
 				if err != nil {
@@ -194,8 +193,6 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 					return
 				}
 
-				log.Info("Запрос готов")
-
 				err = a.DWHProvider.InsertDataToDWH(ctx, queryInsert.Query)
 				if err != nil {
 					log.Error("ошибка при вставке данных в таблицу", slog.String("error", err.Error()))
@@ -205,35 +202,38 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 					return
 				}
 
-				log.Info("Вставка данных завершена")
-
-			}(start, end, tableName, sourceName, tempTableName, oltpStorage)
-
+				log.Info("Вставка данных завершена",
+					slog.String("таблица", tempTableName),
+					slog.Int64("offset", start),
+					slog.Int64("limit", limit),
+				)
+			}(start, limit, tableName, sourceName, tempTableName, oltpStorage)
 		}
 	}
 
 	wg.Wait()
 
 	if hasError {
-		a.DeleteTempTables(ctx, tempTbl)
+		_ = a.DeleteTempTables(ctx, tempTbl)
 		return false, fmt.Errorf("одна или несколько горутин завершились с ошибкой")
 	}
 
 	viewJoin, err := a.prepareViewJoin(ctx, tempTbl, "public")
 	if err != nil {
-		a.DeleteTempTables(ctx, tempTbl)
+		_ = a.DeleteTempTables(ctx, tempTbl)
 		log.Error("Ошибка", slog.String("error", err.Error()))
 		return false, err
 	}
+
 	query, err := sqlgenerator.CreateViewQuery(*viewSchema, *viewJoin, log.Logger, a.DWHDbName)
 	if err != nil {
-		a.DeleteTempTables(ctx, tempTbl)
+		_ = a.DeleteTempTables(ctx, tempTbl)
 		log.Error("Ошибка", slog.String("error", err.Error()))
 		return false, err
 	}
 
 	a.DWHProvider.MergeTempTables(ctx, query.Query)
-	a.DeleteTempTables(ctx, tempTbl)
+	_ = a.DeleteTempTables(ctx, tempTbl)
 	return true, nil
 }
 
