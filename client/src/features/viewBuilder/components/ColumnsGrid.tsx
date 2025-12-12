@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Box,
   Text,
+  Button,
   Accordion,
   AccordionItem,
   AccordionButton,
@@ -18,20 +19,23 @@ import {
 interface SelectedColumn {
   table: string;
   column: string;
+  isUpdateKey?: boolean;
 }
 
 interface Props {
   selectedTables: string[];
   selectedSchemaData: any;
   selectedColumns: SelectedColumn[];
-  onToggleColumn: (table: string, column: string) => void;
+  onToggleColumn: (table: string, column: any) => void;
+  onSetTableColumns: (table: string, columns: any[]) => void;
 }
 
 const ColumnsList: React.FC<Props> = ({
   selectedTables,
   selectedSchemaData,
   selectedColumns,
-  onToggleColumn
+  onToggleColumn,
+  onSetTableColumns,
 }) => {
   const panelBg = useColorModeValue('gray.50', 'gray.700');
   const panelText = useColorModeValue('gray.800', 'gray.100');
@@ -47,6 +51,9 @@ const ColumnsList: React.FC<Props> = ({
       <Accordion allowMultiple>
         {selectedTables.map((tableName) => {
           const tableData = selectedSchemaData.tables?.find((t: any) => t.name === tableName);
+          const allSelected = tableData?.columns?.every((col: any) =>
+            selectedColumns.some((c) => c.table === tableName && c.column === col.name),
+          );
           return (
             <AccordionItem key={tableName} border="1px solid" borderColor={border} borderRadius="md" mb={3}>
               <h2>
@@ -58,6 +65,18 @@ const ColumnsList: React.FC<Props> = ({
                 </AccordionButton>
               </h2>
               <AccordionPanel pb={4} bg={panelBg} color={panelText}>
+                <HStack justify="space-between" w="100%" mb={3}>
+                  <Text fontWeight="bold">Колонки</Text>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      onSetTableColumns(tableName, allSelected ? [] : tableData?.columns || [])
+                    }
+                  >
+                    {allSelected ? 'Снять все' : 'Выбрать все'}
+                  </Button>
+                </HStack>
                 <VStack align="start" spacing={4}>
                   {tableData?.columns?.map((col: any, index: number) => (
                     <Box key={index} w="100%">
@@ -67,7 +86,7 @@ const ColumnsList: React.FC<Props> = ({
                             isChecked={selectedColumns.some(
                               (c) => c.table === tableName && c.column === col.name
                             )}
-                            onChange={() => onToggleColumn(tableName, col.name)}
+                            onChange={() => onToggleColumn(tableName, col)}
                           />
                           <Text fontWeight="medium">{col.name}</Text>
                         </HStack>

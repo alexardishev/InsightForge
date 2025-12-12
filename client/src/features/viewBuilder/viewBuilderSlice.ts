@@ -4,6 +4,7 @@ interface SelectedColumn {
   table: string;
   column: string;
   viewKey?: string;
+  isUpdateKey?: boolean;
 }
 
 interface JoinSide {
@@ -83,16 +84,55 @@ const viewBuilderSlice = createSlice({
         state.selectedTables.push(table);
       }
     },
-    toggleColumn(state, action: PayloadAction<SelectedColumn>) {
-      const { table, column } = action.payload;
+    toggleColumn(
+      state,
+      action: PayloadAction<
+        SelectedColumn & { isPrimaryKey?: boolean; isUpdateKey?: boolean }
+      >,
+    ) {
+      const { table, column, isPrimaryKey, isUpdateKey } = action.payload;
       const idx = state.selectedColumns.findIndex(
         (c) => c.table === table && c.column === column,
       );
       if (idx !== -1) {
         state.selectedColumns.splice(idx, 1);
       } else {
-        state.selectedColumns.push({ table, column });
+        state.selectedColumns.push({
+          table,
+          column,
+          isUpdateKey: isUpdateKey ?? isPrimaryKey ?? false,
+        });
       }
+    },
+    setTableColumns(
+      state,
+      action: PayloadAction<{
+        table: string;
+        columns: { name: string; isPrimaryKey?: boolean; isUpdateKey?: boolean }[];
+      }>,
+    ) {
+      const { table, columns } = action.payload;
+      const otherTables = state.selectedColumns.filter((c) => c.table !== table);
+      const existingMap = new Map(
+        state.selectedColumns
+          .filter((c) => c.table === table)
+          .map((c) => [c.column, c]),
+      );
+
+      const updatedColumns = columns.map((col) => {
+        const existing = existingMap.get(col.name);
+        const isUpdate =
+          existing?.isUpdateKey ?? col.isUpdateKey ?? col.isPrimaryKey ?? false;
+
+        return {
+          table,
+          column: col.name,
+          viewKey: existing?.viewKey,
+          isUpdateKey: isUpdate,
+        } as SelectedColumn;
+      });
+
+      state.selectedColumns = [...otherTables, ...updatedColumns];
     },
     setViewKey(
       state,
@@ -104,6 +144,22 @@ const viewBuilderSlice = createSlice({
       );
       if (col) {
         col.viewKey = viewKey || undefined;
+      }
+    },
+    setUpdateKey(
+      state,
+      action: PayloadAction<{
+        table: string;
+        column: string;
+        isUpdateKey: boolean;
+      }>,
+    ) {
+      const { table, column, isUpdateKey } = action.payload;
+      const col = state.selectedColumns.find(
+        (c) => c.table === table && c.column === column,
+      );
+      if (col) {
+        col.isUpdateKey = isUpdateKey;
       }
     },
     addJoin(state, action: PayloadAction<Join>) {
@@ -143,7 +199,9 @@ export const {
   setSelectedSchema,
   toggleTable,
   toggleColumn,
+  setTableColumns,
   setViewKey,
+  setUpdateKey,
   addJoin,
   removeJoin,
   setTransformation,
