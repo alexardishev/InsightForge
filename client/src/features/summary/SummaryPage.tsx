@@ -44,10 +44,10 @@ const SummaryPage: React.FC = () => {
                     selectedColumn?.viewKey || col.view_key,
                   is_update_key:
                     selectedColumn?.isUpdateKey ??
-                    col.is_update_key ??
-                    col.is_primary_key ||
+                col.is_update_key ??
+                    (col.is_primary_key ||
                     col.is_pk ||
-                    false,
+                    false),
                 };
                 const tr = builder.transformations[key];
                 return tr ? { ...base, transform: tr } : base;
