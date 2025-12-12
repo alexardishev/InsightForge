@@ -29,6 +29,9 @@ const SummaryPage: React.FC = () => {
               .filter((col: any) => builder.selectedColumns.some((c) => c.table === tableName && c.column === col.name))
               .map((col: any) => {
                 const key = `${tableName}.${col.name}`;
+                const selectedColumn = builder.selectedColumns.find(
+                  (c) => c.table === tableName && c.column === col.name,
+                );
                 const base = {
                   name: col.name,
                   type: col.type,
@@ -38,9 +41,13 @@ const SummaryPage: React.FC = () => {
                   default: col.default,
                   is_unq: col.is_unique,
                   view_key:
-                    builder.selectedColumns.find((c) => c.table === tableName && c.column === col.name)?.viewKey ||
-                    col.view_key,
-                  is_update_key: col.is_update_key,
+                    selectedColumn?.viewKey || col.view_key,
+                  is_update_key:
+                    selectedColumn?.isUpdateKey ??
+                    col.is_update_key ??
+                    col.is_primary_key ||
+                    col.is_pk ||
+                    false,
                 };
                 const tr = builder.transformations[key];
                 return tr ? { ...base, transform: tr } : base;

@@ -8,6 +8,7 @@ import {
   setSelectedSchema,
   toggleTable,
   toggleColumn,
+  setTableColumns,
 } from './viewBuilderSlice';
 import DatabaseSelector from './components/DatabaseSelector';
 import SchemaSelector from './components/SchemaSelector';
@@ -37,8 +38,31 @@ const ViewBuilderPage: React.FC = () => {
     dispatch(toggleTable(table));
   };
 
-  const handleToggleColumn = (table: string, column: string) => {
-    dispatch(toggleColumn({ table, column }));
+  const handleToggleColumn = (
+    table: string,
+    column: any,
+  ) => {
+    dispatch(
+      toggleColumn({
+        table,
+        column: column.name,
+        isPrimaryKey: column.is_primary_key || column.is_pk,
+        isUpdateKey: column.is_update_key,
+      }),
+    );
+  };
+
+  const handleSetTableColumns = (table: string, columns: any[]) => {
+    dispatch(
+      setTableColumns({
+        table,
+        columns: columns.map((col) => ({
+          name: col.name,
+          isPrimaryKey: col.is_primary_key || col.is_pk,
+          isUpdateKey: col.is_update_key,
+        })),
+      }),
+    );
   };
 
   const selectedDatabase = data?.find((db: any) => db.name === selectedDb);
@@ -115,6 +139,7 @@ const ViewBuilderPage: React.FC = () => {
           selectedSchemaData={schemaDataWithTables}
           selectedColumns={selectedColumns}
           onToggleColumn={handleToggleColumn}
+          onSetTableColumns={handleSetTableColumns}
         />
         
         {selectedColumns.length > 0 && (

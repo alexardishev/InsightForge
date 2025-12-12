@@ -10,11 +10,15 @@ import {
   Text,
   Divider,
   useColorModeValue,
+  Checkbox,
+  Tooltip,
+  HStack,
 } from '@chakra-ui/react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import type { RootState, AppDispatch } from '../../app/store';
-import { setTransformation, setViewKey } from './viewBuilderSlice';
+import { setTransformation, setUpdateKey, setViewKey } from './viewBuilderSlice';
+import { InfoIcon } from '@chakra-ui/icons';
 
 interface LocalTransformState {
   type: string;
@@ -128,12 +132,36 @@ const TransformBuilderPage: React.FC = () => {
             </option>
           ))}
         </Select>
+        <HStack alignItems="center" mb={2} spacing={2}>
+          <Checkbox
+            isChecked={selectedCol?.isUpdateKey || false}
+            onChange={(e) =>
+              dispatch(
+                setUpdateKey({
+                  table,
+                  column: column.name,
+                  isUpdateKey: e.target.checked,
+                }),
+              )
+            }
+          >
+            is_update_key
+          </Checkbox>
+          <Tooltip label="Отмеченные колонки участвуют в логике обновления данных" hasArrow>
+            <InfoIcon color="gray.500" />
+          </Tooltip>
+        </HStack>
         <Select mb={2} value={val.type} onChange={(e) => updateField(key, 'type', e.target.value)}>
           <option value="">Без трансформации</option>
           <option value="FieldTransform">FieldTransform</option>
           <option value="JSON">JSON</option>
         </Select>
-        <Input mb={2} placeholder="Output column" value={val.output} onChange={(e) => updateField(key, 'output', e.target.value)} />
+        <Input
+          mb={2}
+          placeholder="Output column"
+          value={val.output}
+          onChange={(e) => updateField(key, 'output', e.target.value)}
+        />
         {val.type === 'FieldTransform' && (
           <Textarea mb={2} placeholder='{"1":"A"}' value={val.mapping} onChange={(e) => updateField(key, 'mapping', e.target.value)} />
         )}
