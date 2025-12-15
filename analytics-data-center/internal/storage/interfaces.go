@@ -12,10 +12,10 @@ import (
 //		QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 //	}
 type SysDB interface {
-        TaskProvider
-        SchemaProvider
-        ColumnRenameSuggestionStorage
-        ColumnMismatchStorage
+	TaskProvider
+	SchemaProvider
+	ColumnRenameSuggestionStorage
+	ColumnMismatchStorage
 }
 type DWHDB interface {
 	TableProvider
@@ -31,6 +31,7 @@ type SchemaProvider interface {
 	GetSchems(ctx context.Context, source string, schema string, table string) ([]int, error)
 	UpdateView(ctx context.Context, view models.View, schemaId int) error
 	UploadView(ctx context.Context, view models.View) (int64, error)
+	ListViews(ctx context.Context) ([]models.SchemaInfo, error)
 	// ListTopics returns list of kafka topics required by existing views
 	ListTopics(ctx context.Context) ([]string, error)
 }
@@ -75,18 +76,18 @@ type DataBaseProviderOLTP interface {
 }
 
 type ColumnRenameSuggestionStorage interface {
-        CreateSuggestion(ctx context.Context, s models.ColumnRenameSuggestion) error
-        ListSuggestions(ctx context.Context, filter models.ColumnRenameSuggestionFilter) ([]models.ColumnRenameSuggestion, error)
-        HasSuggestion(ctx context.Context, schemaID int64, database, schema, table string) (bool, error)
-        GetSuggestionByID(ctx context.Context, id int64) (models.ColumnRenameSuggestion, error)
-        DeleteSuggestionByID(ctx context.Context, id int64) error
+	CreateSuggestion(ctx context.Context, s models.ColumnRenameSuggestion) error
+	ListSuggestions(ctx context.Context, filter models.ColumnRenameSuggestionFilter) ([]models.ColumnRenameSuggestion, error)
+	HasSuggestion(ctx context.Context, schemaID int64, database, schema, table string) (bool, error)
+	GetSuggestionByID(ctx context.Context, id int64) (models.ColumnRenameSuggestion, error)
+	DeleteSuggestionByID(ctx context.Context, id int64) error
 }
 
 type ColumnMismatchStorage interface {
-        CreateMismatchGroup(ctx context.Context, group models.ColumnMismatchGroup, items []models.ColumnMismatchItem) (int64, error)
-        ReplaceMismatchItems(ctx context.Context, groupID int64, items []models.ColumnMismatchItem) error
-        GetOpenMismatchGroup(ctx context.Context, schemaID int64, database, schema, table string) (models.ColumnMismatchGroupWithItems, error)
-        ListMismatchGroups(ctx context.Context, filter models.ColumnMismatchFilter) ([]models.ColumnMismatchGroup, error)
-        GetMismatchGroup(ctx context.Context, id int64) (models.ColumnMismatchGroupWithItems, error)
-        ResolveMismatchGroup(ctx context.Context, id int64) error
+	CreateMismatchGroup(ctx context.Context, group models.ColumnMismatchGroup, items []models.ColumnMismatchItem) (int64, error)
+	ReplaceMismatchItems(ctx context.Context, groupID int64, items []models.ColumnMismatchItem) error
+	GetOpenMismatchGroup(ctx context.Context, schemaID int64, database, schema, table string) (models.ColumnMismatchGroupWithItems, error)
+	ListMismatchGroups(ctx context.Context, filter models.ColumnMismatchFilter) ([]models.ColumnMismatchGroup, error)
+	GetMismatchGroup(ctx context.Context, id int64) (models.ColumnMismatchGroupWithItems, error)
+	ResolveMismatchGroup(ctx context.Context, id int64) error
 }

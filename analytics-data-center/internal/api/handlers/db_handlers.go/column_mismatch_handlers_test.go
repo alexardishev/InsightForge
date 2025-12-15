@@ -55,6 +55,7 @@ func (m *testSchemaProvider) UpdateView(_ context.Context, view models.View, sch
 	return nil
 }
 func (m *testSchemaProvider) UploadView(context.Context, models.View) (int64, error) { return 0, nil }
+func (m *testSchemaProvider) ListViews(context.Context) ([]models.SchemaInfo, error) { return nil, nil }
 func (m *testSchemaProvider) ListTopics(context.Context) ([]string, error)           { return nil, nil }
 
 func (m *testSchemaProvider) CreateSuggestion(context.Context, models.ColumnRenameSuggestion) error {

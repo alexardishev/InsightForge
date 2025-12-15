@@ -61,6 +61,10 @@ func (m *mockSchemaProvider) UploadView(context.Context, models.View) (int64, er
 	return 0, nil
 }
 
+func (m *mockSchemaProvider) ListViews(context.Context) ([]models.SchemaInfo, error) {
+	return nil, nil
+}
+
 func (m *mockSchemaProvider) ListTopics(context.Context) ([]string, error) { return nil, nil }
 
 func (m *mockSchemaProvider) CreateSuggestion(_ context.Context, s models.ColumnRenameSuggestion) error {

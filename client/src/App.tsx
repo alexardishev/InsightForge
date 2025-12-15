@@ -13,10 +13,13 @@ import TasksPage from './features/tasks/TasksPage';
 import ColumnRenameSuggestionsPage from './features/columnRenameSuggestions/ColumnRenameSuggestionsPage';
 import ColumnMismatchListPage from './features/columnMismatches/ColumnMismatchListPage';
 import ColumnMismatchDetailsPage from './features/columnMismatches/ColumnMismatchDetailsPage';
+import SchemasPage from './features/schemas/SchemasPage';
+import NotificationCenter from './components/NotificationCenter';
 
 const App: React.FC = () => {
   return (
     <Box>
+      <NotificationCenter />
       <Flex justify="flex-end" p={4}>
         <ThemeToggle />
       </Flex>
@@ -33,6 +36,7 @@ const App: React.FC = () => {
         <Route path='/joins' element={<JoinBuilderPage/>}></Route>
         <Route path='/transforms' element={<TransformBuilderPage/>}></Route>
         <Route path='/summary' element={<SummaryPage/>}></Route>
+        <Route path="/schemas" element={<SchemasPage />} />
         <Route path="*" element={<Navigate to="/settings" replace />} />
       </Routes>
     </Box>

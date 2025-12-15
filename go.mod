@@ -3,12 +3,16 @@ module analyticDataCenter
 go 1.23.3
 
 require (
+	github.com/ClickHouse/clickhouse-go/v2 v2.37.1
+	github.com/adrg/strutil v0.3.1
 	github.com/alexardishev/proto_auth v0.0.0-20250408074131-13e09e911053
 	github.com/confluentinc/confluent-kafka-go/v2 v2.10.0
+	github.com/go-chi/cors v1.2.1
 	github.com/go-playground/validator/v10 v10.26.0
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/golang-migrate/migrate v3.5.4+incompatible
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.5.0
 	github.com/lib/pq v1.10.9
 	github.com/numbergroup/cleanenv v1.7.1
 	github.com/stretchr/testify v1.10.0
@@ -17,10 +21,7 @@ require (
 
 require (
 	github.com/ClickHouse/ch-go v0.66.0 // indirect
-	github.com/ClickHouse/clickhouse-go/v2 v2.37.1 // indirect
-	github.com/adrg/strutil v0.3.1 // indirect
 	github.com/andybalholm/brotli v1.1.1 // indirect
-	github.com/go-chi/cors v1.2.1 // indirect
 	github.com/go-faster/city v1.0.1 // indirect
 	github.com/go-faster/errors v0.7.1 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
@@ -34,17 +35,13 @@ require (
 require (
 	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/docker/docker v28.2.2+incompatible // indirect
 	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
 	github.com/go-chi/chi/v5 v5.2.1
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-sqlite3 v1.14.27 // indirect
-	github.com/moby/sys/userns v0.1.0 // indirect
-	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0 // indirect
 	go.opentelemetry.io/otel v1.36.0 // indirect

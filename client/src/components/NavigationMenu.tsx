@@ -29,6 +29,7 @@ const NavigationMenu: React.FC = () => {
     { label: 'Просмотр БД', path: '/db-viewer', enabled: true },
     { label: 'Подключение', path: '/settings', enabled: true },
     { label: 'Задачи', path: '/tasks', enabled: true },
+    { label: 'Схемы', path: '/schemas', enabled: true },
     { label: 'Переименования колонок', path: '/column-rename-suggestions', enabled: true },
     { label: 'Рассинхроны колонок', path: '/column-mismatches', enabled: true },
     { label: 'Таблицы', path: '/builder', enabled: canBuilder },
