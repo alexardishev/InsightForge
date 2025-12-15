@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	chimw "github.com/go-chi/chi/v5/middleware"
 )
 
 // Logger is a middleware that logs HTTP requests.
@@ -20,27 +22,19 @@ func NewLogger(logger *loggerpkg.Logger) *Logger {
 // Middleware returns a chi compatible middleware handler.
 func (l *Logger) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sr := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-		start := time.Now()
+		// WrapResponseWriter from chi correctly preserves interfaces like:
+		// http.Hijacker (WebSocket), http.Flusher, etc.
+		ww := chimw.NewWrapResponseWriter(w, r.ProtoMajor)
 
-		next.ServeHTTP(sr, r)
+		start := time.Now()
+		next.ServeHTTP(ww, r)
 
 		l.log.Info("request completed",
 			slog.String("method", r.Method),
 			slog.String("path", r.URL.Path),
-			slog.Int("status", sr.status),
+			slog.Int("status", ww.Status()),
 			slog.Duration("duration", time.Since(start)),
+			slog.Int("bytes", ww.BytesWritten()),
 		)
 	})
-}
-
-// statusRecorder wraps http.ResponseWriter to capture the response status code.
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-}
-
-func (r *statusRecorder) WriteHeader(code int) {
-	r.status = code
-	r.ResponseWriter.WriteHeader(code)
 }

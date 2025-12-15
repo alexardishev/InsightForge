@@ -121,6 +121,58 @@ func (p *PostgresSys) UploadView(ctx context.Context, view models.View) (int64, 
 	return id, nil
 }
 
+func (p *PostgresSys) ListViews(ctx context.Context) ([]models.SchemaInfo, error) {
+	const op = "Storage.PostgreSQL.ListViews"
+	log := p.Log.With(slog.String("op", op))
+
+	query := "SELECT id, schema_view FROM schems ORDER BY id DESC"
+	rows, err := p.Db.QueryContext(ctx, query)
+	if err != nil {
+		log.Error("Запрос выполнен с ошибкой", slog.String("error", err.Error()))
+		return nil, err
+	}
+	defer rows.Close()
+
+	var views []models.SchemaInfo
+
+	for rows.Next() {
+		var id int64
+		var raw []byte
+
+		if err := rows.Scan(&id, &raw); err != nil {
+			log.Error("Ошибка сканирования строки", slog.String("error", err.Error()))
+			return nil, err
+		}
+
+		var view models.View
+		if err := json.Unmarshal(raw, &view); err != nil {
+			log.Error("Ошибка разбора JSON", slog.String("error", err.Error()))
+			return nil, err
+		}
+
+		schemaInfo := models.SchemaInfo{
+			ID:          id,
+			Name:        view.Name,
+			SourceCount: len(view.Sources),
+		}
+
+		for _, source := range view.Sources {
+			for _, schema := range source.Schemas {
+				schemaInfo.TableCount += len(schema.Tables)
+			}
+		}
+
+		views = append(views, schemaInfo)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Error("Ошибка после сканирования всех строк", slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	return views, nil
+}
+
 func (p *PostgresSys) ListTopics(ctx context.Context) ([]string, error) {
 	const op = "Storage.PostgreSQL.ListTopics"
 	log := p.Log.With(slog.String("op", op))

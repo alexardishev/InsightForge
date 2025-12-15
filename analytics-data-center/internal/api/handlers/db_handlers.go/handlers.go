@@ -119,6 +119,57 @@ func (d *DBHandlers) UploadSchema(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func (d *DBHandlers) ListViews(w http.ResponseWriter, r *http.Request) {
+	const op = "DBHandlers.ListViews"
+	log := d.log.With(slog.String("op", op))
+
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "application/json")
+
+	views, err := d.serviceAnalytics.ListViews(ctx)
+	if err != nil {
+		log.Error("ошибка получения списка схем", slog.String("error", err.Error()))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(views); err != nil {
+		log.Error("failed to encode response", slog.String("error", err.Error()))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (d *DBHandlers) StartETL(w http.ResponseWriter, r *http.Request) {
+	const op = "DBHandlers.StartETL"
+	log := d.log.With(slog.String("op", op))
+
+	w.Header().Set("Content-Type", "application/json")
+	ctx := r.Context()
+
+	schemaIDParam := chi.URLParam(r, "id")
+	schemaID, err := strconv.ParseInt(schemaIDParam, 10, 64)
+	if err != nil {
+		log.Error("invalid schema id", slog.String("error", err.Error()))
+		http.Error(w, "invalid schema id", http.StatusBadRequest)
+		return
+	}
+
+	taskID, err := d.serviceAnalytics.StartETLProcess(ctx, schemaID)
+	if err != nil {
+		log.Error("ошибка запуска ETL", slog.String("error", err.Error()))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]string{"task_id": taskID}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Error("failed to encode response", slog.String("error", err.Error()))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+}
+
 func (d *DBHandlers) GetColumnMismatchGroups(w http.ResponseWriter, r *http.Request) {
 	const op = "DBHandlers.GetColumnMismatchGroups"
 	log := d.log.With(slog.String("op", op))

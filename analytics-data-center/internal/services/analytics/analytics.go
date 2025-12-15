@@ -3,6 +3,7 @@ package serviceanalytics
 import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
 	sqlgenerator "analyticDataCenter/analytics-data-center/internal/lib/SQLGenerator"
+	"analyticDataCenter/analytics-data-center/internal/notifications"
 	smtpsender "analyticDataCenter/analytics-data-center/internal/services/smtrsender"
 	"analyticDataCenter/analytics-data-center/internal/storage"
 	"context"
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 
@@ -50,13 +52,13 @@ type TopicNotifier interface {
 }
 
 type AnalyticsDataCenterService struct {
-        log                     *loggerpkg.Logger
-        SchemaProvider          storage.SysDB
-        RenameSuggestionStorage storage.ColumnRenameSuggestionStorage
-        ColumnMismatchStorage   storage.ColumnMismatchStorage
-        TaskService             TaskService
-        DWHProvider             storage.DWHDB
-        OLTPFactory             storage.OLTPFactory
+	log                     *loggerpkg.Logger
+	SchemaProvider          storage.SysDB
+	RenameSuggestionStorage storage.ColumnRenameSuggestionStorage
+	ColumnMismatchStorage   storage.ColumnMismatchStorage
+	TaskService             TaskService
+	DWHProvider             storage.DWHDB
+	OLTPFactory             storage.OLTPFactory
 	DWHDbName               string
 	DWHDbPath               string
 	OLTPDbName              string
@@ -65,6 +67,7 @@ type AnalyticsDataCenterService struct {
 	eventQueue              chan models.CDCEvent
 	SMTPClient              smtpsender.SMTP
 	topicNotifier           TopicNotifier
+	notifier                notifications.Notifier
 }
 
 type TaskService interface {
@@ -87,12 +90,12 @@ func New(
 	SMTPClient smtpsender.SMTP,
 
 ) *AnalyticsDataCenterService {
-        service := &AnalyticsDataCenterService{
-                log:                     log,
-                SchemaProvider:          schemaProvider,
-                RenameSuggestionStorage: schemaProvider,
-                ColumnMismatchStorage:   schemaProvider,
-                TaskService:             taskService,
+	service := &AnalyticsDataCenterService{
+		log:                     log,
+		SchemaProvider:          schemaProvider,
+		RenameSuggestionStorage: schemaProvider,
+		ColumnMismatchStorage:   schemaProvider,
+		TaskService:             taskService,
 		DWHProvider:             dwhProvider,
 		OLTPFactory:             OLTPFactory,
 		DWHDbName:               DWHDbName,
@@ -113,6 +116,11 @@ func (a *AnalyticsDataCenterService) SetTopicNotifier(n TopicNotifier) {
 	a.topicNotifier = n
 }
 
+// SetNotifier injects websocket notification publisher.
+func (a *AnalyticsDataCenterService) SetNotifier(notifier notifications.Notifier) {
+	a.notifier = notifier
+}
+
 func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView int64) (taskID string, err error) {
 	taskID = uuid.NewString()
 
@@ -129,6 +137,14 @@ func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView
 
 }
 
+func (a *AnalyticsDataCenterService) ListViews(ctx context.Context) ([]models.SchemaInfo, error) {
+	views, err := a.SchemaProvider.ListViews(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return views, nil
+}
+
 func (a *AnalyticsDataCenterService) etlWorker() {
 	for job := range a.jobQueue {
 		log := a.log.With(
@@ -142,6 +158,7 @@ func (a *AnalyticsDataCenterService) etlWorker() {
 		if err != nil {
 			log.ErrorMsg(loggerpkg.MsgInsertDataFailed, slog.String("error", err.Error()))
 			a.TaskService.ChangeStatusTask(ctx, job.TaskID, Error, err.Error())
+			a.notifyTaskStatus(job.TaskID, Error, err.Error())
 		}
 	}
 }
@@ -226,5 +243,23 @@ func (a *AnalyticsDataCenterService) runETL(ctx context.Context, idView int64, t
 
 	log.InfoMsg(loggerpkg.MsgTableRecordCount, slog.Any("count", countInsertData))
 	a.TaskService.ChangeStatusTask(ctx, taskID, Completed, CompletedTask)
+	a.notifyTaskStatus(taskID, Completed, CompletedTask)
 	return nil
+}
+
+func (a *AnalyticsDataCenterService) notifyTaskStatus(taskID, status, message string) {
+	if a.notifier == nil {
+		return
+	}
+
+	notification := models.Notification{
+		Type:      "task_status",
+		Title:     "ETL задача",
+		Message:   message,
+		TaskID:    taskID,
+		Status:    status,
+		CreatedAt: time.Now(),
+	}
+
+	a.notifier.Publish(notification)
 }

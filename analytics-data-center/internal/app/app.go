@@ -5,6 +5,7 @@ import (
 	grpcapp "analyticDataCenter/analytics-data-center/internal/app/grpc"
 	"analyticDataCenter/analytics-data-center/internal/config"
 	"analyticDataCenter/analytics-data-center/internal/kafkaengine"
+	"analyticDataCenter/analytics-data-center/internal/notifications"
 	serviceanalytics "analyticDataCenter/analytics-data-center/internal/services/analytics"
 	"analyticDataCenter/analytics-data-center/internal/services/cdc"
 	"analyticDataCenter/analytics-data-center/internal/services/debezium"
@@ -31,11 +32,12 @@ const (
 )
 
 type App struct {
-	GRPCSrv     *grpcapp.App
-	OLTPFactory *storage.InstanceOLTPFactory
-	Kafka       *kafka.Consumer
-	Router      http.Handler
-	TopicCron   *topicsubscription.Cron
+	GRPCSrv       *grpcapp.App
+	OLTPFactory   *storage.InstanceOLTPFactory
+	Kafka         *kafka.Consumer
+	Router        http.Handler
+	TopicCron     *topicsubscription.Cron
+	Notifications *notifications.Worker
 }
 
 func New(log *loggerpkg.Logger, grpcPort int,
@@ -88,7 +90,9 @@ func New(log *loggerpkg.Logger, grpcPort int,
 	}
 	tasksserivce := tasksserivce.New(log, storageSys, statusEnum)
 	analyticsService := serviceanalytics.New(log, storage.DbSys, tasksserivce, storageDWH, oltpFactory, DWHName, DWHPath, OLTPName, renameHeuristic, *smtp)
-	r := routes.NewRouter(log, analyticsService)
+	notificationWorker := notifications.NewWorker(log)
+	analyticsService.SetNotifier(notificationWorker)
+	r := routes.NewRouter(log, analyticsService, notificationWorker)
 
 	kafkaEngine, err := kafkaengine.NewEngine(BootstrapServers, GroupId, AutoOffsetReset, EnableAutoCommit, SessionTimeoutMs, ClientId, storage.DbSys, log)
 	if err != nil {
@@ -104,10 +108,11 @@ func New(log *loggerpkg.Logger, grpcPort int,
 	cdcListener.Start()
 	grpcServer := grpcapp.New(log, grpcPort, analyticsService)
 	return &App{
-		GRPCSrv:     grpcServer,
-		OLTPFactory: oltpFactory,
-		Kafka:       kafkaConsumer,
-		Router:      r,
-		TopicCron:   topicCron,
+		GRPCSrv:       grpcServer,
+		OLTPFactory:   oltpFactory,
+		Kafka:         kafkaConsumer,
+		Router:        r,
+		TopicCron:     topicCron,
+		Notifications: notificationWorker,
 	}
 }

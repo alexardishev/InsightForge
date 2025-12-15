@@ -5,6 +5,7 @@ import (
 	dbhandlers "analyticDataCenter/analytics-data-center/internal/api/handlers/db_handlers.go"
 	taskshandlers "analyticDataCenter/analytics-data-center/internal/api/handlers/tasks_handlers.go"
 	"analyticDataCenter/analytics-data-center/internal/api/middleware"
+	"analyticDataCenter/analytics-data-center/internal/notifications"
 	serviceanalytics "analyticDataCenter/analytics-data-center/internal/services/analytics"
 	"net/http"
 
@@ -14,12 +15,13 @@ import (
 	"github.com/go-chi/cors"
 )
 
-func NewRouter(logger *loggerpkg.Logger, serviceAnalytics *serviceanalytics.AnalyticsDataCenterService) http.Handler {
+func NewRouter(logger *loggerpkg.Logger, serviceAnalytics *serviceanalytics.AnalyticsDataCenterService, notificationWorker *notifications.Worker) http.Handler {
 	r := chi.NewRouter()
 	dbhandlers := dbhandlers.NewDBHandler(logger, serviceAnalytics)
 	taskshandlers := taskshandlers.NewTaskHandlers(logger, serviceAnalytics)
+	notificationHandlers := handlers.NewNotificationHandlers(notificationWorker)
 
-	handlers := handlers.NewHandlers(logger, dbhandlers, taskshandlers)
+	handlers := handlers.NewHandlers(logger, dbhandlers, taskshandlers, notificationHandlers)
 
 	logMiddleware := middleware.NewLogger(logger)
 	r.Use(logMiddleware.Middleware)
@@ -39,6 +41,8 @@ func NewRouter(logger *loggerpkg.Logger, serviceAnalytics *serviceanalytics.Anal
 		r.Get("/get-connections", handlers.GetConnectionsStrings)
 		r.Post("/get-db", handlers.GetDBInformations)
 		r.Post("/upload-schem", handlers.UploadSchema)
+		r.Get("/schemas", handlers.ListViews)
+		r.Post("/schemas/{id}/etl", handlers.StartETL)
 		r.Post("/get-tasks", handlers.GetTasks)
 		r.Get("/column-rename-suggestions", handlers.GetColumnRenameSuggestions)
 		r.Post("/column-rename-suggestions/{id}/accept", handlers.AcceptColumnRenameSuggestion)
@@ -47,6 +51,8 @@ func NewRouter(logger *loggerpkg.Logger, serviceAnalytics *serviceanalytics.Anal
 		r.Get("/column-mismatch-groups/{id}", handlers.GetColumnMismatchGroup)
 		r.Post("/column-mismatch-groups/{id}/apply", handlers.ApplyColumnMismatchGroup)
 	})
+
+	r.Get("/ws/notifications", handlers.NotificationsWS)
 
 	return r
 }
