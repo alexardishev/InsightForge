@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Heading, VStack, Button } from '@chakra-ui/react';
+import { Box, Heading, VStack, Text, HStack, Badge, Divider } from '@chakra-ui/react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import type { RootState, AppDispatch } from '../../app/store';
@@ -16,6 +16,8 @@ import TableSelector from './components/TableSelector';
 import ColumnsGrid from './components/ColumnsGrid';
 import { useHttp } from '../../hooks/http.hook';
 import { appendTables } from '../settings/settingsSlice';
+import FlowLayout from '../../components/FlowLayout';
+import { builderSteps } from './flowSteps';
 
 const ViewBuilderPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -104,10 +106,32 @@ const ViewBuilderPage: React.FC = () => {
   };
 
   return (
-    <Box p={8} maxW="1200px" mx="auto">
-      <Heading mb={8} textAlign="center">Конструктор витрины</Heading>
+    <FlowLayout
+      steps={builderSteps}
+      currentStep={1}
+      onBack={() => navigate('/settings')}
+      onNext={handleBuildView}
+      primaryLabel="Перейти к джоинам"
+      secondaryLabel="К подключениям"
+      isNextDisabled={selectedColumns.length === 0}
+    >
       <VStack align="stretch" spacing={6}>
-        <Box maxW="md" mx="auto">
+        <Box>
+          <Heading size="lg">Tables & Columns</Heading>
+          <Text color="text.muted" mt={2}>
+            Выбери схемы, таблицы и колонки. Безопасные дефолты помогают избежать случайных
+            пропусков ключей.
+          </Text>
+          <HStack spacing={3} mt={3} color="text.muted">
+            <Badge colorScheme="cyan">Source</Badge>
+            <Badge colorScheme="purple">Schema</Badge>
+            <Badge colorScheme="green">Columns</Badge>
+          </HStack>
+        </Box>
+
+        <Divider borderColor="border.subtle" />
+
+        <Box>
           <DatabaseSelector
             data={data}
             selectedDb={selectedDb}
@@ -116,7 +140,7 @@ const ViewBuilderPage: React.FC = () => {
         </Box>
 
         {selectedDb && selectedDatabase && (
-          <Box maxW="md" mx="auto">
+          <Box>
             <SchemaSelector
               selectedDatabase={selectedDatabase}
               selectedSchema={selectedSchema}
@@ -141,16 +165,21 @@ const ViewBuilderPage: React.FC = () => {
           onToggleColumn={handleToggleColumn}
           onSetTableColumns={handleSetTableColumns}
         />
-        
-        {selectedColumns.length > 0 && (
-          <Box textAlign="center">
-            <Button onClick={handleBuildView} colorScheme="blue" size="lg">
-              Собрать витрину
-            </Button>
+
+        {selectedColumns.length === 0 && (
+          <Box
+            p={4}
+            border="1px dashed"
+            borderColor="border.subtle"
+            borderRadius="lg"
+            textAlign="center"
+            color="text.muted"
+          >
+            Добавь минимум одну колонку, чтобы перейти к настройке джоинов.
           </Box>
         )}
       </VStack>
-    </Box>
+    </FlowLayout>
   );
 };
 

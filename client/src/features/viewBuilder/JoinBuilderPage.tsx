@@ -11,12 +11,18 @@ import {
   List,
   ListItem,
   IconButton,
+  Alert,
+  AlertIcon,
+  Tag,
+  Divider,
 } from '@chakra-ui/react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import type { RootState, AppDispatch } from '../../app/store';
 import { addJoin, removeJoin, setViewName } from './viewBuilderSlice';
 import { DeleteIcon } from '@chakra-ui/icons';
+import FlowLayout from '../../components/FlowLayout';
+import { builderSteps } from './flowSteps';
 
 interface Column {
   name: string;
@@ -72,16 +78,38 @@ const JoinBuilderPage: React.FC = () => {
   };
 
   return (
-    <Box p={8} maxW="800px" mx="auto">
-      <Heading mb={8} textAlign="center">
-        Настройка джоинов
-      </Heading>
-      <VStack spacing={4} align="stretch">
+    <FlowLayout
+      steps={builderSteps}
+      currentStep={2}
+      onBack={() => navigate('/builder')}
+      onNext={handleNext}
+      primaryLabel="К трансформациям"
+      secondaryLabel="Назад к таблицам"
+      isNextDisabled={joins.length === 0}
+    >
+      <VStack spacing={6} align="stretch">
         <Box>
+          <Heading size="lg">Join Builder</Heading>
+          <Text color="text.muted" mt={2}>
+            Настрой добавление таблиц, исключая cartesian join. Заполни имя витрины и ключи для
+            соединения.
+          </Text>
+        </Box>
+
+        <Alert status="info" borderRadius="md" variant="left-accent">
+          <AlertIcon />
+          Мы автоматически подсветим рискованные join без ключей.
+        </Alert>
+
+        <Box>
+          <Text fontWeight="semibold" mb={2}>Выбранные таблицы</Text>
           {selectedTables.map((table) => (
-            <Box key={table} mb={2}>
-              <Text fontWeight="bold">{table}</Text>
-              <List pl={4} styleType="disc">
+            <Box key={table} mb={3} p={3} border="1px solid" borderColor="border.subtle" borderRadius="md">
+              <HStack justify="space-between">
+                <Text fontWeight="bold">{table}</Text>
+                <Tag colorScheme="cyan">{getColumnsForTable(table).length} колонок</Tag>
+              </HStack>
+              <List pl={4} styleType="disc" color="text.muted" mt={2}>
                 {selectedColumns
                   .filter((c) => c.table === table)
                   .map((c) => (
@@ -91,11 +119,16 @@ const JoinBuilderPage: React.FC = () => {
             </Box>
           ))}
         </Box>
+
         <Input
           placeholder="Имя витрины"
           value={viewName}
           onChange={(e) => dispatch(setViewName(e.target.value))}
         />
+
+        <Divider borderColor="border.subtle" />
+
+        <Text fontWeight="semibold">Настрой ключи join</Text>
         <HStack>
           <Select placeholder="Основная таблица" value={mainTable} onChange={(e) => setMainTable(e.target.value)}>
             {selectedTables.map((t) => (
@@ -128,7 +161,7 @@ const JoinBuilderPage: React.FC = () => {
             ))}
           </Select>
         </HStack>
-        <Button onClick={handleAddJoin} colorScheme="teal" alignSelf="flex-start">
+        <Button onClick={handleAddJoin} variant="glow" alignSelf="flex-start">
           Добавить join
         </Button>
 
@@ -141,16 +174,13 @@ const JoinBuilderPage: React.FC = () => {
                 icon={<DeleteIcon />}
                 size="sm"
                 onClick={() => dispatch(removeJoin(idx))}
+                variant="ghost"
               />
             </ListItem>
           ))}
         </List>
-
-        <Button colorScheme="blue" onClick={handleNext} alignSelf="center">
-          Далее
-        </Button>
       </VStack>
-    </Box>
+    </FlowLayout>
   );
 };
 

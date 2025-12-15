@@ -1,9 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import SettingsPage from './features/settings/SettingsPage';
-import { Box, Flex } from '@chakra-ui/react';
-import ThemeToggle from './components/ThemeToggle';
-import NavigationMenu from './components/NavigationMenu';
+import { Box } from '@chakra-ui/react';
 import ViewBuilderPage from './features/viewBuilder/ViewBuilderPage';
 import JoinBuilderPage from './features/viewBuilder/JoinBuilderPage';
 import TransformBuilderPage from './features/viewBuilder/TransformBuilderPage';
@@ -15,31 +13,30 @@ import ColumnMismatchListPage from './features/columnMismatches/ColumnMismatchLi
 import ColumnMismatchDetailsPage from './features/columnMismatches/ColumnMismatchDetailsPage';
 import SchemasPage from './features/schemas/SchemasPage';
 import NotificationCenter from './components/NotificationCenter';
+import AppShell from './layout/AppShell';
 
 const App: React.FC = () => {
   return (
-    <Box>
-      <NotificationCenter />
-      <Flex justify="flex-end" p={4}>
-        <ThemeToggle />
-      </Flex>
-      <NavigationMenu />
+    <AppShell>
+      <Box>
+        <NotificationCenter />
 
-      <Routes>
-        <Route path="/db-viewer" element={<DatabaseViewerPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/tasks" element={<TasksPage />} />
-        <Route path="/column-rename-suggestions" element={<ColumnRenameSuggestionsPage />} />
-        <Route path="/column-mismatches" element={<ColumnMismatchListPage />} />
-        <Route path="/column-mismatches/:id" element={<ColumnMismatchDetailsPage />} />
-        <Route path='/builder' element={<ViewBuilderPage/>}></Route>
-        <Route path='/joins' element={<JoinBuilderPage/>}></Route>
-        <Route path='/transforms' element={<TransformBuilderPage/>}></Route>
-        <Route path='/summary' element={<SummaryPage/>}></Route>
-        <Route path="/schemas" element={<SchemasPage />} />
-        <Route path="*" element={<Navigate to="/settings" replace />} />
-      </Routes>
-    </Box>
+        <Routes>
+          <Route path="/db-viewer" element={<DatabaseViewerPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/column-rename-suggestions" element={<ColumnRenameSuggestionsPage />} />
+          <Route path="/column-mismatches" element={<ColumnMismatchListPage />} />
+          <Route path="/column-mismatches/:id" element={<ColumnMismatchDetailsPage />} />
+          <Route path='/builder' element={<ViewBuilderPage/>}></Route>
+          <Route path='/joins' element={<JoinBuilderPage/>}></Route>
+          <Route path='/transforms' element={<TransformBuilderPage/>}></Route>
+          <Route path='/summary' element={<SummaryPage/>}></Route>
+          <Route path="/schemas" element={<SchemasPage />} />
+          <Route path="*" element={<Navigate to="/settings" replace />} />
+        </Routes>
+      </Box>
+    </AppShell>
   );
 };
 
