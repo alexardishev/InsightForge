@@ -19,10 +19,15 @@ import {
   Tr,
   useColorModeValue,
   useToast,
+  Card,
+  CardBody,
+  HStack,
+  Icon,
 } from '@chakra-ui/react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useHttp } from '../../hooks/http.hook';
 import type { ColumnMismatchGroup } from './ColumnMismatchListPage';
+import { FiAlertTriangle, FiCheckCircle } from 'react-icons/fi';
 
 export interface ColumnMismatchItem {
   id: number;
@@ -181,7 +186,8 @@ const ColumnMismatchDetailsPage: React.FC = () => {
     showDelete = true,
     disabled = false,
   ) => (
-    <Box borderWidth="1px" borderRadius="lg" p={4} bg={sectionBg[type]}>
+    <Card variant="surface" bg={sectionBg[type]}>
+      <CardBody>
       <Heading size="md" mb={3}>{title}</Heading>
       {itemsToRender.length === 0 ? (
         <Text>Нет элементов.</Text>
@@ -219,48 +225,51 @@ const ColumnMismatchDetailsPage: React.FC = () => {
           </Tbody>
         </Table>
       )}
-    </Box>
+      </CardBody>
+    </Card>
   );
 
   const renderRenameCandidates = () => (
-    <Box borderWidth="1px" borderRadius="lg" p={4} bg={sectionBg.rename_candidate}>
-      <Heading size="md" mb={3}>Кандидаты на переименование</Heading>
-      {renameCandidates.length === 0 ? (
-        <Text>Нет кандидатов.</Text>
-      ) : (
-        <Table size="sm" variant="simple">
-          <Thead>
-            <Tr>
-              <Th>Old column</Th>
-              <Th>New column</Th>
-              <Th>Score</Th>
-              <Th>Выбрать</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {renameCandidates.map((item) => {
-              const key: RenameKey = `${item.old_column_name || ''}->${item.new_column_name || ''}`;
-              const selected = selectedRenames.has(key);
-              const scoreDisplay = item.score ? Math.round((item.score || 0) * 100) / 100 : undefined;
-              return (
-                <Tr key={item.id}>
-                  <Td>{item.old_column_name}</Td>
-                  <Td>{item.new_column_name}</Td>
-                  <Td>{scoreDisplay !== undefined ? scoreDisplay : '-'}</Td>
-                  <Td>
-                    <Checkbox
-                      isChecked={selected}
-                      onChange={() => toggleRename(item.old_column_name, item.new_column_name)}
-                      isDisabled={isResolved}
-                    />
-                  </Td>
-                </Tr>
-              );
-            })}
-          </Tbody>
-        </Table>
-      )}
-    </Box>
+    <Card variant="surface" bg={sectionBg.rename_candidate}>
+      <CardBody>
+        <Heading size="md" mb={3}>Кандидаты на переименование</Heading>
+        {renameCandidates.length === 0 ? (
+          <Text>Нет кандидатов.</Text>
+        ) : (
+          <Table size="sm" variant="simple">
+            <Thead>
+              <Tr>
+                <Th>Old column</Th>
+                <Th>New column</Th>
+                <Th>Score</Th>
+                <Th>Выбрать</Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {renameCandidates.map((item) => {
+                const key: RenameKey = `${item.old_column_name || ''}->${item.new_column_name || ''}`;
+                const selected = selectedRenames.has(key);
+                const scoreDisplay = item.score ? Math.round((item.score || 0) * 100) / 100 : undefined;
+                return (
+                  <Tr key={item.id}>
+                    <Td>{item.old_column_name}</Td>
+                    <Td>{item.new_column_name}</Td>
+                    <Td>{scoreDisplay !== undefined ? scoreDisplay : '-'}</Td>
+                    <Td>
+                      <Checkbox
+                        isChecked={selected}
+                        onChange={() => toggleRename(item.old_column_name, item.new_column_name)}
+                        isDisabled={isResolved}
+                      />
+                    </Td>
+                  </Tr>
+                );
+              })}
+            </Tbody>
+          </Table>
+        )}
+      </CardBody>
+    </Card>
   );
 
   if (loading && !group) {
@@ -272,7 +281,7 @@ const ColumnMismatchDetailsPage: React.FC = () => {
   }
 
   return (
-    <Box p={8} maxW="1200px" mx="auto">
+    <Box>
       <Button mb={4} variant="ghost" onClick={() => navigate('/column-mismatches')}>
         ← Назад к списку
       </Button>
@@ -282,22 +291,39 @@ const ColumnMismatchDetailsPage: React.FC = () => {
       )}
 
       {group && (
-        <Box borderWidth="1px" borderRadius="lg" p={4} mb={6}>
-          <Heading size="lg" mb={3}>Группа #{group.id}</Heading>
-          <Flex gap={4} wrap="wrap" mb={3}>
-            <Badge colorScheme={group.status === 'open' ? 'yellow' : 'green'}>{group.status}</Badge>
-            <Text>View ID: {group.schema_id}</Text>
-            <Text>DB: {group.database_name}</Text>
-            <Text>Schema: {group.schema_name}</Text>
-            <Text>Table: {group.table_name}</Text>
-          </Flex>
-          <Text>Создано: {new Date(group.created_at).toLocaleString()}</Text>
-          {group.resolved_at && <Text>Закрыто: {new Date(group.resolved_at).toLocaleString()}</Text>}
-        </Box>
+        <Card variant="surface" mb={6}>
+          <CardBody>
+            <HStack justify="space-between" align="start" flexWrap="wrap" gap={3}>
+              <Box>
+                <Heading size="lg" mb={2}>Группа #{group.id}</Heading>
+                <HStack spacing={3} mb={2}>
+                  <Badge colorScheme={group.status === 'open' ? 'yellow' : 'green'}>{group.status}</Badge>
+                  <Text>View ID: {group.schema_id}</Text>
+                  <Text>DB: {group.database_name}</Text>
+                  <Text>Schema: {group.schema_name}</Text>
+                  <Text>Table: {group.table_name}</Text>
+                </HStack>
+                <Text color="text.muted">Создано: {new Date(group.created_at).toLocaleString()}</Text>
+                {group.resolved_at && <Text color="text.muted">Закрыто: {new Date(group.resolved_at).toLocaleString()}</Text>}
+              </Box>
+              <HStack spacing={2}>
+                <Icon as={FiAlertTriangle} color="yellow.400" />
+                <Text color="text.muted">Проверь действия перед применением</Text>
+              </HStack>
+            </HStack>
+          </CardBody>
+        </Card>
       )}
 
       {isResolved && (
-        <Box mb={4} color="gray.600">Эта группа уже закрыта. Изменения недоступны.</Box>
+        <Card variant="glass" mb={4}>
+          <CardBody>
+            <HStack spacing={2} color="text.muted">
+              <Icon as={FiCheckCircle} />
+              <Text>Эта группа уже закрыта. Изменения недоступны.</Text>
+            </HStack>
+          </CardBody>
+        </Card>
       )}
 
       <Stack spacing={6}>
@@ -308,7 +334,7 @@ const ColumnMismatchDetailsPage: React.FC = () => {
       </Stack>
 
       <Flex justify="flex-end" mt={6} gap={3}>
-        <Button colorScheme="blue" onClick={handleApply} isDisabled={!canApply || submitting} isLoading={submitting}>
+        <Button colorScheme="cyan" onClick={handleApply} isDisabled={!canApply || submitting} isLoading={submitting}>
           Применить решение
         </Button>
       </Flex>

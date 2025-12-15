@@ -1,28 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Badge,
   Box,
+  Card,
+  CardBody,
+  Flex,
   Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Text,
+  HStack,
+  Icon,
+  IconButton,
   SimpleGrid,
+  Text,
+  VStack,
   useColorModeValue,
-  ScaleFade,
   Button,
+  Divider,
+  Stack,
+  Tooltip,
 } from '@chakra-ui/react';
+import { FiDatabase, FiGrid, FiKey, FiRefreshCw, FiServer } from 'react-icons/fi';
 import { useSelector, useDispatch } from 'react-redux';
-import {
-  useReactTable,
-  createColumnHelper,
-  getCoreRowModel,
-  getSortedRowModel,
-  flexRender,
-  type SortingState,
-} from '@tanstack/react-table';
 import type { RootState, AppDispatch } from '../../app/store';
 import DatabaseSelector from '../viewBuilder/components/DatabaseSelector';
 import SchemaSelector from '../viewBuilder/components/SchemaSelector';
@@ -34,8 +31,6 @@ interface TableRow {
   name: string;
   columns: any[];
 }
-
-const columnHelper = createColumnHelper<TableRow>();
 
 const DatabaseViewerPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -51,37 +46,15 @@ const DatabaseViewerPage: React.FC = () => {
   const [tablesState, setTablesState] = useState<TableRow[]>(selectedSchemaData?.tables || []);
   const [page, setPage] = useState(1);
   const pageSize = 20;
+  const [focusedTable, setFocusedTable] = useState<string | null>(null);
 
-  const [sorting, setSorting] = useState<SortingState>([]);
-  const [expanded, setExpanded] = useState<string | null>(null);
-
-  const columns = [
-    columnHelper.accessor('name', {
-      header: 'Таблица',
-      cell: info => info.getValue(),
-    }),
-    columnHelper.accessor(row => row.columns.length, {
-      id: 'count',
-      header: 'Колонки',
-      cell: info => info.getValue(),
-    }),
-  ];
-
-  const table = useReactTable({
-    data: tablesState,
-    columns,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  });
-
-  const rowBg = useColorModeValue('white', 'gray.700');
-  const expandBg = useColorModeValue('gray.50', 'gray.800');
+  const blueprintBg = useColorModeValue('radial-gradient(circle at 20% 20%, rgba(0, 255, 255, 0.06), transparent 35%), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(180deg, rgba(255,255,255,0.04) 1px, transparent 1px)',
+    'radial-gradient(circle at 20% 20%, rgba(0, 255, 255, 0.08), transparent 35%), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(180deg, rgba(255,255,255,0.06) 1px, transparent 1px)');
 
   useEffect(() => {
     setTablesState(selectedSchemaData?.tables || []);
     setPage(1);
+    setFocusedTable(null);
   }, [selectedSchemaData]);
 
   const loadMore = async () => {
@@ -97,7 +70,7 @@ const DatabaseViewerPage: React.FC = () => {
       const schema = db?.schemas?.find((s: any) => s.name === selectedSchema);
       const newTables = schema?.tables || [];
       if (newTables.length > 0) {
-        setTablesState(prev => [...prev, ...newTables]);
+        setTablesState((prev) => [...prev, ...newTables]);
         dispatch(appendTables({ db: selectedDb, schema: selectedSchema, tables: newTables }));
         setPage(nextPage);
       }
@@ -106,74 +79,184 @@ const DatabaseViewerPage: React.FC = () => {
     }
   };
 
+  const focusedData = useMemo(
+    () => tablesState.find((t) => t.name === focusedTable),
+    [focusedTable, tablesState],
+  );
+
+  const renderColumnBadge = (col: any) => {
+    const pk = col.is_primary_key || col.is_pk;
+    const uk = col.is_unique;
+    return (
+      <HStack spacing={2} align="center" justify="space-between">
+        <Text fontWeight="semibold">{col.name}</Text>
+        <HStack spacing={1}>
+          {pk && (
+            <Tooltip label="Primary key" openDelay={150}>
+              <Badge colorScheme="cyan">PK</Badge>
+            </Tooltip>
+          )}
+          {uk && <Badge colorScheme="purple">UQ</Badge>}
+          {col.is_nullable ? <Badge variant="outline">NULL</Badge> : <Badge colorScheme="green">NOT NULL</Badge>}
+        </HStack>
+      </HStack>
+    );
+  };
+
   return (
-    <Box p={8} maxW="1000px" mx="auto">
-      <Heading mb={8} textAlign="center">Просмотр базы данных</Heading>
-      <Box maxW="md" mx="auto" mb={4}>
-        <DatabaseSelector data={data} selectedDb={selectedDb} onChange={(db) => dispatch(setSelectedDb(db))} />
-      </Box>
-      {selectedDb && selectedDatabase && (
-        <Box maxW="md" mx="auto" mb={4}>
-          <SchemaSelector selectedDatabase={selectedDatabase} selectedSchema={selectedSchema} onChange={(schema) => dispatch(setSelectedSchema(schema))} />
-        </Box>
-      )}
+    <Box>
+      <HStack justify="space-between" mb={6} flexWrap="wrap" gap={3}>
+        <Heading size="lg">Интерактивная схема БД</Heading>
+        <HStack spacing={2} color="text.muted" fontSize="sm">
+          <Badge colorScheme="cyan">ПК — ключи</Badge>
+          <Badge colorScheme="purple">UQ</Badge>
+          <Badge variant="outline">NULL</Badge>
+        </HStack>
+      </HStack>
+
+      <Card variant="glass" mb={4}>
+        <CardBody>
+          <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} alignItems="center">
+            <DatabaseSelector
+              data={data}
+              selectedDb={selectedDb}
+              onChange={(db) => dispatch(setSelectedDb(db))}
+            />
+            {selectedDb && selectedDatabase && (
+              <SchemaSelector
+                selectedDatabase={selectedDatabase}
+                selectedSchema={selectedSchema}
+                onChange={(schema) => dispatch(setSelectedSchema(schema))}
+              />
+            )}
+          </SimpleGrid>
+        </CardBody>
+      </Card>
+
       {selectedSchema && (
-        <><Table variant="simple" size="sm">
-          <Thead>
-            {table.getHeaderGroups().map(headerGroup => (
-              <Tr key={headerGroup.id}>
-                {headerGroup.headers.map(header => (
-                  <Th
-                    key={header.id}
-                    cursor={header.column.getCanSort() ? 'pointer' : undefined}
-                    onClick={header.column.getToggleSortingHandler()}
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                  </Th>
-                ))}
-              </Tr>
-            ))}
-          </Thead>
-          <Tbody>
-            {table.getRowModel().rows.map(row => (
-              <React.Fragment key={row.id}>
-                <Tr
-                  bg={rowBg}
-                  _hover={{ bg: useColorModeValue('gray.100', 'gray.600') }}
-                  cursor="pointer"
-                  onClick={() => setExpanded(expanded === row.id ? null : row.id)}
+        <Stack spacing={4}>
+          <Card variant="surface">
+            <CardBody>
+              <HStack justify="space-between" mb={3} align="center">
+                <HStack>
+                  <Icon as={FiDatabase} />
+                  <Text fontWeight="bold">{selectedDb}</Text>
+                  <Badge>{selectedSchema}</Badge>
+                </HStack>
+                <Button
+                  leftIcon={<FiRefreshCw />}
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setPage(1);
+                    setTablesState(selectedSchemaData?.tables || []);
+                  }}
                 >
-                  {row.getVisibleCells().map(cell => (
-                    <Td key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </Td>
-                  ))}
-                </Tr>
-                <Tr>
-                  <Td colSpan={2} p={0} border="none">
-                    <ScaleFade in={expanded === row.id} unmountOnExit>
-                      <Box p={4} bg={expandBg}>
-                        <Text fontWeight="bold" mb={2}>Колонки:</Text>
-                        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={2}>
-                          {row.original.columns.map(col => (
-                            <Box key={col.name} p={2} borderWidth="1px" borderRadius="md">
-                              <Text fontSize="sm" fontWeight="medium">{col.name}</Text>
-                              <Text fontSize="xs" color="gray.500">{col.type}</Text>
+                  Обновить
+                </Button>
+              </HStack>
+
+              <Box
+                borderRadius="xl"
+                border="1px solid"
+                borderColor="border.subtle"
+                p={4}
+                bg={blueprintBg}
+                overflowX="auto"
+              >
+                <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={3} minW="full">
+                  {tablesState.map((table) => (
+                    <Card
+                      key={table.name}
+                      variant={focusedTable === table.name ? 'glass' : 'surface'}
+                      borderColor={focusedTable === table.name ? 'accent.primary' : 'border.subtle'}
+                      cursor="pointer"
+                      onClick={() => setFocusedTable(table.name)}
+                    >
+                      <CardBody>
+                        <HStack justify="space-between" mb={2}>
+                          <HStack spacing={2}>
+                            <Icon as={FiGrid} />
+                            <Text fontWeight="bold">{table.name}</Text>
+                          </HStack>
+                          <Badge colorScheme="cyan">{table.columns.length} полей</Badge>
+                        </HStack>
+                        <VStack align="stretch" spacing={1} maxH="200px" overflowY="auto">
+                          {table.columns.slice(0, 8).map((col) => (
+                            <Box
+                              key={col.name}
+                              border="1px solid"
+                              borderColor="border.subtle"
+                              borderRadius="md"
+                              px={2}
+                              py={1}
+                              bg="bg.elevated"
+                            >
+                              {renderColumnBadge(col)}
+                              <Text fontSize="xs" color="text.muted">
+                                {col.type}
+                              </Text>
                             </Box>
                           ))}
-                        </SimpleGrid>
-                      </Box>
-                    </ScaleFade>
-                  </Td>
-                </Tr>
-              </React.Fragment>
-            ))}
-          </Tbody>
-        </Table><Box textAlign="center" mt={4}>
-            <Button onClick={loadMore}>Загрузить ещё</Button>
-          </Box></>
+                          {table.columns.length > 8 && (
+                            <Text fontSize="xs" color="text.muted">
+                              + ещё {table.columns.length - 8} колонок
+                            </Text>
+                          )}
+                        </VStack>
+                      </CardBody>
+                    </Card>
+                  ))}
+                </SimpleGrid>
+              </Box>
+
+              <Flex justify="center" mt={4}>
+                <Button variant="ghost" onClick={loadMore} leftIcon={<FiRefreshCw />}>
+                  Загрузить ещё
+                </Button>
+              </Flex>
+            </CardBody>
+          </Card>
+
+          {focusedData && (
+            <Card variant="glass">
+              <CardBody>
+                <HStack justify="space-between" mb={2}>
+                  <HStack spacing={2}>
+                    <Icon as={FiServer} />
+                    <Text fontWeight="bold">{focusedData.name}</Text>
+                    <Badge colorScheme="cyan">{focusedData.columns.length} колонок</Badge>
+                  </HStack>
+                  <IconButton
+                    aria-label="close"
+                    icon={<FiRefreshCw />}
+                    variant="ghost"
+                    onClick={() => setFocusedTable(null)}
+                  />
+                </HStack>
+                <Divider mb={3} />
+                <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={3}>
+                  {focusedData.columns.map((col) => (
+                    <Card key={col.name} variant="surface">
+                      <CardBody>
+                        <HStack justify="space-between" mb={1}>
+                          <HStack spacing={2}>
+                            {(col.is_primary_key || col.is_pk) && <Icon as={FiKey} color="accent.primary" />}
+                            <Text fontWeight="semibold">{col.name}</Text>
+                          </HStack>
+                          <Badge>{col.type}</Badge>
+                        </HStack>
+                        <Text fontSize="sm" color="text.muted">
+                          {col.is_nullable ? 'Nullable' : 'Not null'} {col.is_unique && '• Unique'}
+                        </Text>
+                      </CardBody>
+                    </Card>
+                  ))}
+                </SimpleGrid>
+              </CardBody>
+            </Card>
+          )}
+        </Stack>
       )}
     </Box>
   );

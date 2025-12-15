@@ -5,6 +5,8 @@ export interface Task {
   status: string;
   create_date: string;
   comment?: string | null;
+  progress?: number;
+  run_id?: string;
 }
 
 interface TasksState {
