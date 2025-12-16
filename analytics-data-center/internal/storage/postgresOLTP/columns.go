@@ -3,7 +3,9 @@ package postgresoltp
 import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
 	"context"
+	"database/sql"
 	"log/slog"
+	"strings"
 )
 
 func (p *PostgresOLTP) GetColumns(ctx context.Context, schemaName string, tableName string) ([]models.Column, error) {
@@ -16,15 +18,13 @@ func (p *PostgresOLTP) GetColumns(ctx context.Context, schemaName string, tableN
 	query := `
 SELECT
     column_name,
-    CASE
-        WHEN data_type = 'ARRAY' THEN udt_name
-        WHEN data_type = 'USER-DEFINED' THEN format('%s.%s', udt_schema, udt_name)
-        WHEN data_type IN ('character varying', 'character', 'bit', 'bit varying') AND character_maximum_length IS NOT NULL
-            THEN format('%s(%s)', data_type, character_maximum_length)
-        WHEN data_type IN ('numeric', 'decimal') AND numeric_precision IS NOT NULL
-            THEN format('%s(%s,%s)', data_type, numeric_precision, COALESCE(numeric_scale, 0))
-        ELSE data_type
-    END AS data_type
+    is_nullable,
+    data_type,
+    udt_schema,
+    udt_name,
+    character_maximum_length,
+    numeric_precision,
+    numeric_scale
 FROM information_schema.columns
 WHERE table_schema = $1 AND table_name = $2
 ORDER BY ordinal_position`
@@ -37,11 +37,43 @@ ORDER BY ordinal_position`
 
 	for rows.Next() {
 		var row models.Column
-		err = rows.Scan(&row.Name, &row.Type)
+		var nullable string
+		var charMax sql.NullInt64
+		var numPrec sql.NullInt64
+		var numScale sql.NullInt64
+		err = rows.Scan(
+			&row.Name,
+			&nullable,
+			&row.DataType,
+			&row.UdtSchema,
+			&row.UdtName,
+			&charMax,
+			&numPrec,
+			&numScale,
+		)
 		if err != nil {
 			log.Error("Запрос выполнен с ошибкой", slog.String("error", err.Error()))
 			return []models.Column{}, err
 		}
+
+		if charMax.Valid {
+			row.CharMaxLen = &charMax.Int64
+		}
+		if numPrec.Valid {
+			row.NumPrecision = &numPrec.Int64
+		}
+		if numScale.Valid {
+			row.NumScale = &numScale.Int64
+		}
+
+		row.IsNullable = nullable == "YES"
+		// Сохраняем Type для обратной совместимости: массивы получают имя элемента, остальные — data_type.
+		if strings.EqualFold(row.DataType, "ARRAY") && row.UdtName != "" {
+			row.Type = row.UdtName
+		} else {
+			row.Type = row.DataType
+		}
+
 		columns = append(columns, row)
 	}
 

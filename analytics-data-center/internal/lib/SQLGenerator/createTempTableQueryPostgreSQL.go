@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
+
+	"github.com/lib/pq"
 )
 
 func MapTypeToPostgres(typ string) string {
@@ -45,8 +48,10 @@ func MapTypeToPostgres(typ string) string {
 		mapped = "SMALLINT"
 	case "date":
 		mapped = "DATE"
-	case "timestamp", "timestamp without time zone", "timestamptz":
+	case "timestamp", "timestamp without time zone":
 		mapped = "TIMESTAMP"
+	case "timestamp with time zone", "timestamptz":
+		mapped = "TIMESTAMPTZ"
 	case "time", "time without time zone":
 		mapped = "TIME"
 	case "timetz", "time with time zone":
@@ -90,7 +95,10 @@ func MapTypeToPostgres(typ string) string {
 	case "array":
 		mapped = "TEXT[]"
 	default:
-		mapped = baseType
+		mapped = "TEXT"
+	}
+	if strings.EqualFold(baseType, "user-defined") {
+		mapped = "TEXT"
 	}
 	if strings.EqualFold(mapped, "user-defined") {
 		if original != "" && !strings.EqualFold(original, "user-defined") {
@@ -127,7 +135,8 @@ func GenerateQueryCreateTempTablePostgres(
 				logger.Info("Table", slog.String("Table", tbl.Name))
 				var b strings.Builder
 				tableName := fmt.Sprintf("temp_%s_%s_%s", source.Name, sch.Name, tbl.Name)
-				_, err := b.WriteString(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n", tableName))
+				quotedTable := pq.QuoteIdentifier(tableName)
+				_, err := b.WriteString(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n", quotedTable))
 				if err != nil {
 					logger.Error("ошибка", slog.String("error", err.Error()))
 					return models.Queries{}, nil, err
@@ -177,19 +186,18 @@ func GenerateQueryCreateTempTablePostgres(
 					if colName == "" {
 						colName = col.Name
 					}
-					colType := MapTypeToPostgres(col.Type)
+					quotedCol := pq.QuoteIdentifier(colName)
+					colType := MapColumnTypeToPostgresDDL(col)
 					isNotNull := "NOT NULL"
-					if colType == "" {
-						colType = "TEXT"
-					}
 					var line string
 					if !col.IsNullable {
-						line = fmt.Sprintf("  %s %s %s", colName, colType, isNotNull)
+						line = fmt.Sprintf("  %s %s %s", quotedCol, colType, isNotNull)
 					} else {
-						line = fmt.Sprintf("  %s %s", colName, colType)
+						line = fmt.Sprintf("  %s %s", quotedCol, colType)
 					}
 					if col.IsPrimaryKey {
-						linePrimary = fmt.Sprintf(", CONSTRAINT %s_%s_prk PRIMARY KEY (%s)", colName, tableName, colName)
+						constraintName := pq.QuoteIdentifier(shortenIdentifier(fmt.Sprintf("%s_%s_prk", colName, tableName)))
+						linePrimary = fmt.Sprintf(", CONSTRAINT %s PRIMARY KEY (%s)", constraintName, quotedCol)
 					}
 					if idx < len(cleanList)-1 {
 						line += ","
@@ -217,4 +225,17 @@ func GenerateQueryCreateTempTablePostgres(
 	return models.Queries{
 		Queries: queryObject,
 	}, duplicateColumnNames, nil
+}
+
+func shortenIdentifier(name string) string {
+	const maxBytes = 63
+	if len(name) <= maxBytes {
+		return name
+	}
+	for i := range name {
+		if i > maxBytes {
+			return name[:i]
+		}
+	}
+	return name
 }

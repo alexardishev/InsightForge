@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+
+	"github.com/lib/pq"
 )
 
 func CreateViewQueryPostgres(schema models.View, viewJoin models.ViewJoinTable, logger *slog.Logger) (models.Query, error) {
@@ -16,19 +18,27 @@ func CreateViewQueryPostgres(schema models.View, viewJoin models.ViewJoinTable, 
 		return models.Query{}, fmt.Errorf("нет временных таблиц для формирования вью")
 	}
 
-	// SELECT част
+	aliasMap := make(map[string]string)
+	assignAlias := func(name string, idx int) string {
+		if existing, ok := aliasMap[name]; ok {
+			return existing
+		}
+		alias := fmt.Sprintf("t%d", idx+1)
+		aliasMap[name] = alias
+		return alias
+	}
+
 	var selectParts []string
-	for _, tempTable := range viewJoin.TempTables {
-		alias := CleanAndTrim(tempTable.TempTableName, 4)
+	for idx, tempTable := range viewJoin.TempTables {
+		alias := assignAlias(tempTable.TempTableName, idx)
 		for _, col := range tempTable.TempColumns {
-			selectParts = append(selectParts, fmt.Sprintf("%s.%s", alias, col.ColumnName))
+			selectParts = append(selectParts, fmt.Sprintf("%s.%s", pq.QuoteIdentifier(alias), pq.QuoteIdentifier(col.ColumnName)))
 		}
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("CREATE TABLE %s AS SELECT %s", schema.Name, strings.Join(selectParts, ", ")))
+	b.WriteString(fmt.Sprintf("CREATE TABLE %s AS SELECT %s", pq.QuoteIdentifier(schema.Name), strings.Join(selectParts, ", ")))
 
-	// Определяем главную таблицу
 	mainTableName := ""
 	mainAlias := ""
 	mainTableSet := false
@@ -36,33 +46,37 @@ func CreateViewQueryPostgres(schema models.View, viewJoin models.ViewJoinTable, 
 	for _, join := range schema.Joins {
 		if join.Inner != nil && join.Inner.MainTable != "" {
 			mainTableName = fmt.Sprintf("temp_%s_%s_%s", join.Inner.Source, join.Inner.Schema, join.Inner.MainTable)
-			mainAlias = CleanAndTrim(mainTableName, 4)
+			mainAlias = assignAlias(mainTableName, len(aliasMap))
 			mainTableSet = true
 			break
 		}
 	}
 	if !mainTableSet {
 		mainTableName = viewJoin.TempTables[0].TempTableName
-		mainAlias = CleanAndTrim(mainTableName, 4)
+		mainAlias = assignAlias(mainTableName, len(aliasMap))
 	}
 
-	fromClause := fmt.Sprintf(" FROM %s %s", mainTableName, mainAlias)
+	fromClause := fmt.Sprintf(" FROM %s %s", pq.QuoteIdentifier(mainTableName), pq.QuoteIdentifier(mainAlias))
 
-	// JOIN части
 	var joinClauses []string
 	for _, join := range schema.Joins {
 		if join.Inner != nil {
 			joinTable := fmt.Sprintf("temp_%s_%s_%s", join.Inner.Source, join.Inner.Schema, join.Inner.Table)
-			joinAlias := CleanAndTrim(joinTable, 4)
+			joinAlias := assignAlias(joinTable, len(aliasMap))
 			joinClauses = append(joinClauses, fmt.Sprintf("JOIN %s %s ON %s.%s = %s.%s",
-				joinTable, joinAlias,
-				mainAlias, join.Inner.ColumnFirst,
-				joinAlias, join.Inner.ColumnSecond,
+				pq.QuoteIdentifier(joinTable), pq.QuoteIdentifier(joinAlias),
+				pq.QuoteIdentifier(mainAlias), pq.QuoteIdentifier(join.Inner.ColumnFirst),
+				pq.QuoteIdentifier(joinAlias), pq.QuoteIdentifier(join.Inner.ColumnSecond),
 			))
 		}
 	}
 
-	finalQuery := fmt.Sprintf("%s%s %s", b.String(), fromClause, strings.Join(joinClauses, " "))
+	joinSQL := strings.Join(joinClauses, " ")
+	if joinSQL != "" {
+		joinSQL = " " + joinSQL
+	}
+
+	finalQuery := fmt.Sprintf("%s%s%s", b.String(), fromClause, joinSQL)
 
 	return models.Query{
 		Query:     finalQuery,
