@@ -9,6 +9,7 @@ import {
   toggleTable,
   toggleColumn,
   setTableColumns,
+  setColumnAlias,
 } from './viewBuilderSlice';
 import DatabaseSelector from './components/DatabaseSelector';
 import SchemaSelector from './components/SchemaSelector';
@@ -65,6 +66,10 @@ const ViewBuilderPage: React.FC = () => {
         })),
       }),
     );
+  };
+
+  const handleAliasChange = (table: string, column: string, alias: string) => {
+    dispatch(setColumnAlias({ table, column, alias }));
   };
 
   const selectedDatabase = data?.find((db: any) => db.name === selectedDb);
@@ -164,6 +169,7 @@ const ViewBuilderPage: React.FC = () => {
           selectedColumns={selectedColumns}
           onToggleColumn={handleToggleColumn}
           onSetTableColumns={handleSetTableColumns}
+          onAliasChange={handleAliasChange}
         />
 
         {selectedColumns.length === 0 && (

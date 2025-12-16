@@ -162,58 +162,72 @@ const JoinBuilderPage: React.FC = () => {
 
         <Divider borderColor="border.subtle" />
 
-        <VStack align="stretch" spacing={3}>
-          <Text fontWeight="semibold">Настрой ключи join</Text>
-          <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
-            <Select
-              placeholder="Основная таблица"
-              value={mainTable}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMainTable(e.target.value)}
-            >
-              {selectedTables.map((t: string) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </Select>
-            <Select
-              placeholder="Колонка"
-              value={mainColumn}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMainColumn(e.target.value)}
-            >
-              {columnsByTable(mainTable).map((col: Column) => (
-                <option key={col.name} value={col.name}>
-                  {col.name}
-                </option>
-              ))}
-            </Select>
-            <Select
-              placeholder="Таблица для join"
-              value={joinTable}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setJoinTable(e.target.value)}
-            >
-              {selectedTables.map((t: string) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </Select>
-            <Select
-              placeholder="Колонка"
-              value={joinColumn}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setJoinColumn(e.target.value)}
-            >
-              {columnsByTable(joinTable).map((col: Column) => (
-                <option key={col.name} value={col.name}>
-                  {col.name}
-                </option>
-              ))}
-            </Select>
-          </SimpleGrid>
-          <Button onClick={handleAddJoin} variant="glow" alignSelf="flex-start">
-            Добавить join
-          </Button>
-        </VStack>
+        <Card variant="surface">
+          <CardBody>
+            <HStack justify="space-between" mb={2} align="center">
+              <Text fontWeight="semibold">Настрой ключи join</Text>
+              <Badge colorScheme={canProceed ? 'green' : 'yellow'}>
+                {canProceed ? 'готово к переходу' : 'нужно правило'}
+              </Badge>
+            </HStack>
+            <Text color="text.muted" fontSize="sm" mb={4}>
+              Выбирай пары таблиц и колонок. Мы блокируем риск картезианских джоинов и подсвечиваем незаполненные поля.
+            </Text>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+              <Select
+                placeholder="Основная таблица"
+                value={mainTable}
+                variant="filled"
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMainTable(e.target.value)}
+              >
+                {selectedTables.map((t: string) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                placeholder="Колонка"
+                value={mainColumn}
+                variant="filled"
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMainColumn(e.target.value)}
+              >
+                {columnsByTable(mainTable).map((col: Column) => (
+                  <option key={col.name} value={col.name}>
+                    {col.name}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                placeholder="Таблица для join"
+                value={joinTable}
+                variant="filled"
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setJoinTable(e.target.value)}
+              >
+                {selectedTables.map((t: string) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                placeholder="Колонка"
+                value={joinColumn}
+                variant="filled"
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setJoinColumn(e.target.value)}
+              >
+                {columnsByTable(joinTable).map((col: Column) => (
+                  <option key={col.name} value={col.name}>
+                    {col.name}
+                  </option>
+                ))}
+              </Select>
+            </SimpleGrid>
+            <Button onClick={handleAddJoin} variant="glow" alignSelf="flex-start" mt={4}>
+              Добавить join
+            </Button>
+          </CardBody>
+        </Card>
 
         <Card variant="surface">
           <CardBody>

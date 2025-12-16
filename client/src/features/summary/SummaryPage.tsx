@@ -36,6 +36,7 @@ const SummaryPage: React.FC = () => {
                 );
                 const base = {
                   name: col.name,
+                  alias: selectedColumn?.alias,
                   type: col.type,
                   is_nullable: col.is_nullable,
                   is_primary_key: col.is_primary_key || col.is_pk,

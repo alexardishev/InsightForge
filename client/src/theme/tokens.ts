@@ -32,32 +32,32 @@ export const shadows = {
 export const semanticTokens = {
   colors: {
     'bg.canvas': {
-      default: '#0b1224',
-      _light: '#f6f8fb',
+      default: '#0f1628',
+      _light: '#eef2f7',
     },
     'bg.surface': {
-      default: 'rgba(24, 32, 54, 0.85)',
+      default: 'rgba(25, 35, 58, 0.92)',
       _light: '#ffffff',
     },
     'bg.elevated': {
-      default: 'rgba(33, 45, 77, 0.85)',
-      _light: '#f2f5fb',
+      default: 'rgba(34, 48, 80, 0.9)',
+      _light: '#f6f8fc',
     },
     'text.primary': {
-      default: '#f5f8ff',
+      default: '#f8fbff',
       _light: '#0f172a',
     },
     'text.muted': {
-      default: '#9fb2d9',
+      default: '#b5c4e1',
       _light: '#4b5563',
     },
     'accent.primary': {
-      default: '#3fe1f7',
-      _light: '#0ea5e9',
+      default: '#7ad7f0',
+      _light: '#22b8e9',
     },
     'accent.secondary': {
-      default: '#a855f7',
-      _light: '#7c3aed',
+      default: '#c8b5ff',
+      _light: '#8f7cf3',
     },
     'border.subtle': {
       default: 'rgba(255, 255, 255, 0.08)',

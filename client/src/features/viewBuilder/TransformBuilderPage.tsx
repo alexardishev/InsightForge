@@ -53,7 +53,7 @@ const TransformBuilderPage: React.FC = () => {
     const existing = transformations[key];
     initial[key] = {
       type: existing?.type || '',
-      output: existing?.output_column || '',
+      output: existing?.output_column || c.alias || '',
       mapping: existing?.mapping?.mapping ? JSON.stringify(existing.mapping.mapping, null, 2) : '',
       mappingJson: existing?.mapping?.mapping_json ? JSON.stringify(existing.mapping.mapping_json, null, 2) : '',
     };
@@ -68,6 +68,9 @@ const TransformBuilderPage: React.FC = () => {
   const handleSave = async () => {
     Object.entries(local).forEach(([key, val]) => {
       const [table, column] = key.split('.');
+      const selectedCol = selectedColumns.find(
+        (c) => c.table === table && c.column === column,
+      );
       if (!val.type) {
         dispatch(setTransformation({ table, column, transform: null }));
         return;
@@ -86,7 +89,7 @@ const TransformBuilderPage: React.FC = () => {
       const transform = {
         type: val.type,
         mode: 'Mapping',
-        output_column: val.output || column,
+        output_column: val.output || selectedCol?.alias || column,
         mapping,
       };
       dispatch(setTransformation({ table, column, transform }));

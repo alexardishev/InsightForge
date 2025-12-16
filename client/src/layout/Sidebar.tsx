@@ -22,6 +22,7 @@ import {
   FiActivity,
   FiLayers,
   FiZap,
+  FiMap,
 } from 'react-icons/fi';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../app/store';
@@ -92,6 +93,7 @@ const SidebarContent: React.FC = () => {
       <VStack align="stretch" spacing={2}>
         <NavButton label="Connections" path="/settings" icon={FiSettings} />
         <NavButton label="Sources" path="/db-viewer" icon={FiDatabase} />
+        <NavButton label="Схемы" path="/schemas" icon={FiMap} />
         <NavButton label="Marts / Views" path="/builder" icon={FiLayers} disabled={!canBuilder} />
         <NavButton label="Join Builder" path="/joins" icon={FiGitBranch} disabled={!canJoins} />
         <NavButton label="Transforms" path="/transforms" icon={FiRepeat} disabled={!canTransforms} />
