@@ -22,6 +22,6 @@ func TestTransformIndexDefToSQLExpression_RenamesIndexWithTimestamp(t *testing.T
 	require.NoError(t, err)
 	require.Contains(t, query, "ON public.analytics_view")
 
-	pattern := regexp.MustCompile(`CREATE INDEX \d{8}_\d{6}_my_complex_index ON`)
+	pattern := regexp.MustCompile(`CREATE INDEX idx_\d{8}_\d{6}_my_complex_index ON`)
 	require.True(t, pattern.MatchString(query), "index name should be prefixed with timestamp and sanitized")
 }

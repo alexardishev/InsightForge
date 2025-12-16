@@ -23,7 +23,7 @@ func TransformIndexDefToSQLExpression(indexExpression models.Index, schemaFrom s
 	updated := re.ReplaceAllString(original, replacement)
 	timePrefix := time.Now().UTC().Format("20060102_150405")
 	safeIndexName := sanitizeIndexName(originalIndexName)
-	new := fmt.Sprintf("%s_%s", timePrefix, safeIndexName)
+	new := fmt.Sprintf("idx_%s_%s", timePrefix, safeIndexName)
 	updated = strings.Replace(updated, originalIndexName, new, 1)
 	if updated == original {
 		logger.Warn("Регулярное выражение не сработало, замена не произведена",

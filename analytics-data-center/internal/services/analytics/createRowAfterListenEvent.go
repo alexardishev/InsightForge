@@ -204,6 +204,11 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 			finalRow,
 			conflictColumns,
 		); err != nil {
+			if isRelationDoesNotExist(err) {
+				log.Warn("таблица отсутствует в DWH, пропускаю вставку",
+					slog.String("view", viewName))
+				continue
+			}
 			log.Error("ошибка вставки/обновления",
 				slog.String("error", err.Error()),
 				slog.String("view", viewName))
@@ -265,6 +270,12 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 		// 2.1. Колонки в DWH для этого view
 		columns, err := a.DWHProvider.GetColumnsTables(ctx, dwhSchemaName, strings.ToLower(dwhTableName))
 		if err != nil {
+			if isRelationDoesNotExist(err) {
+				log.Warn("таблица отсутствует в DWH, пропускаю схему",
+					slog.String("view", viewName),
+					slog.String("table", dwhTableName))
+				continue
+			}
 			log.Error("ошибка получения колонок DWH",
 				slog.String("error", err.Error()),
 				slog.String("view", viewName))
@@ -570,4 +581,11 @@ func isTimeType(t string) bool {
 	return strings.HasPrefix(tt, "TIMESTAMP") ||
 		strings.HasPrefix(tt, "TIME") ||
 		tt == "DATE"
+}
+
+func isRelationDoesNotExist(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "does not exist")
 }
