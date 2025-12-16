@@ -18,6 +18,7 @@ SELECT
     column_name,
     CASE
         WHEN data_type = 'ARRAY' THEN udt_name
+        WHEN data_type = 'USER-DEFINED' THEN format('%s.%s', udt_schema, udt_name)
         WHEN data_type IN ('character varying', 'character', 'bit', 'bit varying') AND character_maximum_length IS NOT NULL
             THEN format('%s(%s)', data_type, character_maximum_length)
         WHEN data_type IN ('numeric', 'decimal') AND numeric_precision IS NOT NULL

@@ -9,7 +9,8 @@ import (
 )
 
 func MapTypeToPostgres(typ string) string {
-	typeLower := strings.ToLower(strings.TrimSpace(typ))
+	original := strings.TrimSpace(typ)
+	typeLower := strings.ToLower(original)
 	isArray := false
 
 	if strings.HasPrefix(typeLower, "_") {
@@ -89,7 +90,7 @@ func MapTypeToPostgres(typ string) string {
 	case "array":
 		mapped = "TEXT[]"
 	default:
-		mapped = "TEXT"
+		mapped = baseType
 	}
 
 	if length != "" {
