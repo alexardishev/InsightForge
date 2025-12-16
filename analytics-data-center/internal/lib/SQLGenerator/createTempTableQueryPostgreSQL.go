@@ -9,28 +9,48 @@ import (
 )
 
 func MapTypeToPostgres(typ string) string {
-	switch strings.ToLower(typ) {
-	case "int", "integer", "int4":
-		return "INTEGER"
-	case "bigint", "int8":
-		return "BIGINT"
-	case "float", "float4", "real":
-		return "REAL"
-	case "double precision", "float8":
-		return "DOUBLE PRECISION"
-	case "bool", "boolean":
-		return "BOOLEAN"
-	case "date":
-		return "DATE"
-	case "timestamp", "timestamp without time zone", "timestamptz":
-		return "TIMESTAMP"
-	case "json", "jsonb":
-		return "JSONB"
-	case "text", "varchar", "character varying":
-		return "TEXT"
-	default:
-		return "TEXT"
+	typeLower := strings.ToLower(strings.TrimSpace(typ))
+	isArray := false
+
+	if strings.HasPrefix(typeLower, "_") {
+		isArray = true
+		typeLower = strings.TrimPrefix(typeLower, "_")
 	}
+	if strings.HasSuffix(typeLower, "[]") {
+		isArray = true
+		typeLower = strings.TrimSuffix(typeLower, "[]")
+	}
+
+	var mapped string
+	switch typeLower {
+	case "int", "integer", "int4":
+		mapped = "INTEGER"
+	case "bigint", "int8":
+		mapped = "BIGINT"
+	case "float", "float4", "real":
+		mapped = "REAL"
+	case "double precision", "float8":
+		mapped = "DOUBLE PRECISION"
+	case "bool", "boolean":
+		mapped = "BOOLEAN"
+	case "date":
+		mapped = "DATE"
+	case "timestamp", "timestamp without time zone", "timestamptz":
+		mapped = "TIMESTAMP"
+	case "json", "jsonb":
+		mapped = "JSONB"
+	case "text", "varchar", "character varying":
+		mapped = "TEXT"
+	case "uuid":
+		mapped = "UUID"
+	default:
+		mapped = "TEXT"
+	}
+
+	if isArray {
+		return mapped + "[]"
+	}
+	return mapped
 }
 
 func GenerateQueryCreateTempTablePostgres(

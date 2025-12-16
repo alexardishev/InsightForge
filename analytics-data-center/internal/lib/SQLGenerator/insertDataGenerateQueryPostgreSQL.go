@@ -115,6 +115,32 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 				}
 			case time.Time:
 				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", v.Format("2006-01-02 15:04:05")))
+			case []interface{}:
+				valueStrings = append(valueStrings, formatPostgresArray(v))
+			case []int:
+				arr := make([]interface{}, len(v))
+				for i, item := range v {
+					arr[i] = item
+				}
+				valueStrings = append(valueStrings, formatPostgresArray(arr))
+			case []int64:
+				arr := make([]interface{}, len(v))
+				for i, item := range v {
+					arr[i] = item
+				}
+				valueStrings = append(valueStrings, formatPostgresArray(arr))
+			case []float64:
+				arr := make([]interface{}, len(v))
+				for i, item := range v {
+					arr[i] = item
+				}
+				valueStrings = append(valueStrings, formatPostgresArray(arr))
+			case []string:
+				arr := make([]interface{}, len(v))
+				for i, item := range v {
+					arr[i] = item
+				}
+				valueStrings = append(valueStrings, formatPostgresArray(arr))
 			default:
 				return models.Query{}, fmt.Errorf("неподдерживаемый тип значения для колонки %s (%T)", col, v)
 			}
@@ -135,4 +161,21 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 		Query:     finalQuery,
 		TableName: tempTableName,
 	}, nil
+}
+
+func formatPostgresArray(items []interface{}) string {
+	parts := make([]string, 0, len(items))
+	for _, it := range items {
+		switch v := it.(type) {
+		case nil:
+			parts = append(parts, "NULL")
+		case string:
+			safe := strings.ReplaceAll(v, "\"", "\\\"")
+			safe = strings.ReplaceAll(safe, "'", "''")
+			parts = append(parts, fmt.Sprintf("\"%s\"", safe))
+		default:
+			parts = append(parts, fmt.Sprintf("%v", v))
+		}
+	}
+	return fmt.Sprintf("'{%s}'", strings.Join(parts, ","))
 }
