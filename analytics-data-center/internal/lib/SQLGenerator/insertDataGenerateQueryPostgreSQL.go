@@ -130,7 +130,7 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 					valueStrings = append(valueStrings, "FALSE")
 				}
 			case time.Time:
-				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", v.Format("2006-01-02 15:04:05")))
+				valueStrings = append(valueStrings, formatTimeLiteral(v, typeLower))
 			case []interface{}:
 				valueStrings = append(valueStrings, formatPostgresArray(v, typeLower))
 			case []int:
@@ -260,4 +260,19 @@ func isBitType(typeLower string) bool {
 
 func isByteaType(typeLower string) bool {
 	return strings.Contains(typeLower, "bytea")
+}
+
+func formatTimeLiteral(t time.Time, typeLower string) string {
+	switch {
+	case strings.Contains(typeLower, "date"):
+		return fmt.Sprintf("'%s'", t.Format("2006-01-02"))
+	case strings.Contains(typeLower, "timetz"):
+		return fmt.Sprintf("'%s'", t.Format("15:04:05-07"))
+	case strings.Contains(typeLower, "time"):
+		return fmt.Sprintf("'%s'", t.Format("15:04:05"))
+	case strings.Contains(typeLower, "timestamptz"):
+		return fmt.Sprintf("'%s'", t.Format("2006-01-02 15:04:05-07"))
+	default: // timestamp without tz
+		return fmt.Sprintf("'%s'", t.Format("2006-01-02 15:04:05"))
+	}
 }
