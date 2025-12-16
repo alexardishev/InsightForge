@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Box, Heading } from '@chakra-ui/react';
+import { Box, Heading, Card, CardBody, Text } from '@chakra-ui/react';
 import { useDispatch, useSelector } from 'react-redux';
 import type { AppDispatch, RootState } from '../../app/store';
 import { useHttp } from '../../hooks/http.hook';
@@ -29,17 +29,22 @@ const TasksPage: React.FC = () => {
   }, [page, pageSize]);
 
   return (
-    <Box p={8} maxW="1200px" mx="auto">
-      <Heading mb={4} textAlign="center">
-        Задачи
-      </Heading>
-      <TaskTable tasks={tasks} />
-      <PaginationControls
-        page={page}
-        pageSize={pageSize}
-        onPageChange={(p) => dispatch(setPage(p))}
-        onPageSizeChange={(s) => dispatch(setPageSize(s))}
-      />
+    <Box>
+      <Heading mb={3}>Мониторинг задач</Heading>
+      <Text color="text.muted" mb={4}>
+        Статусы, прогресс и комментарии по всем запускам. Кликни по строке, чтобы раскрыть детали.
+      </Text>
+      <Card variant="surface">
+        <CardBody>
+          <TaskTable tasks={tasks} />
+          <PaginationControls
+            page={page}
+            pageSize={pageSize}
+            onPageChange={(p) => dispatch(setPage(p))}
+            onPageSizeChange={(s) => dispatch(setPageSize(s))}
+          />
+        </CardBody>
+      </Card>
     </Box>
   );
 };

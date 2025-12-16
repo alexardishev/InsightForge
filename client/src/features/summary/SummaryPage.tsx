@@ -1,9 +1,11 @@
 import React from 'react';
-import { Box, Heading } from '@chakra-ui/react';
+import { Box, Heading, Text, VStack, Divider, Badge, HStack } from '@chakra-ui/react';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../../app/store';
 import ViewPreview from './components/ViewPreview';
 import SummaryActions from './components/SummaryActions';
+import FlowLayout from '../../components/FlowLayout';
+import { builderSteps } from '../viewBuilder/flowSteps';
 
 const SummaryPage: React.FC = () => {
   const settings = useSelector((state: RootState) => state.settings);
@@ -34,6 +36,7 @@ const SummaryPage: React.FC = () => {
                 );
                 const base = {
                   name: col.name,
+                  alias: selectedColumn?.alias,
                   type: col.type,
                   is_nullable: col.is_nullable,
                   is_primary_key: col.is_primary_key || col.is_pk,
@@ -65,13 +68,30 @@ const SummaryPage: React.FC = () => {
   };
 
   return (
-    <Box p={8} maxW="900px" mx="auto">
-      <Heading mb={4} textAlign="center">
-        Итоговая схема
-      </Heading>
-      <ViewPreview view={view} />
-      <SummaryActions view={view} />
-    </Box>
+    <FlowLayout
+      steps={builderSteps}
+      currentStep={4}
+      onBack={() => window.history.back()}
+      primaryLabel="Запустить"
+      onNext={() => null}
+    >
+      <VStack align="stretch" spacing={4}>
+        <Box>
+          <Heading size="lg">Review & Apply</Heading>
+          <Text color="text.muted" mt={2}>
+            Проверь выбранные источники, связи и трансформации перед запуском. Фокус на прозрачных
+            предупреждениях и безопасности.
+          </Text>
+          <HStack spacing={3} mt={3}>
+            <Badge colorScheme="cyan">{builder.selectedDb}</Badge>
+            <Badge colorScheme="purple">{builder.selectedSchema}</Badge>
+          </HStack>
+        </Box>
+        <Divider borderColor="border.subtle" />
+        <ViewPreview view={view} />
+        <SummaryActions view={view} />
+      </VStack>
+    </FlowLayout>
   );
 };
 

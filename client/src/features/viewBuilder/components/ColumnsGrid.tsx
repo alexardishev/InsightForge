@@ -3,23 +3,23 @@ import {
   Box,
   Text,
   Button,
-  Accordion,
-  AccordionItem,
-  AccordionButton,
-  AccordionPanel,
-  AccordionIcon,
   Badge,
   HStack,
   VStack,
-  Divider,
   Checkbox,
-  useColorModeValue
+  Input,
+  Stack,
+  Card,
+  CardBody,
+  Tag,
+  SimpleGrid,
 } from '@chakra-ui/react';
 
 interface SelectedColumn {
   table: string;
   column: string;
   isUpdateKey?: boolean;
+  alias?: string;
 }
 
 interface Props {
@@ -28,6 +28,7 @@ interface Props {
   selectedColumns: SelectedColumn[];
   onToggleColumn: (table: string, column: any) => void;
   onSetTableColumns: (table: string, columns: any[]) => void;
+  onAliasChange: (table: string, column: string, alias: string) => void;
 }
 
 const ColumnsList: React.FC<Props> = ({
@@ -36,122 +37,115 @@ const ColumnsList: React.FC<Props> = ({
   selectedColumns,
   onToggleColumn,
   onSetTableColumns,
+  onAliasChange,
 }) => {
-  const panelBg = useColorModeValue('gray.50', 'gray.700');
-  const panelText = useColorModeValue('gray.800', 'gray.100');
-  const border = useColorModeValue('gray.200', 'gray.600');
-
   if (selectedTables.length === 0 || !selectedSchemaData) return null;
 
   return (
-    <Box w="100%" px={4} py={6}>
-      <Text mb={6} fontWeight="bold" textAlign="center" fontSize="xl">
-        Колонки в выбранных таблицах:
-      </Text>
-      <Accordion allowMultiple>
-        {selectedTables.map((tableName) => {
-          const tableData = selectedSchemaData.tables?.find((t: any) => t.name === tableName);
-          const allSelected = tableData?.columns?.every((col: any) =>
-            selectedColumns.some((c) => c.table === tableName && c.column === col.name),
-          );
-          return (
-            <AccordionItem key={tableName} border="1px solid" borderColor={border} borderRadius="md" mb={3}>
-              <h2>
-                <AccordionButton>
-                  <Box flex="1" textAlign="left" fontWeight="semibold" fontSize="md">
-                    {tableName}
-                  </Box>
-                  <AccordionIcon />
-                </AccordionButton>
-              </h2>
-              <AccordionPanel pb={4} bg={panelBg} color={panelText}>
-                <HStack justify="space-between" w="100%" mb={3}>
-                  <Text fontWeight="bold">Колонки</Text>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      onSetTableColumns(tableName, allSelected ? [] : tableData?.columns || [])
-                    }
-                  >
-                    {allSelected ? 'Снять все' : 'Выбрать все'}
-                  </Button>
-                </HStack>
-                <VStack align="start" spacing={4}>
-                  {tableData?.columns?.map((col: any, index: number) => (
-                    <Box key={index} w="100%">
-                      <HStack justify="space-between" mb={1}>
-                        <HStack spacing={3}>
-                          <Checkbox
-                            isChecked={selectedColumns.some(
-                              (c) => c.table === tableName && c.column === col.name
-                            )}
-                            onChange={() => onToggleColumn(tableName, col)}
-                          />
-                          <Text fontWeight="medium">{col.name}</Text>
-                        </HStack>
-                        <HStack spacing={2} wrap="wrap">
-                          <Badge colorScheme="blue">{col.type}</Badge>
-                          {col.is_primary_key && <Badge colorScheme="red">PK</Badge>}
-                          {col.is_fk && <Badge colorScheme="orange">FK</Badge>}
-                          {col.is_unique && <Badge colorScheme="purple">UNQ</Badge>}
-                        </HStack>
-                      </HStack>
+    <Box w="100%" px={{ base: 0, md: 2 }} py={4}>
+      <VStack align="stretch" spacing={4}>
+        <HStack justify="space-between" flexWrap="wrap" gap={3}>
+          <Box>
+            <Text mb={1} fontWeight="bold" fontSize="xl">
+              Колонки витрины
+            </Text>
+            <Text color="text.muted" fontSize="sm">
+              Чекбоксы и алиасы приведены к новому стилю. "Выбрать все" учитывает безопасные ключи.
+            </Text>
+          </Box>
+        </HStack>
 
-                      <VStack align="start" spacing={2} pl={6} mt={1}>
-                        <HStack>
-                          <Text fontWeight="medium" minW="90px" fontSize="sm">Тип:</Text>
-                          <Text fontSize="sm">{col.type}</Text>
-                        </HStack>
+        <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={3}>
+          {selectedTables.map((tableName) => {
+            const tableData = selectedSchemaData.tables?.find((t: any) => t.name === tableName);
+            const allSelected = tableData?.columns?.every((col: any) =>
+              selectedColumns.some((c) => c.table === tableName && c.column === col.name),
+            );
 
-                        <HStack>
-                          <Text fontWeight="medium" minW="90px" fontSize="sm">Nullable:</Text>
-                          <Badge colorScheme={col.is_nullable ? 'yellow' : 'green'}>
-                            {col.is_nullable ? 'Да' : 'Нет'}
-                          </Badge>
-                        </HStack>
+            return (
+              <Card key={tableName} variant="surface" border="1px solid" borderColor="border.subtle">
+                <CardBody>
+                  <HStack justify="space-between" mb={3} align="center">
+                    <VStack align="start" spacing={0}>
+                      <Text fontWeight="semibold">{tableName}</Text>
+                      <Text color="text.muted" fontSize="sm">
+                        {tableData?.columns?.length || 0} колонок
+                      </Text>
+                    </VStack>
+                    <HStack spacing={2}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          onSetTableColumns(tableName, allSelected ? [] : tableData?.columns || [])
+                        }
+                      >
+                        {allSelected ? 'Снять все' : 'Выбрать все'}
+                      </Button>
+                    </HStack>
+                  </HStack>
 
-                        {col.default && (
-                          <VStack align="start" spacing={1}>
-                            <Text fontWeight="medium" fontSize="sm">По умолчанию:</Text>
-                            <Text fontSize="xs" p={2} borderRadius="md" wordBreak="break-word" bg="gray.600">
-                              {col.default}
-                            </Text>
-                          </VStack>
-                        )}
-
-                        {col.description && (
-                          <VStack align="start" spacing={1}>
-                            <Text fontWeight="medium" fontSize="sm">Описание:</Text>
-                            <Text fontSize="sm">{col.description}</Text>
-                          </VStack>
-                        )}
-
-                        <HStack wrap="wrap" pt={2}>
-                          {col.is_primary_key && (
-                            <Badge colorScheme="red" variant="outline">Первичный ключ</Badge>
-                          )}
-                          {col.is_fk && (
-                            <Badge colorScheme="orange" variant="outline">Внешний ключ</Badge>
-                          )}
-                          {col.is_unique && (
-                            <Badge colorScheme="purple" variant="outline">Уникальный</Badge>
-                          )}
-                          {!col.is_primary_key && !col.is_fk && !col.is_unique && (
-                            <Text fontSize="sm" color="gray.400">Обычная колонка</Text>
-                          )}
-                        </HStack>
-
-                        <Divider />
-                      </VStack>
-                    </Box>
-                  ))}
-                </VStack>
-              </AccordionPanel>
-            </AccordionItem>
-          );
-        })}
-      </Accordion>
+                  <Stack spacing={2} maxH="360px" overflowY="auto">
+                    {tableData?.columns?.map((col: any) => {
+                      const isChecked = selectedColumns.some(
+                        (c) => c.table === tableName && c.column === col.name,
+                      );
+                      const selected = selectedColumns.find(
+                        (c) => c.table === tableName && c.column === col.name,
+                      );
+                      return (
+                        <Box
+                          key={col.name}
+                          p={3}
+                          border="1px solid"
+                          borderColor={isChecked ? 'accent.primary' : 'border.subtle'}
+                          borderRadius="lg"
+                          bg="bg.elevated"
+                          transition="border-color 0.2s ease, transform 0.2s ease"
+                        >
+                          <HStack justify="space-between" align="start" spacing={3}>
+                            <HStack align="start" spacing={3} flex="1">
+                              <Checkbox
+                                isChecked={isChecked}
+                                onChange={() => onToggleColumn(tableName, col)}
+                                size="lg"
+                              />
+                              <VStack align="start" spacing={1} flex="1">
+                                <HStack spacing={2} wrap="wrap">
+                                  <Text fontWeight="semibold">{col.name}</Text>
+                                  <Tag colorScheme="cyan" variant="subtle">{col.type}</Tag>
+                                  {col.is_primary_key && <Tag colorScheme="green">PK</Tag>}
+                                  {col.is_fk && <Tag colorScheme="purple">FK</Tag>}
+                                  {col.is_unique && <Tag colorScheme="orange">UNQ</Tag>}
+                                </HStack>
+                                <HStack spacing={2} color="text.muted" fontSize="sm">
+                                  <Text>{col.is_nullable ? 'Nullable' : 'Not null'}</Text>
+                                  {col.default && <Badge variant="outline">default</Badge>}
+                                </HStack>
+                                {isChecked && (
+                                  <Input
+                                    placeholder="Алиас колонки (опционально)"
+                                    size="sm"
+                                    variant="filled"
+                                    value={selected?.alias || ''}
+                                    onChange={(e) =>
+                                      onAliasChange(tableName, col.name, e.target.value)
+                                    }
+                                  />
+                                )}
+                              </VStack>
+                            </HStack>
+                          </HStack>
+                        </Box>
+                      );
+                    })}
+                  </Stack>
+                </CardBody>
+              </Card>
+            );
+          })}
+        </SimpleGrid>
+      </VStack>
     </Box>
   );
 };

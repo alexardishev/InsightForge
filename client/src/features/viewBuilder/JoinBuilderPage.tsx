@@ -8,15 +8,26 @@ import {
   Button,
   Text,
   Input,
-  List,
-  ListItem,
   IconButton,
+  Alert,
+  AlertIcon,
+  Tag,
+  Divider,
+  SimpleGrid,
+  Badge,
+  Card,
+  CardBody,
+  Tooltip,
+  Icon,
 } from '@chakra-ui/react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import type { RootState, AppDispatch } from '../../app/store';
 import { addJoin, removeJoin, setViewName } from './viewBuilderSlice';
 import { DeleteIcon } from '@chakra-ui/icons';
+import { FiKey, FiLink2 } from 'react-icons/fi';
+import FlowLayout from '../../components/FlowLayout';
+import { builderSteps } from './flowSteps';
 
 interface Column {
   name: string;
@@ -44,6 +55,12 @@ const JoinBuilderPage: React.FC = () => {
   const [mainColumn, setMainColumn] = useState('');
   const [joinColumn, setJoinColumn] = useState('');
 
+  const requiresJoin = selectedTables.length > 1;
+  const cartesianRisk = requiresJoin && joins.length === 0;
+  const canProceed = !requiresJoin || joins.length > 0;
+  const columnsByTable = (tableName: string): Column[] =>
+    selectedSchemaData?.tables.find((t: any) => t.name === tableName)?.columns ?? [];
+
   const handleAddJoin = () => {
     if (!mainTable || !joinTable || !mainColumn || !joinColumn) return;
     const join = {
@@ -66,91 +83,204 @@ const JoinBuilderPage: React.FC = () => {
     navigate('/transforms');
   };
 
-  const getColumnsForTable = (tableName: string): Column[] => {
-    const table = selectedSchemaData?.tables.find((t: any) => t.name === tableName);
-    return table ? table.columns : [];
-  };
-
   return (
-    <Box p={8} maxW="800px" mx="auto">
-      <Heading mb={8} textAlign="center">
-        Настройка джоинов
-      </Heading>
-      <VStack spacing={4} align="stretch">
+    <FlowLayout
+      steps={builderSteps}
+      currentStep={2}
+      onBack={() => navigate('/builder')}
+      onNext={handleNext}
+      primaryLabel="К трансформациям"
+      secondaryLabel="Назад к таблицам"
+      isNextDisabled={!canProceed}
+    >
+      <VStack spacing={6} align="stretch">
         <Box>
-          {selectedTables.map((table) => (
-            <Box key={table} mb={2}>
-              <Text fontWeight="bold">{table}</Text>
-              <List pl={4} styleType="disc">
-                {selectedColumns
-                  .filter((c) => c.table === table)
-                  .map((c) => (
-                    <ListItem key={c.column}>{c.column}</ListItem>
-                  ))}
-              </List>
-            </Box>
-          ))}
+          <Heading size="lg">Join Builder</Heading>
+          <Text color="text.muted" mt={2}>
+            Настрой добавление таблиц, исключая cartesian join. Заполни имя витрины и ключи для
+            соединения.
+          </Text>
         </Box>
+
+        <Alert status={cartesianRisk ? 'warning' : 'info'} borderRadius="md" variant="left-accent">
+          <AlertIcon />
+          {cartesianRisk
+            ? 'Добавь хотя бы один join для нескольких таблиц — иначе возможен cartesian join.'
+            : 'Для одной таблицы джоины не обязательны. Мы подсветим рискованные связки.'}
+        </Alert>
+
+        <Card variant="surface">
+          <CardBody>
+            <HStack justify="space-between" mb={3} align="center">
+              <Text fontWeight="semibold">Состав витрины</Text>
+              <Badge colorScheme="cyan">{selectedTables.length} таблиц</Badge>
+            </HStack>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+              {selectedTables.map((table) => {
+                const cols = columnsByTable(table) as Column[];
+                return (
+                  <Box
+                    key={table}
+                    p={3}
+                    border="1px solid"
+                    borderColor="border.subtle"
+                    borderRadius="lg"
+                    bg="bg.elevated"
+                  >
+                    <HStack justify="space-between" mb={2}>
+                      <HStack spacing={2}>
+                        <Icon as={FiLink2} color="accent.primary" />
+                        <Text fontWeight="bold">{table}</Text>
+                      </HStack>
+                      <Tag colorScheme="purple">{cols.length} колонок</Tag>
+                    </HStack>
+                    <HStack spacing={2} flexWrap="wrap">
+                      {selectedColumns
+                        .filter((c) => c.table === table)
+                        .slice(0, 6)
+                        .map((c: { column: string }) => (
+                          <Tag key={c.column} colorScheme="cyan" variant="subtle">
+                            {c.column}
+                          </Tag>
+                        ))}
+                      {selectedColumns.filter((c) => c.table === table).length > 6 && (
+                        <Tag variant="outline">…</Tag>
+                      )}
+                    </HStack>
+                  </Box>
+                );
+              })}
+            </SimpleGrid>
+          </CardBody>
+        </Card>
+
         <Input
           placeholder="Имя витрины"
           value={viewName}
-          onChange={(e) => dispatch(setViewName(e.target.value))}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => dispatch(setViewName(e.target.value))}
         />
-        <HStack>
-          <Select placeholder="Основная таблица" value={mainTable} onChange={(e) => setMainTable(e.target.value)}>
-            {selectedTables.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </Select>
-          <Select placeholder="Колонка" value={mainColumn} onChange={(e) => setMainColumn(e.target.value)}>
-            {getColumnsForTable(mainTable).map((col) => (
-              <option key={col.name} value={col.name}>
-                {col.name}
-              </option>
-            ))}
-          </Select>
-        </HStack>
-        <HStack>
-          <Select placeholder="Таблица для join" value={joinTable} onChange={(e) => setJoinTable(e.target.value)}>
-            {selectedTables.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </Select>
-          <Select placeholder="Колонка" value={joinColumn} onChange={(e) => setJoinColumn(e.target.value)}>
-            {getColumnsForTable(joinTable).map((col) => (
-              <option key={col.name} value={col.name}>
-                {col.name}
-              </option>
-            ))}
-          </Select>
-        </HStack>
-        <Button onClick={handleAddJoin} colorScheme="teal" alignSelf="flex-start">
-          Добавить join
-        </Button>
 
-        <List spacing={3} w="100%">
-          {joins.map((j, idx) => (
-            <ListItem key={idx} display="flex" alignItems="center" justifyContent="space-between">
-              <Text>{`${j.inner.main_table}.${j.inner.column_first} = ${j.inner.table}.${j.inner.column_second}`}</Text>
-              <IconButton
-                aria-label="delete"
-                icon={<DeleteIcon />}
-                size="sm"
-                onClick={() => dispatch(removeJoin(idx))}
-              />
-            </ListItem>
-          ))}
-        </List>
+        <Divider borderColor="border.subtle" />
 
-        <Button colorScheme="blue" onClick={handleNext} alignSelf="center">
-          Далее
-        </Button>
+        <Card variant="surface">
+          <CardBody>
+            <HStack justify="space-between" mb={2} align="center">
+              <Text fontWeight="semibold">Настрой ключи join</Text>
+              <Badge colorScheme={canProceed ? 'green' : 'yellow'}>
+                {canProceed ? 'готово к переходу' : 'нужно правило'}
+              </Badge>
+            </HStack>
+            <Text color="text.muted" fontSize="sm" mb={4}>
+              Выбирай пары таблиц и колонок. Мы блокируем риск картезианских джоинов и подсвечиваем незаполненные поля.
+            </Text>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+              <Select
+                placeholder="Основная таблица"
+                value={mainTable}
+                variant="filled"
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMainTable(e.target.value)}
+              >
+                {selectedTables.map((t: string) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                placeholder="Колонка"
+                value={mainColumn}
+                variant="filled"
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMainColumn(e.target.value)}
+              >
+                {columnsByTable(mainTable).map((col: Column) => (
+                  <option key={col.name} value={col.name}>
+                    {col.name}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                placeholder="Таблица для join"
+                value={joinTable}
+                variant="filled"
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setJoinTable(e.target.value)}
+              >
+                {selectedTables.map((t: string) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                placeholder="Колонка"
+                value={joinColumn}
+                variant="filled"
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setJoinColumn(e.target.value)}
+              >
+                {columnsByTable(joinTable).map((col: Column) => (
+                  <option key={col.name} value={col.name}>
+                    {col.name}
+                  </option>
+                ))}
+              </Select>
+            </SimpleGrid>
+            <Button onClick={handleAddJoin} variant="glow" alignSelf="flex-start" mt={4}>
+              Добавить join
+            </Button>
+          </CardBody>
+        </Card>
+
+        <Card variant="surface">
+          <CardBody>
+            <HStack justify="space-between" mb={3}>
+              <Text fontWeight="semibold">Карта джоинов</Text>
+              <Badge colorScheme={joins.length ? 'green' : 'yellow'}>
+                {joins.length ? `${joins.length} правил` : 'правил пока нет'}
+              </Badge>
+            </HStack>
+            {joins.length === 0 ? (
+              <Text color="text.muted">Добавь хотя бы одно правило, если используешь более одной таблицы.</Text>
+            ) : (
+              <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+                {joins.map((j: any, idx: number) => (
+                  <Card key={`${j.inner.main_table}-${idx}`} variant="glass">
+                    <CardBody>
+                      <HStack justify="space-between" mb={2}>
+                        <HStack>
+                          <Icon as={FiLink2} />
+                          <Text fontWeight="bold">INNER JOIN</Text>
+                        </HStack>
+                        <IconButton
+                          aria-label="delete"
+                          icon={<DeleteIcon />}
+                          size="sm"
+                          onClick={() => dispatch(removeJoin(idx))}
+                          variant="ghost"
+                        />
+                      </HStack>
+                      <VStack align="stretch" spacing={2} fontSize="sm">
+                        <HStack>
+                          <Tag colorScheme="cyan">{j.inner.main_table}</Tag>
+                          <Icon as={FiKey} />
+                          <Text>{j.inner.column_first}</Text>
+                        </HStack>
+                        <HStack>
+                          <Tag colorScheme="purple">{j.inner.table}</Tag>
+                          <Icon as={FiKey} />
+                          <Text>{j.inner.column_second}</Text>
+                        </HStack>
+                        <Tooltip label="Мы блокируем cartesian join, если ключ не указан" placement="top">
+                          <Text color="text.muted">Ключи обязательно должны быть выбраны.</Text>
+                        </Tooltip>
+                      </VStack>
+                    </CardBody>
+                  </Card>
+                ))}
+              </SimpleGrid>
+            )}
+          </CardBody>
+        </Card>
       </VStack>
-    </Box>
+    </FlowLayout>
   );
 };
 

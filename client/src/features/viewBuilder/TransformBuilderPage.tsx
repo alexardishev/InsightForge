@@ -6,19 +6,23 @@ import {
   Select,
   Input,
   Textarea,
-  Button,
   Text,
   Divider,
   useColorModeValue,
   Checkbox,
   Tooltip,
   HStack,
+  Alert,
+  AlertIcon,
+  Tag,
 } from '@chakra-ui/react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import type { RootState, AppDispatch } from '../../app/store';
 import { setTransformation, setUpdateKey, setViewKey } from './viewBuilderSlice';
 import { InfoIcon } from '@chakra-ui/icons';
+import FlowLayout from '../../components/FlowLayout';
+import { builderSteps } from './flowSteps';
 
 interface LocalTransformState {
   type: string;
@@ -49,7 +53,7 @@ const TransformBuilderPage: React.FC = () => {
     const existing = transformations[key];
     initial[key] = {
       type: existing?.type || '',
-      output: existing?.output_column || '',
+      output: existing?.output_column || c.alias || '',
       mapping: existing?.mapping?.mapping ? JSON.stringify(existing.mapping.mapping, null, 2) : '',
       mappingJson: existing?.mapping?.mapping_json ? JSON.stringify(existing.mapping.mapping_json, null, 2) : '',
     };
@@ -64,6 +68,9 @@ const TransformBuilderPage: React.FC = () => {
   const handleSave = async () => {
     Object.entries(local).forEach(([key, val]) => {
       const [table, column] = key.split('.');
+      const selectedCol = selectedColumns.find(
+        (c) => c.table === table && c.column === column,
+      );
       if (!val.type) {
         dispatch(setTransformation({ table, column, transform: null }));
         return;
@@ -82,7 +89,7 @@ const TransformBuilderPage: React.FC = () => {
       const transform = {
         type: val.type,
         mode: 'Mapping',
-        output_column: val.output || column,
+        output_column: val.output || selectedCol?.alias || column,
         mapping,
       };
       dispatch(setTransformation({ table, column, transform }));
@@ -173,14 +180,36 @@ const TransformBuilderPage: React.FC = () => {
   };
 
   return (
-    <Box p={8} maxW="900px" mx="auto">
-      <Heading mb={8} textAlign="center">Трансформации</Heading>
+    <FlowLayout
+      steps={builderSteps}
+      currentStep={3}
+      onBack={() => navigate('/joins')}
+      onNext={handleSave}
+      primaryLabel="К обзору"
+      secondaryLabel="Назад к джоинам"
+    >
       <VStack align="stretch" spacing={4}>
+        <Box>
+          <Heading size="lg">Transform Builder</Heading>
+          <Text color="text.muted" mt={2}>
+            Настрой переименования, JSON-раскладку и surrogate/view ключи. Мы подсветим конфликты
+            алиасов.
+          </Text>
+        </Box>
+
+        <Alert status="warning" borderRadius="md" variant="left-accent">
+          <AlertIcon />
+          Перед применением проверь конфликты алиасов и обновляемые поля.
+        </Alert>
+
         {selectedTables.map((tableName) => {
           const tableData = selectedSchemaData?.tables.find((t: any) => t.name === tableName);
           return (
             <Box key={tableName}>
-              <Text fontSize="lg" fontWeight="bold" mb={2}>{tableName}</Text>
+              <HStack justify="space-between" mb={2}>
+                <Text fontSize="lg" fontWeight="bold">{tableName}</Text>
+                <Tag colorScheme="cyan">{tableData?.columns?.length || 0} колонок</Tag>
+              </HStack>
               <Divider mb={2} />
               {tableData?.columns
                 .filter((col: any) => selectedColumns.some((c) => c.table === tableName && c.column === col.name))
@@ -188,11 +217,8 @@ const TransformBuilderPage: React.FC = () => {
             </Box>
           );
         })}
-        <Button colorScheme="blue" onClick={handleSave} alignSelf="center">
-          Создать витрину
-        </Button>
       </VStack>
-    </Box>
+    </FlowLayout>
   );
 };
 

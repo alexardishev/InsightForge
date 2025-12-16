@@ -5,6 +5,7 @@ interface SelectedColumn {
   column: string;
   viewKey?: string;
   isUpdateKey?: boolean;
+  alias?: string;
 }
 
 interface JoinSide {
@@ -129,6 +130,7 @@ const viewBuilderSlice = createSlice({
           column: col.name,
           viewKey: existing?.viewKey,
           isUpdateKey: isUpdate,
+          alias: existing?.alias,
         } as SelectedColumn;
       });
 
@@ -160,6 +162,18 @@ const viewBuilderSlice = createSlice({
       );
       if (col) {
         col.isUpdateKey = isUpdateKey;
+      }
+    },
+    setColumnAlias(
+      state,
+      action: PayloadAction<{ table: string; column: string; alias: string }>,
+    ) {
+      const { table, column, alias } = action.payload;
+      const col = state.selectedColumns.find(
+        (c) => c.table === table && c.column === column,
+      );
+      if (col) {
+        col.alias = alias || undefined;
       }
     },
     addJoin(state, action: PayloadAction<Join>) {
@@ -202,6 +216,7 @@ export const {
   setTableColumns,
   setViewKey,
   setUpdateKey,
+  setColumnAlias,
   addJoin,
   removeJoin,
   setTransformation,

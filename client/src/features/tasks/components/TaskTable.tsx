@@ -10,6 +10,9 @@ import {
   useColorModeValue,
   Badge,
   ScaleFade,
+  Progress,
+  Text,
+  HStack,
 } from '@chakra-ui/react';
 import type { Task } from '../tasksSlice';
 
@@ -19,8 +22,8 @@ interface Props {
 
 const TaskTable: React.FC<Props> = ({ tasks }) => {
   const [expanded, setExpanded] = useState<string | null>(null);
-  const rowBg = useColorModeValue('white', 'gray.700');
-  const expandBg = useColorModeValue('gray.50', 'gray.800');
+  const rowBg = useColorModeValue('rgba(255,255,255,0.04)', 'rgba(255,255,255,0.04)');
+  const expandBg = useColorModeValue('rgba(255,255,255,0.06)', 'rgba(255,255,255,0.08)');
 
   const getStatusColor = (status: string) => {
     const s = status.toLowerCase();
@@ -30,12 +33,13 @@ const TaskTable: React.FC<Props> = ({ tasks }) => {
   };
 
   return (
-    <Table variant="simple" size="md" width="100%">
+    <Table variant="dataGrid" size="sm" width="100%">
       <Thead>
         <Tr>
           <Th>ID</Th>
           <Th>Статус</Th>
           <Th>Создано</Th>
+          <Th>Прогресс</Th>
         </Tr>
       </Thead>
       <Tbody>
@@ -43,7 +47,7 @@ const TaskTable: React.FC<Props> = ({ tasks }) => {
           <React.Fragment key={task.id}>
             <Tr
               bg={rowBg}
-              _hover={{ bg: useColorModeValue('gray.100', 'gray.600') }}
+              _hover={{ bg: useColorModeValue('gray.100', 'gray.700') }}
               cursor="pointer"
               transition="transform 0.1s"
               _active={{ transform: 'scale(0.98)' }}
@@ -54,12 +58,19 @@ const TaskTable: React.FC<Props> = ({ tasks }) => {
                 <Badge colorScheme={getStatusColor(task.status)}>{task.status}</Badge>
               </Td>
               <Td>{new Date(task.create_date).toLocaleString()}</Td>
+              <Td>
+                <Progress value={task.progress ?? 0} size="xs" colorScheme={getStatusColor(task.status)} borderRadius="full" />
+              </Td>
             </Tr>
             <Tr>
               <Td colSpan={3} p={0} border="none">
                 <ScaleFade in={expanded === task.id} unmountOnExit>
-                  <Box p={4} bg={expandBg}>
-                    {task.comment || 'Нет комментария'}
+                  <Box p={4} bg={expandBg} borderRadius="md">
+                    <HStack justify="space-between" mb={2}>
+                      <Text fontWeight="semibold">Комментарий</Text>
+                      <Badge variant="outline">{task.run_id || '—'}</Badge>
+                    </HStack>
+                    <Text color="text.muted">{task.comment || 'Нет комментария'}</Text>
                   </Box>
                 </ScaleFade>
               </Td>
