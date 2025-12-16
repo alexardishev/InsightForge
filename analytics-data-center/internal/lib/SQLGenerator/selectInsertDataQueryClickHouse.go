@@ -22,6 +22,13 @@ func GenerateSelectInsertDataQueryClickhouse(
 	var b strings.Builder
 	var primaryColumn string
 
+	resolveColumnName := func(column models.Column) string {
+		if column.Alias != "" {
+			return column.Alias
+		}
+		return column.Name
+	}
+
 	for _, source := range view.Sources {
 		for _, sch := range source.Schemas {
 			for _, tbl := range sch.Tables {
@@ -33,11 +40,17 @@ func GenerateSelectInsertDataQueryClickhouse(
 				columns := make([]string, 0, len(tbl.Columns))
 
 				for _, column := range tbl.Columns {
-					if used[column.Name] {
-						logger.Error("повторяющееся имя колонки", slog.String("column", column.Name))
+					targetName := resolveColumnName(column)
+					if used[targetName] {
+						logger.Error("повторяющееся имя колонки", slog.String("column", targetName))
 						return models.Query{}, errors.New("колонки с одинаковыми именами недопустимы")
 					}
-					used[column.Name] = true
+					used[targetName] = true
+
+					columnExpr := column.Name
+					if column.Alias != "" {
+						columnExpr = fmt.Sprintf("%s AS %s", column.Name, column.Alias)
+					}
 
 					// JSON трансформация (ClickHouse)
 					if column.Transform != nil && column.Transform.Type == transformTypeJSON && column.Transform.Mapping != nil {
@@ -48,9 +61,9 @@ func GenerateSelectInsertDataQueryClickhouse(
 								columns = append(columns, extracted)
 							}
 						}
-						columns = append(columns, column.Name)
+						columns = append(columns, columnExpr)
 					} else {
-						columns = append(columns, column.Name)
+						columns = append(columns, columnExpr)
 					}
 
 					// CASE (Field Transform)

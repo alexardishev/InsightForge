@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -38,26 +39,38 @@ func GenerateInsertDataQueryClickhouse(
 	logger.Info("ДАТА ДЛЯ ВСТАВКИ", slog.Any("Нулевой элемент", selectData[0]))
 
 	columnNames := make(map[string]struct{})
+	resolveColumnName := func(col models.Column) string {
+		if col.Alias != "" {
+			return col.Alias
+		}
+		return col.Name
+	}
+
 	for _, src := range view.Sources {
 		for _, sch := range src.Schemas {
 			for _, tbl := range sch.Tables {
 				for _, clmn := range tbl.Columns {
+					finalName := resolveColumnName(clmn)
 					if clmn.Transform != nil && clmn.Transform.Type == transformTypeJSON && clmn.Transform.Mapping != nil {
 						for _, mapping := range clmn.Transform.Mapping.MappingJSON {
 							for _, outputCol := range mapping.Mapping {
 								columnNames[outputCol] = struct{}{}
 							}
 						}
-						columnNames[clmn.Name] = struct{}{}
+						columnNames[finalName] = struct{}{}
 					} else {
-						columnNames[clmn.Name] = struct{}{}
+						columnNames[finalName] = struct{}{}
 					}
 					if clmn.Transform != nil && clmn.Transform.Type == transformTypeFieldTransform && clmn.Transform.Mapping != nil {
 						mapping := clmn.Transform.Mapping
-						columnNames[mapping.AliasNewColumnTransform] = struct{}{}
-						columnNames[clmn.Name] = struct{}{}
+						aliasName := mapping.AliasNewColumnTransform
+						if aliasName == "" {
+							aliasName = clmn.Name + "_transformed"
+						}
+						columnNames[aliasName] = struct{}{}
+						columnNames[finalName] = struct{}{}
 					} else {
-						columnNames[clmn.Name] = struct{}{}
+						columnNames[finalName] = struct{}{}
 					}
 				}
 			}
@@ -69,6 +82,7 @@ func GenerateInsertDataQueryClickhouse(
 			columns = append(columns, colName)
 		}
 	}
+	sort.Strings(columns)
 
 	if len(columns) == 0 {
 		logger.Error("Не найдены колонки для вставки")

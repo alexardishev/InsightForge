@@ -126,13 +126,18 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 							}
 						}
 
-						// всегда кладём по имени колонки
-						finalRow[column.Name] = val
+						targetColumnName := column.Name
+						if column.Alias != "" {
+							targetColumnName = column.Alias
+						}
+
+						// всегда кладём по имени колонки (с учётом алиаса)
+						finalRow[targetColumnName] = val
 
 						// если ключевая — добавляем её в conflictKeys
 						if column.IsUpdateKey {
-							conflictKeys[column.Name] = struct{}{}
-							if column.ViewKey != "" && column.ViewKey != column.Name {
+							conflictKeys[targetColumnName] = struct{}{}
+							if column.ViewKey != "" && column.ViewKey != targetColumnName {
 								finalRow[column.ViewKey] = val
 								conflictKeys[column.ViewKey] = struct{}{}
 							}
@@ -142,7 +147,7 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 						if column.Transform != nil && column.Transform.Type == "FieldTransform" && column.Transform.Mapping != nil {
 							rawStr := fmt.Sprintf("%v", val)
 							if transformed, ok := column.Transform.Mapping.Mapping[rawStr]; ok {
-								outputColumn := column.Transform.OutputColumn
+								outputColumn := column.Transform.Mapping.AliasNewColumnTransform
 								if outputColumn == "" {
 									outputColumn = column.Name + "_transformed"
 								}
@@ -295,20 +300,35 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 
 					for _, column := range table.Columns {
 						colCopy := column
-						colCopy.Name = strings.ToLower(colCopy.Name)
+
+						originalNameLower := strings.ToLower(colCopy.Name)
+						targetName := colCopy.Alias
+						if targetName == "" {
+							targetName = colCopy.Name
+						}
+						targetNameLower := strings.ToLower(targetName)
+						colCopy.Name = targetNameLower
 
 						if colCopy.Type != "" {
-							columnTypes[colCopy.Name] = normalizeColumnType(colCopy.Type)
+							normalized := normalizeColumnType(colCopy.Type)
+							columnTypes[colCopy.Name] = normalized
+							if _, exists := columnTypes[originalNameLower]; !exists {
+								columnTypes[originalNameLower] = normalized
+							}
 						}
 
 						if colCopy.Type == "" {
-							if oltpCol, exists := oltpColumnsMap[colCopy.Name]; exists {
+							if oltpCol, exists := oltpColumnsMap[originalNameLower]; exists {
 								colCopy.Type = oltpCol.Type
 							}
 						}
 
 						if _, ok := columnTypes[colCopy.Name]; !ok {
-							columnTypes[colCopy.Name] = normalizeColumnType(colCopy.Type)
+							normalized := normalizeColumnType(colCopy.Type)
+							columnTypes[colCopy.Name] = normalized
+							if _, exists := columnTypes[originalNameLower]; !exists {
+								columnTypes[originalNameLower] = normalized
+							}
 						}
 
 						expectedColumns = append(expectedColumns, colCopy)

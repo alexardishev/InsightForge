@@ -63,3 +63,41 @@ func TestGeneratetInsertDataQuery(t *testing.T) {
 	require.Contains(t, query.Query, "FALSE")
 	require.Contains(t, query.Query, "'2023-03-15")
 }
+
+func TestGenerateInsertDataQuery_WithAlias(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	view := models.View{
+		Sources: []models.Source{
+			{
+				Name: "source_1",
+				Schemas: []models.Schema{
+					{
+						Name: "schema_1",
+						Tables: []models.Table{
+							{
+								Name: "temp_test_table",
+								Columns: []models.Column{
+									{Name: "id", Alias: "route_id"},
+									{Name: "title"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	selectData := []map[string]interface{}{
+		{
+			"route_id": 123,
+			"title":    "Route 123",
+		},
+	}
+
+	query, err := sqlgenerator.GenerateInsertDataQuery(view, selectData, "temp_test_table", logger, "postgres")
+
+	require.NoError(t, err)
+	require.Contains(t, query.Query, "INSERT INTO temp_test_table (route_id, title) VALUES (123, 'Route 123')")
+}

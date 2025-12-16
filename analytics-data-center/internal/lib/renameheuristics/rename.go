@@ -56,6 +56,9 @@ func pickCandidates(
 		expectedType := types[strings.ToLower(oldCol)]
 		for _, newCol := range newCandidates {
 			newType := normalizeType(types[strings.ToLower(newCol)])
+			if expectedType == "" && newType == "" {
+				continue
+			}
 			if expectedType != "" && newType != "" && expectedType != newType {
 				log.Debug("skip rename candidate due to type mismatch",
 					slog.String("old", oldCol),
