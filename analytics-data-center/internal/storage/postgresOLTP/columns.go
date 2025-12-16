@@ -13,7 +13,20 @@ func (p *PostgresOLTP) GetColumns(ctx context.Context, schemaName string, tableN
 		slog.String("op", op),
 	)
 
-	query := "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 ORDER BY ordinal_position"
+	query := `
+SELECT
+    column_name,
+    CASE
+        WHEN data_type = 'ARRAY' THEN udt_name
+        WHEN data_type IN ('character varying', 'character', 'bit', 'bit varying') AND character_maximum_length IS NOT NULL
+            THEN format('%s(%s)', data_type, character_maximum_length)
+        WHEN data_type IN ('numeric', 'decimal') AND numeric_precision IS NOT NULL
+            THEN format('%s(%s,%s)', data_type, numeric_precision, COALESCE(numeric_scale, 0))
+        ELSE data_type
+    END AS data_type
+FROM information_schema.columns
+WHERE table_schema = $1 AND table_name = $2
+ORDER BY ordinal_position`
 	rows, err := p.Db.QueryContext(ctx, query, schemaName, tableName)
 	if err != nil {
 		log.Error("Запрос выполнен с ошибкой", slog.String("error", err.Error()))

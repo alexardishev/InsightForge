@@ -21,8 +21,15 @@ func MapTypeToPostgres(typ string) string {
 		typeLower = strings.TrimSuffix(typeLower, "[]")
 	}
 
+	baseType := typeLower
+	length := ""
+	if idx := strings.Index(baseType, "("); idx != -1 && strings.HasSuffix(baseType, ")") {
+		length = strings.TrimSuffix(baseType[idx+1:], ")")
+		baseType = strings.TrimSpace(baseType[:idx])
+	}
+
 	var mapped string
-	switch typeLower {
+	switch baseType {
 	case "int", "integer", "int4":
 		mapped = "INTEGER"
 	case "bigint", "int8":
@@ -64,20 +71,28 @@ func MapTypeToPostgres(typ string) string {
 	case "bytea":
 		mapped = "BYTEA"
 	case "bit":
-		mapped = "BIT"
+		mapped = "VARBIT"
 	case "varbit", "bit varying":
 		mapped = "VARBIT"
 	case "xml":
 		mapped = "XML"
-	case "text", "varchar", "character varying":
+	case "text":
 		mapped = "TEXT"
-	case "uuid":
-		mapped = "UUID"
+	case "varchar", "character varying":
+		mapped = "VARCHAR"
+	case "character", "char":
+		mapped = "CHAR"
+	case "array":
+		mapped = "TEXT[]"
 	default:
 		mapped = "TEXT"
 	}
 
-	if isArray {
+	if length != "" {
+		mapped = fmt.Sprintf("%s(%s)", mapped, length)
+	}
+
+	if isArray && mapped != "TEXT[]" {
 		return mapped + "[]"
 	}
 	return mapped
