@@ -264,15 +264,17 @@ func isByteaType(typeLower string) bool {
 
 func formatTimeLiteral(t time.Time, typeLower string) string {
 	switch {
-	case strings.Contains(typeLower, "date"):
-		return fmt.Sprintf("'%s'", t.Format("2006-01-02"))
+	case strings.Contains(typeLower, "timestamptz"):
+		return fmt.Sprintf("'%s'", t.Format("2006-01-02 15:04:05-07"))
+	case strings.Contains(typeLower, "timestamp"):
+		return fmt.Sprintf("'%s'", t.Format("2006-01-02 15:04:05"))
 	case strings.Contains(typeLower, "timetz"):
 		return fmt.Sprintf("'%s'", t.Format("15:04:05-07"))
 	case strings.Contains(typeLower, "time"):
 		return fmt.Sprintf("'%s'", t.Format("15:04:05"))
-	case strings.Contains(typeLower, "timestamptz"):
-		return fmt.Sprintf("'%s'", t.Format("2006-01-02 15:04:05-07"))
-	default: // timestamp without tz
+	case strings.Contains(typeLower, "date"):
+		return fmt.Sprintf("'%s'", t.Format("2006-01-02"))
+	default: // fallback to timestamp without tz
 		return fmt.Sprintf("'%s'", t.Format("2006-01-02 15:04:05"))
 	}
 }
