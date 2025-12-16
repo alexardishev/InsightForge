@@ -92,6 +92,13 @@ func MapTypeToPostgres(typ string) string {
 	default:
 		mapped = baseType
 	}
+	if strings.EqualFold(mapped, "user-defined") {
+		if original != "" && !strings.EqualFold(original, "user-defined") {
+			mapped = original
+		} else {
+			mapped = "TEXT"
+		}
+	}
 
 	if length != "" {
 		mapped = fmt.Sprintf("%s(%s)", mapped, length)
