@@ -178,6 +178,9 @@ func updateWithTx(ctx context.Context, tx *sql.Tx, table string, row map[string]
 func normalizeSQLValue(val interface{}) interface{} {
 	switch v := val.(type) {
 	case []interface{}:
+		if ints := convertInterfacesToInt64(v); ints != nil {
+			return pq.Array(ints)
+		}
 		strVals := make([]string, 0, len(v))
 		for _, item := range v {
 			strVals = append(strVals, fmt.Sprintf("%v", item))
@@ -188,4 +191,26 @@ func normalizeSQLValue(val interface{}) interface{} {
 	default:
 		return val
 	}
+}
+
+func convertInterfacesToInt64(arr []interface{}) []int64 {
+	ints := make([]int64, 0, len(arr))
+	for _, item := range arr {
+		switch t := item.(type) {
+		case int:
+			ints = append(ints, int64(t))
+		case int64:
+			ints = append(ints, t)
+		case float64:
+			// безопасно конвертируем только целые значения
+			if t == float64(int64(t)) {
+				ints = append(ints, int64(t))
+			} else {
+				return nil
+			}
+		default:
+			return nil
+		}
+	}
+	return ints
 }
