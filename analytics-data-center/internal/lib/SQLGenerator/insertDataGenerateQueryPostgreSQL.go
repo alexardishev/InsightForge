@@ -89,6 +89,8 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 		return models.Query{}, errors.New("не найдены подходящие колонки для вставки")
 	}
 
+	columnTypes := buildColumnTypeMap(view)
+
 	for _, row := range selectData {
 		var valueStrings []string
 		for _, col := range columns {
@@ -98,12 +100,25 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 				continue
 			}
 
+			typeLower := strings.ToLower(columnTypes[col])
 			switch v := val.(type) {
 			case string:
-				safe := strings.ReplaceAll(v, "'", "''")
-				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", safe))
+				if isBitType(typeLower) {
+					valueStrings = append(valueStrings, formatBitLiteral(v))
+				} else {
+					safe := strings.ReplaceAll(v, "'", "''")
+					valueStrings = append(valueStrings, fmt.Sprintf("'%s'", safe))
+				}
 			case []byte:
-				valueStrings = append(valueStrings, formatPostgresBytea(v))
+				switch {
+				case isByteaType(typeLower):
+					valueStrings = append(valueStrings, formatPostgresBytea(v))
+				case isBitType(typeLower):
+					valueStrings = append(valueStrings, formatBitLiteral(string(v)))
+				default:
+					safe := strings.ReplaceAll(string(v), "'", "''")
+					valueStrings = append(valueStrings, fmt.Sprintf("'%s'", safe))
+				}
 			case int, int64, float64:
 				valueStrings = append(valueStrings, fmt.Sprintf("%v", v))
 			case uuid.UUID:
@@ -117,37 +132,37 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 			case time.Time:
 				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", v.Format("2006-01-02 15:04:05")))
 			case []interface{}:
-				valueStrings = append(valueStrings, formatPostgresArray(v))
+				valueStrings = append(valueStrings, formatPostgresArray(v, typeLower))
 			case []int:
 				arr := make([]interface{}, len(v))
 				for i, item := range v {
 					arr[i] = item
 				}
-				valueStrings = append(valueStrings, formatPostgresArray(arr))
+				valueStrings = append(valueStrings, formatPostgresArray(arr, typeLower))
 			case []int64:
 				arr := make([]interface{}, len(v))
 				for i, item := range v {
 					arr[i] = item
 				}
-				valueStrings = append(valueStrings, formatPostgresArray(arr))
+				valueStrings = append(valueStrings, formatPostgresArray(arr, typeLower))
 			case []float64:
 				arr := make([]interface{}, len(v))
 				for i, item := range v {
 					arr[i] = item
 				}
-				valueStrings = append(valueStrings, formatPostgresArray(arr))
+				valueStrings = append(valueStrings, formatPostgresArray(arr, typeLower))
 			case []string:
 				arr := make([]interface{}, len(v))
 				for i, item := range v {
 					arr[i] = item
 				}
-				valueStrings = append(valueStrings, formatPostgresArray(arr))
+				valueStrings = append(valueStrings, formatPostgresArray(arr, typeLower))
 			case []uuid.UUID:
 				arr := make([]interface{}, len(v))
 				for i, item := range v {
 					arr[i] = item.String()
 				}
-				valueStrings = append(valueStrings, formatPostgresArray(arr))
+				valueStrings = append(valueStrings, formatPostgresArray(arr, typeLower))
 			default:
 				return models.Query{}, fmt.Errorf("неподдерживаемый тип значения для колонки %s (%T)", col, v)
 			}
@@ -170,18 +185,30 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 	}, nil
 }
 
-func formatPostgresArray(items []interface{}) string {
+func formatPostgresArray(items []interface{}, typeLower string) string {
 	parts := make([]string, 0, len(items))
 	for _, it := range items {
 		switch v := it.(type) {
 		case nil:
 			parts = append(parts, "NULL")
 		case string:
-			safe := strings.ReplaceAll(v, "\"", "\\\"")
-			safe = strings.ReplaceAll(safe, "'", "''")
-			parts = append(parts, fmt.Sprintf("\"%s\"", safe))
+			if isBitType(typeLower) {
+				parts = append(parts, formatBitLiteral(v))
+			} else {
+				safe := strings.ReplaceAll(v, "\"", "\\\"")
+				safe = strings.ReplaceAll(safe, "'", "''")
+				parts = append(parts, fmt.Sprintf("\"%s\"", safe))
+			}
 		case []byte:
-			parts = append(parts, formatPostgresBytea(v))
+			switch {
+			case isByteaType(typeLower):
+				parts = append(parts, formatPostgresBytea(v))
+			case isBitType(typeLower):
+				parts = append(parts, formatBitLiteral(string(v)))
+			default:
+				safe := strings.ReplaceAll(string(v), "'", "''")
+				parts = append(parts, fmt.Sprintf("'%s'", safe))
+			}
 		default:
 			parts = append(parts, fmt.Sprintf("%v", v))
 		}
@@ -191,4 +218,46 @@ func formatPostgresArray(items []interface{}) string {
 
 func formatPostgresBytea(b []byte) string {
 	return fmt.Sprintf("E'\\\\x%s'", hex.EncodeToString(b))
+}
+
+func formatBitLiteral(raw string) string {
+	var b strings.Builder
+	for _, r := range raw {
+		if r == '0' || r == '1' {
+			b.WriteRune(r)
+		}
+	}
+	if b.Len() == 0 {
+		safe := strings.ReplaceAll(raw, "'", "''")
+		return fmt.Sprintf("'%s'", safe)
+	}
+	return fmt.Sprintf("B'%s'", b.String())
+}
+
+func buildColumnTypeMap(view models.View) map[string]string {
+	res := make(map[string]string)
+	resolveColumnName := func(col models.Column) string {
+		if col.Alias != "" {
+			return col.Alias
+		}
+		return col.Name
+	}
+	for _, src := range view.Sources {
+		for _, sch := range src.Schemas {
+			for _, tbl := range sch.Tables {
+				for _, col := range tbl.Columns {
+					res[resolveColumnName(col)] = col.Type
+				}
+			}
+		}
+	}
+	return res
+}
+
+func isBitType(typeLower string) bool {
+	return strings.HasPrefix(typeLower, "bit") || strings.HasPrefix(typeLower, "varbit")
+}
+
+func isByteaType(typeLower string) bool {
+	return strings.Contains(typeLower, "bytea")
 }
