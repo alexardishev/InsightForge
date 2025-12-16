@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"encoding/hex"
 
@@ -104,9 +107,10 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 			switch v := val.(type) {
 			case string:
 				if isBitType(typeLower) {
-					valueStrings = append(valueStrings, formatBitLiteral(v))
+					valueStrings = append(valueStrings, formatBitLiteral(v, typeLower))
 				} else {
-					safe := strings.ReplaceAll(v, "'", "''")
+					safe := truncateStringForType(v, typeLower)
+					safe = strings.ReplaceAll(safe, "'", "''")
 					valueStrings = append(valueStrings, fmt.Sprintf("'%s'", safe))
 				}
 			case []byte:
@@ -114,7 +118,7 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 				case isByteaType(typeLower):
 					valueStrings = append(valueStrings, formatPostgresBytea(v))
 				case isBitType(typeLower):
-					valueStrings = append(valueStrings, formatBitLiteral(string(v)))
+					valueStrings = append(valueStrings, formatBitLiteral(string(v), typeLower))
 				default:
 					safe := strings.ReplaceAll(string(v), "'", "''")
 					valueStrings = append(valueStrings, fmt.Sprintf("'%s'", safe))
@@ -193,9 +197,10 @@ func formatPostgresArray(items []interface{}, typeLower string) string {
 			parts = append(parts, "NULL")
 		case string:
 			if isBitType(typeLower) {
-				parts = append(parts, formatBitLiteral(v))
+				parts = append(parts, formatBitLiteral(v, typeLower))
 			} else {
-				safe := strings.ReplaceAll(v, "\"", "\\\"")
+				safe := truncateStringForType(v, typeLower)
+				safe = strings.ReplaceAll(safe, "\"", "\\\"")
 				safe = strings.ReplaceAll(safe, "'", "''")
 				parts = append(parts, fmt.Sprintf("\"%s\"", safe))
 			}
@@ -204,7 +209,7 @@ func formatPostgresArray(items []interface{}, typeLower string) string {
 			case isByteaType(typeLower):
 				parts = append(parts, formatPostgresBytea(v))
 			case isBitType(typeLower):
-				parts = append(parts, formatBitLiteral(string(v)))
+				parts = append(parts, formatBitLiteral(string(v), typeLower))
 			default:
 				safe := strings.ReplaceAll(string(v), "'", "''")
 				parts = append(parts, fmt.Sprintf("'%s'", safe))
@@ -220,18 +225,71 @@ func formatPostgresBytea(b []byte) string {
 	return fmt.Sprintf("E'\\\\x%s'", hex.EncodeToString(b))
 }
 
-func formatBitLiteral(raw string) string {
+func formatBitLiteral(raw string, typeLower string) string {
 	var b strings.Builder
 	for _, r := range raw {
 		if r == '0' || r == '1' {
 			b.WriteRune(r)
 		}
 	}
-	if b.Len() == 0 {
+
+	binaryString := b.String()
+	if len(binaryString) == 0 {
 		safe := strings.ReplaceAll(raw, "'", "''")
 		return fmt.Sprintf("'%s'", safe)
 	}
-	return fmt.Sprintf("B'%s'", b.String())
+
+	expectedLen, ok := parseBitLength(typeLower)
+	if ok && expectedLen > 0 {
+		switch {
+		case len(binaryString) > expectedLen:
+			binaryString = binaryString[:expectedLen]
+		case len(binaryString) < expectedLen:
+			binaryString = binaryString + strings.Repeat("0", expectedLen-len(binaryString))
+		}
+	}
+
+	return fmt.Sprintf("B'%s'", binaryString)
+}
+
+func parseBitLength(typeLower string) (int, bool) {
+	clean := strings.TrimSuffix(typeLower, "[]")
+	re := regexp.MustCompile(`bit(?: varying)?\s*\((\d+)\)`)
+	matches := re.FindStringSubmatch(clean)
+	if len(matches) < 2 {
+		return 0, false
+	}
+	val, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return 0, false
+	}
+	return val, true
+}
+
+func parseCharVarLength(typeLower string) (int, bool) {
+	clean := strings.TrimSuffix(typeLower, "[]")
+	re := regexp.MustCompile(`(?:char(?:acter)?(?: varying)?|varchar)\s*\((\d+)\)`)
+	matches := re.FindStringSubmatch(clean)
+	if len(matches) < 2 {
+		return 0, false
+	}
+	val, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return 0, false
+	}
+	return val, true
+}
+
+func truncateStringForType(val string, typeLower string) string {
+	limit, ok := parseCharVarLength(typeLower)
+	if !ok || limit <= 0 {
+		return val
+	}
+	if utf8.RuneCountInString(val) <= limit {
+		return val
+	}
+	runes := []rune(val)
+	return string(runes[:limit])
 }
 
 func buildColumnTypeMap(view models.View) map[string]string {

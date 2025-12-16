@@ -27,6 +27,12 @@ type Column struct {
 	Transform    *Transform `json:"transform,omitempty"`
 	Reference    *Reference `json:"reference,omitempty"`
 	Type         string     `json:"type,omitempty"`
+	DataType     string     `json:"data_type,omitempty"`
+	UdtSchema    string     `json:"udt_schema,omitempty"`
+	UdtName      string     `json:"udt_name,omitempty"`
+	CharMaxLen   *int64     `json:"char_max_len,omitempty"`
+	NumPrecision *int64     `json:"num_precision,omitempty"`
+	NumScale     *int64     `json:"num_scale,omitempty"`
 	IsDeleted    bool       `json:"is_deleted,omitempty"`
 	IsNullable   bool       `json:"is_nullable,omitempty"`
 	IsPrimaryKey bool       `json:"is_primary_key,omitempty"`
