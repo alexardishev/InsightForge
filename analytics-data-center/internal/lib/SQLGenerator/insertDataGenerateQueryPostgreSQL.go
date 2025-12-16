@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"encoding/hex"
 
@@ -108,7 +109,8 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 				if isBitType(typeLower) {
 					valueStrings = append(valueStrings, formatBitLiteral(v, typeLower))
 				} else {
-					safe := strings.ReplaceAll(v, "'", "''")
+					safe := truncateStringForType(v, typeLower)
+					safe = strings.ReplaceAll(safe, "'", "''")
 					valueStrings = append(valueStrings, fmt.Sprintf("'%s'", safe))
 				}
 			case []byte:
@@ -197,7 +199,8 @@ func formatPostgresArray(items []interface{}, typeLower string) string {
 			if isBitType(typeLower) {
 				parts = append(parts, formatBitLiteral(v, typeLower))
 			} else {
-				safe := strings.ReplaceAll(v, "\"", "\\\"")
+				safe := truncateStringForType(v, typeLower)
+				safe = strings.ReplaceAll(safe, "\"", "\\\"")
 				safe = strings.ReplaceAll(safe, "'", "''")
 				parts = append(parts, fmt.Sprintf("\"%s\"", safe))
 			}
@@ -261,6 +264,32 @@ func parseBitLength(typeLower string) (int, bool) {
 		return 0, false
 	}
 	return val, true
+}
+
+func parseCharVarLength(typeLower string) (int, bool) {
+	clean := strings.TrimSuffix(typeLower, "[]")
+	re := regexp.MustCompile(`(?:char(?:acter)?(?: varying)?|varchar)\s*\((\d+)\)`)
+	matches := re.FindStringSubmatch(clean)
+	if len(matches) < 2 {
+		return 0, false
+	}
+	val, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return 0, false
+	}
+	return val, true
+}
+
+func truncateStringForType(val string, typeLower string) string {
+	limit, ok := parseCharVarLength(typeLower)
+	if !ok || limit <= 0 {
+		return val
+	}
+	if utf8.RuneCountInString(val) <= limit {
+		return val
+	}
+	runes := []rune(val)
+	return string(runes[:limit])
 }
 
 func buildColumnTypeMap(view models.View) map[string]string {

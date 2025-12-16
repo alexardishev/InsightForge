@@ -81,6 +81,10 @@ func MapTypeToPostgres(typ string) string {
 	case "varchar", "character varying":
 		mapped = "VARCHAR"
 	case "character", "char":
+		if length == "" {
+			mapped = "TEXT"
+			break
+		}
 		mapped = "CHAR"
 	case "array":
 		mapped = "TEXT[]"
