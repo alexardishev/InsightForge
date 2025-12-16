@@ -33,12 +33,42 @@ func MapTypeToPostgres(typ string) string {
 		mapped = "DOUBLE PRECISION"
 	case "bool", "boolean":
 		mapped = "BOOLEAN"
+	case "smallint", "int2":
+		mapped = "SMALLINT"
 	case "date":
 		mapped = "DATE"
 	case "timestamp", "timestamp without time zone", "timestamptz":
 		mapped = "TIMESTAMP"
+	case "time", "time without time zone":
+		mapped = "TIME"
+	case "timetz", "time with time zone":
+		mapped = "TIMETZ"
+	case "interval":
+		mapped = "INTERVAL"
+	case "numeric", "decimal":
+		mapped = "NUMERIC"
+	case "money":
+		mapped = "MONEY"
 	case "json", "jsonb":
 		mapped = "JSONB"
+	case "uuid":
+		mapped = "UUID"
+	case "inet":
+		mapped = "INET"
+	case "cidr":
+		mapped = "CIDR"
+	case "macaddr":
+		mapped = "MACADDR"
+	case "macaddr8":
+		mapped = "MACADDR8"
+	case "bytea":
+		mapped = "BYTEA"
+	case "bit":
+		mapped = "BIT"
+	case "varbit", "bit varying":
+		mapped = "VARBIT"
+	case "xml":
+		mapped = "XML"
 	case "text", "varchar", "character varying":
 		mapped = "TEXT"
 	case "uuid":

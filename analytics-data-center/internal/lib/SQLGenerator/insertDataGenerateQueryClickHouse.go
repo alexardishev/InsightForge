@@ -102,7 +102,7 @@ func GenerateInsertDataQueryClickhouse(
 				safe := strings.ReplaceAll(v, "'", "''")
 				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", safe))
 			case []byte:
-				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", string(v)))
+				valueStrings = append(valueStrings, formatClickhouseBytea(v))
 			case int, int64, float64:
 				valueStrings = append(valueStrings, fmt.Sprintf("%v", v))
 			case uuid.UUID:
@@ -141,6 +141,12 @@ func GenerateInsertDataQueryClickhouse(
 					arr[i] = item
 				}
 				valueStrings = append(valueStrings, formatClickhouseArray(arr))
+			case []uuid.UUID:
+				arr := make([]interface{}, len(v))
+				for i, item := range v {
+					arr[i] = item.String()
+				}
+				valueStrings = append(valueStrings, formatClickhouseArray(arr))
 			default:
 				return models.Query{}, fmt.Errorf("неподдерживаемый тип значения для колонки %s (%T)", col, v)
 			}
@@ -172,9 +178,15 @@ func formatClickhouseArray(items []interface{}) string {
 		case string:
 			safe := strings.ReplaceAll(v, "'", "\\'")
 			parts = append(parts, fmt.Sprintf("'%s'", safe))
+		case []byte:
+			parts = append(parts, formatClickhouseBytea(v))
 		default:
 			parts = append(parts, fmt.Sprintf("%v", v))
 		}
 	}
 	return fmt.Sprintf("[%s]", strings.Join(parts, ","))
+}
+
+func formatClickhouseBytea(b []byte) string {
+	return fmt.Sprintf("unhex('%x')", b)
 }

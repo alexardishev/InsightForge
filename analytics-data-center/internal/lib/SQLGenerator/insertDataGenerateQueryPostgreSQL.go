@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"encoding/hex"
+
 	"github.com/gofrs/uuid"
 )
 
@@ -101,8 +103,7 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 				safe := strings.ReplaceAll(v, "'", "''")
 				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", safe))
 			case []byte:
-				safe := strings.ReplaceAll(string(v), "'", "''")
-				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", safe))
+				valueStrings = append(valueStrings, formatPostgresBytea(v))
 			case int, int64, float64:
 				valueStrings = append(valueStrings, fmt.Sprintf("%v", v))
 			case uuid.UUID:
@@ -141,6 +142,12 @@ func GenerateInsertDataQueryPostgres(view models.View, selectData []map[string]i
 					arr[i] = item
 				}
 				valueStrings = append(valueStrings, formatPostgresArray(arr))
+			case []uuid.UUID:
+				arr := make([]interface{}, len(v))
+				for i, item := range v {
+					arr[i] = item.String()
+				}
+				valueStrings = append(valueStrings, formatPostgresArray(arr))
 			default:
 				return models.Query{}, fmt.Errorf("неподдерживаемый тип значения для колонки %s (%T)", col, v)
 			}
@@ -173,9 +180,15 @@ func formatPostgresArray(items []interface{}) string {
 			safe := strings.ReplaceAll(v, "\"", "\\\"")
 			safe = strings.ReplaceAll(safe, "'", "''")
 			parts = append(parts, fmt.Sprintf("\"%s\"", safe))
+		case []byte:
+			parts = append(parts, formatPostgresBytea(v))
 		default:
 			parts = append(parts, fmt.Sprintf("%v", v))
 		}
 	}
 	return fmt.Sprintf("'{%s}'", strings.Join(parts, ","))
+}
+
+func formatPostgresBytea(b []byte) string {
+	return fmt.Sprintf("E'\\\\x%s'", hex.EncodeToString(b))
 }
