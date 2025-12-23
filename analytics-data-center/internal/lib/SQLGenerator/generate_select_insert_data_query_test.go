@@ -90,6 +90,35 @@ func TestGenerateSelectInsertDataQuery_WithJSONAndFieldTransform(t *testing.T) {
 
 }
 
+func TestGenerateSelectInsertDataQuery_WithAlias(t *testing.T) {
+	view := models.View{
+		Name: "test_view",
+		Sources: []models.Source{
+			{
+				Name: "postgres",
+				Schemas: []models.Schema{
+					{
+						Name: "public",
+						Tables: []models.Table{
+							{
+								Name: "routes",
+								Columns: []models.Column{
+									{Name: "id", Alias: "route_id", IsPrimaryKey: true},
+									{Name: "name"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	query, err := sqlgenerator.GenerateSelectInsertDataQuery(view, 0, 10, "routes", getTestLogger(), "postgres")
+	require.NoError(t, err)
+	require.Contains(t, query.Query, "SELECT id AS route_id, name FROM routes ORDER BY id OFFSET 0 LIMIT 10")
+}
+
 func TestGenerateSelectInsertDataQuery_Success(t *testing.T) {
 	view := models.View{
 		Sources: []models.Source{

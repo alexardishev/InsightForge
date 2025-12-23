@@ -2,6 +2,7 @@ package serviceanalytics
 
 import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
+	sqlgenerator "analyticDataCenter/analytics-data-center/internal/lib/SQLGenerator"
 	renameheuristics "analyticDataCenter/analytics-data-center/internal/lib/renameheuristics"
 	"analyticDataCenter/analytics-data-center/internal/storage"
 	"context"
@@ -10,7 +11,6 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -96,43 +96,24 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 							continue
 						}
 						hasData = true
-						log.Info("ТЕКУЩАЯ БД", slog.String("postgres", a.DWHDbName))
-						log.Info("TYPE VALUE", slog.String("тип", column.Type))
-						log.Info("TYPE check", slog.Bool("тип", isTimeType(column.Type)))
 
-						if a.DWHDbName == "postgres" &&
-							(isTimeType(column.Type)) {
-
-							switch v := val.(type) {
-							case int64:
-								micros := v
-								val = time.Unix(0, micros*int64(time.Microsecond))
-							case float64:
-								micros := int64(v)
-								val = time.Unix(0, micros*int64(time.Microsecond))
-							case string:
-								if micros, err := strconv.ParseInt(v, 10, 64); err == nil {
-									val = time.Unix(0, micros*int64(time.Microsecond))
-								} else {
-									log.Warn("не могу сконвертировать time-поле",
-										slog.String("column", column.Name),
-										slog.String("value", v),
-										slog.String("error", err.Error()))
-								}
-							default:
-								log.Warn("неожиданный тип для time-поля",
-									slog.String("column", column.Name),
-									slog.String("type", fmt.Sprintf("%T", val)))
-							}
+						// SAFE: конвертация time-полей (если Debezium прислал микросекунды)
+						if a.DWHDbName == "postgres" && isTimeColumn(column) {
+							val = convertDebeziumTemporal(column, val, log.Logger)
 						}
 
-						// всегда кладём по имени колонки
-						finalRow[column.Name] = val
+						targetColumnName := column.Name
+						if column.Alias != "" {
+							targetColumnName = column.Alias
+						}
+
+						// всегда кладём по имени колонки (с учётом алиаса)
+						finalRow[targetColumnName] = val
 
 						// если ключевая — добавляем её в conflictKeys
 						if column.IsUpdateKey {
-							conflictKeys[column.Name] = struct{}{}
-							if column.ViewKey != "" && column.ViewKey != column.Name {
+							conflictKeys[targetColumnName] = struct{}{}
+							if column.ViewKey != "" && column.ViewKey != targetColumnName {
 								finalRow[column.ViewKey] = val
 								conflictKeys[column.ViewKey] = struct{}{}
 							}
@@ -142,7 +123,7 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 						if column.Transform != nil && column.Transform.Type == "FieldTransform" && column.Transform.Mapping != nil {
 							rawStr := fmt.Sprintf("%v", val)
 							if transformed, ok := column.Transform.Mapping.Mapping[rawStr]; ok {
-								outputColumn := column.Transform.OutputColumn
+								outputColumn := column.Transform.Mapping.AliasNewColumnTransform
 								if outputColumn == "" {
 									outputColumn = column.Name + "_transformed"
 								}
@@ -199,6 +180,11 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 			finalRow,
 			conflictColumns,
 		); err != nil {
+			if isRelationDoesNotExist(err) {
+				log.Warn("таблица отсутствует в DWH, пропускаю вставку",
+					slog.String("view", viewName))
+				continue
+			}
 			log.Error("ошибка вставки/обновления",
 				slog.String("error", err.Error()),
 				slog.String("view", viewName))
@@ -257,24 +243,34 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 				slog.String("view", viewName))
 		}
 
+		columnTableMap := mapColumnTables(view, databaseEvt, schemaEvt)
+
 		// 2.1. Колонки в DWH для этого view
 		columns, err := a.DWHProvider.GetColumnsTables(ctx, dwhSchemaName, strings.ToLower(dwhTableName))
 		if err != nil {
+			if isRelationDoesNotExist(err) {
+				log.Warn("таблица отсутствует в DWH, пропускаю схему",
+					slog.String("view", viewName),
+					slog.String("table", dwhTableName))
+				continue
+			}
 			log.Error("ошибка получения колонок DWH",
 				slog.String("error", err.Error()),
 				slog.String("view", viewName))
 			return err
 		}
 
+		targetTable := strings.ToLower(tableEvt)
 		actualCols := make(map[string]struct{}, len(columns))
 		for _, col := range columns {
-			actualCols[strings.ToLower(col)] = struct{}{}
+			colLower := strings.ToLower(col)
+			if tables, ok := columnTableMap[colLower]; ok {
+				if _, belongs := tables[targetTable]; !belongs {
+					continue
+				}
+			}
+			actualCols[colLower] = struct{}{}
 		}
-
-		log.Debug("используются таблица и схема DWH для view",
-			slog.String("schema", dwhSchemaName),
-			slog.String("table", dwhTableName),
-			slog.String("view", viewName))
 
 		// 2.2. Колонки схемы (view) для этой таблицы
 		var expectedColumns []models.Column
@@ -295,20 +291,45 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 
 					for _, column := range table.Columns {
 						colCopy := column
-						colCopy.Name = strings.ToLower(colCopy.Name)
 
-						if colCopy.Type != "" {
-							columnTypes[colCopy.Name] = normalizeColumnType(colCopy.Type)
+						originalNameLower := strings.ToLower(colCopy.Name)
+						targetName := colCopy.Alias
+						if targetName == "" {
+							targetName = colCopy.Name
+						}
+						targetNameLower := strings.ToLower(targetName)
+						colCopy.Name = targetNameLower
+
+						// SAFE: тип для сравнения берём из одного источника (DDL-маппер)
+						normalized := strings.ToLower(strings.TrimSpace(sqlgenerator.MapColumnTypeToPostgresDDL(colCopy)))
+						if normalized == "" {
+							normalized = "text"
+						}
+						columnTypes[colCopy.Name] = normalized
+						if _, exists := columnTypes[originalNameLower]; !exists {
+							columnTypes[originalNameLower] = normalized
 						}
 
+						// если в схеме не задан тип — подхватываем из OLTP
 						if colCopy.Type == "" {
-							if oltpCol, exists := oltpColumnsMap[colCopy.Name]; exists {
+							if oltpCol, exists := oltpColumnsMap[originalNameLower]; exists {
 								colCopy.Type = oltpCol.Type
-							}
-						}
+								colCopy.DataType = oltpCol.DataType
+								colCopy.UdtName = oltpCol.UdtName
+								colCopy.UdtSchema = oltpCol.UdtSchema
+								colCopy.CharMaxLen = oltpCol.CharMaxLen
+								colCopy.NumPrecision = oltpCol.NumPrecision
+								colCopy.NumScale = oltpCol.NumScale
 
-						if _, ok := columnTypes[colCopy.Name]; !ok {
-							columnTypes[colCopy.Name] = normalizeColumnType(colCopy.Type)
+								normalized2 := strings.ToLower(strings.TrimSpace(sqlgenerator.MapColumnTypeToPostgresDDL(colCopy)))
+								if normalized2 == "" {
+									normalized2 = "text"
+								}
+								columnTypes[colCopy.Name] = normalized2
+								if _, exists := columnTypes[originalNameLower]; !exists {
+									columnTypes[originalNameLower] = normalized2
+								}
+							}
 						}
 
 						expectedColumns = append(expectedColumns, colCopy)
@@ -326,18 +347,13 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 		// 2.3. Приводим схему к map[name]Column
 		schemaCols := make(map[string]models.Column)
 		for _, col := range expectedColumns {
-			schemaCols[col.Name] = col // уже lower-case
+			schemaCols[col.Name] = col // already lower-case
 		}
 
 		// --- 3. Базовые несоответствия ---
 
-		// schema_only: есть в схеме, но нет в OLTP
 		schemaOnly := make([]string, 0)
-
-		// missing_in_dwh: есть в схеме и OLTP, но нет в DWH
 		missingInDWH := make([]string, 0)
-
-		// dwh_only: есть в DWH, но нет в схеме
 		dwhOnly := make([]string, 0)
 
 		for name := range schemaCols {
@@ -362,7 +378,6 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 
 		// --- 4. Кандидаты на переименование ---
 
-		// Старые имена: есть в схеме и DWH, но НЕТ в OLTP
 		oldCandidates := make([]string, 0)
 		for name := range schemaCols {
 			_, inDWH := actualCols[name]
@@ -372,8 +387,6 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 			}
 		}
 
-		// Новые имена: есть в OLTP, но НЕТ ни в схеме, ни в DWH
-		// (классическое "старую колонку переименовали в новую")
 		newCandidates := make([]string, 0)
 		for name := range oltpColumnsMap {
 			_, inSchema := schemaCols[name]
@@ -474,16 +487,10 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 
 func normalizeColumnsToMap(columns []models.Column) map[string]models.Column {
 	result := make(map[string]models.Column, len(columns))
-
 	for _, col := range columns {
 		result[strings.ToLower(col.Name)] = col
 	}
-
 	return result
-}
-
-func normalizeColumnType(t string) string {
-	return strings.ToLower(strings.TrimSpace(t))
 }
 
 func sortedMapKeys(columns map[string]models.Column) []string {
@@ -513,13 +520,37 @@ func lowerCaseColumns(columns []string) []string {
 	return result
 }
 
-func findRenameTarget(renames map[string]string, name string) (string, bool) {
-	for oldName, newName := range renames {
-		if strings.EqualFold(oldName, name) {
-			return newName, true
+func mapColumnTables(view models.View, databaseName, schemaName string) map[string]map[string]struct{} {
+	result := make(map[string]map[string]struct{})
+
+	for _, source := range view.Sources {
+		if source.Name != databaseName {
+			continue
+		}
+		for _, sch := range source.Schemas {
+			if sch.Name != schemaName {
+				continue
+			}
+			for _, table := range sch.Tables {
+				tableNameLower := strings.ToLower(table.Name)
+
+				for _, column := range table.Columns {
+					targetName := column.Alias
+					if targetName == "" {
+						targetName = column.Name
+					}
+					colLower := strings.ToLower(targetName)
+
+					if _, ok := result[colLower]; !ok {
+						result[colLower] = make(map[string]struct{})
+					}
+					result[colLower][tableNameLower] = struct{}{}
+				}
+			}
 		}
 	}
-	return "", false
+
+	return result
 }
 
 func (a *AnalyticsDataCenterService) sendColumnRemovedEvent(tableName, columnName string) {
@@ -544,10 +575,103 @@ func (a *AnalyticsDataCenterService) sendColumnRemovedEvent(tableName, columnNam
 	}
 }
 
-func isTimeType(t string) bool {
-	tt := strings.ToUpper(strings.TrimSpace(t))
+// isTimeColumn: проверяем по DataType/UdtName/Type, чтобы не зависеть от старого поля Type
+func isTimeColumn(c models.Column) bool {
+	t := strings.ToLower(strings.TrimSpace(c.DataType))
+	if t == "" {
+		t = strings.ToLower(strings.TrimSpace(c.UdtName))
+	}
+	if t == "" {
+		t = strings.ToLower(strings.TrimSpace(c.Type))
+	}
+	if strings.HasPrefix(t, "_") {
+		return false
+	}
+	return strings.Contains(t, "timestamp") ||
+		strings.Contains(t, "time") ||
+		t == "date"
+}
 
-	return strings.HasPrefix(tt, "TIMESTAMP") ||
-		strings.HasPrefix(tt, "TIME") ||
-		tt == "DATE"
+func isRelationDoesNotExist(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "does not exist")
+}
+func convertDebeziumTemporal(column models.Column, val interface{}, log *slog.Logger) interface{} {
+	typ := strings.ToLower(strings.TrimSpace(column.DataType))
+	if typ == "" {
+		typ = strings.ToLower(strings.TrimSpace(column.UdtName))
+	}
+	if typ == "" {
+		typ = strings.ToLower(strings.TrimSpace(column.Type))
+	}
+
+	// массивы тут не трогаем
+	if strings.HasPrefix(typ, "_") {
+		return val
+	}
+
+	// микросекунды -> time.Time (Debezium часто так шлёт)
+	switch v := val.(type) {
+	case int64:
+		if isTemporalTypeName(typ) {
+			return time.Unix(0, v*int64(time.Microsecond))
+		}
+		return val
+	case float64:
+		if isTemporalTypeName(typ) {
+			return time.Unix(0, int64(v)*int64(time.Microsecond))
+		}
+		return val
+	case string:
+		return parseTemporalString(typ, v, log, column.Name)
+	default:
+		return val
+	}
+}
+
+func isTemporalTypeName(t string) bool {
+	return strings.Contains(t, "timestamp") ||
+		strings.Contains(t, "time") ||
+		t == "date"
+}
+
+func parseTemporalString(typ, s string, log *slog.Logger, colName string) interface{} {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+
+	// timestamp / timestamptz — парсим в time.Time
+	if strings.Contains(typ, "timestamp") {
+		// RFC3339Nano нормально ест "2025-12-31T21:00:00.000000Z"
+		if tm, err := time.Parse(time.RFC3339Nano, s); err == nil {
+			return tm
+		}
+		// fallback: иногда без Z
+		if tm, err := time.Parse("2006-01-02T15:04:05.999999", s); err == nil {
+			return tm
+		}
+		log.Warn("не могу распарсить timestamp (оставляю строкой)",
+			slog.String("column", colName),
+			slog.String("value", s))
+		return s
+	}
+
+	// date — парсим в time.Time (00:00:00)
+	if typ == "date" {
+		if d, err := time.Parse("2006-01-02", s); err == nil {
+			return d
+		}
+		log.Warn("не могу распарсить date (оставляю строкой)",
+			slog.String("column", colName),
+			slog.String("value", s))
+		return s
+	}
+
+	// time / timetz — лучше оставить строкой
+	// pq умеет принимать строку и кастить в TIME/TIMETZ
+	// Пример: "20:59:01Z" или "20:59:01+03:00"
+	return s
 }

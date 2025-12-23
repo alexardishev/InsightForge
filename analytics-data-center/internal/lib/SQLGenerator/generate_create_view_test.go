@@ -124,11 +124,11 @@ func TestCreateViewQuery_WithJoins(t *testing.T) {
 		t.Fatalf("error generating view query: %v", err)
 	}
 
-	if !strings.Contains(result.Query, "JOIN temp_postgres_public_profiles") {
+	if !strings.Contains(result.Query, "JOIN \"temp_postgres_public_profiles\"") {
 		t.Errorf("expected JOIN clause in query, got: %s", result.Query)
 	}
 
-	if !strings.Contains(result.Query, "CREATE TABLE user_basic_info") {
+	if !strings.Contains(result.Query, "CREATE TABLE \"user_basic_info\"") {
 		t.Errorf("expected CREATE TABLE clause in query, got: %s", result.Query)
 	}
 }

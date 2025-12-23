@@ -80,7 +80,7 @@ func (p *PostgresDWH) InsertOrUpdateTransactional(
 	values := make([]interface{}, len(conflictColumns))
 	for i, col := range conflictColumns {
 		where[i] = fmt.Sprintf("%s = $%d", col, i+1)
-		values[i] = row[col]
+		values[i] = normalizeSQLValue(row[col])
 	}
 
 	selectQuery := fmt.Sprintf(`SELECT 1 FROM %s WHERE %s LIMIT 1`, schemaName, strings.Join(where, " AND "))
@@ -123,7 +123,7 @@ func insertWithTx(ctx context.Context, tx *sql.Tx, table string, row map[string]
 	for col, val := range row {
 		columns = append(columns, col)
 		placeholders = append(placeholders, fmt.Sprintf("$%d", i))
-		values = append(values, val)
+		values = append(values, normalizeSQLValue(val))
 		i++
 	}
 
@@ -155,13 +155,13 @@ func updateWithTx(ctx context.Context, tx *sql.Tx, table string, row map[string]
 			continue
 		}
 		setParts = append(setParts, fmt.Sprintf("%s = $%d", col, i))
-		values = append(values, val)
+		values = append(values, normalizeSQLValue(val))
 		i++
 	}
 
 	for _, col := range conflictColumns {
 		whereParts = append(whereParts, fmt.Sprintf("%s = $%d", col, i))
-		values = append(values, row[col])
+		values = append(values, normalizeSQLValue(row[col]))
 		i++
 	}
 
@@ -173,4 +173,44 @@ func updateWithTx(ctx context.Context, tx *sql.Tx, table string, row map[string]
 
 	_, err := tx.ExecContext(ctx, query, values...)
 	return err
+}
+
+func normalizeSQLValue(val interface{}) interface{} {
+	switch v := val.(type) {
+	case []interface{}:
+		if ints := convertInterfacesToInt64(v); ints != nil {
+			return pq.Array(ints)
+		}
+		strVals := make([]string, 0, len(v))
+		for _, item := range v {
+			strVals = append(strVals, fmt.Sprintf("%v", item))
+		}
+		return pq.Array(strVals)
+	case []string:
+		return pq.Array(v)
+	default:
+		return val
+	}
+}
+
+func convertInterfacesToInt64(arr []interface{}) []int64 {
+	ints := make([]int64, 0, len(arr))
+	for _, item := range arr {
+		switch t := item.(type) {
+		case int:
+			ints = append(ints, int64(t))
+		case int64:
+			ints = append(ints, t)
+		case float64:
+			// безопасно конвертируем только целые значения
+			if t == float64(int64(t)) {
+				ints = append(ints, int64(t))
+			} else {
+				return nil
+			}
+		default:
+			return nil
+		}
+	}
+	return ints
 }

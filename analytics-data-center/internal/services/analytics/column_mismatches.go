@@ -51,6 +51,8 @@ func (a *AnalyticsDataCenterService) ApplyColumnMismatchResolution(ctx context.C
 	}
 
 	tableName := strings.ToLower(view.Name)
+	viewChanged := false
+	columnsForViewRemoval := uniqueColumns(resolution.Deletes)
 
 	for _, decision := range resolution.Renames {
 		renameQuery, err := sqlgenerator.GenerateRenameColumnQuery(a.DWHDbName, "public", tableName, decision.OldName, decision.NewName)
@@ -74,18 +76,39 @@ func (a *AnalyticsDataCenterService) ApplyColumnMismatchResolution(ctx context.C
 			log.Error("не удалось переименовать колонку в view", slog.String("error", err.Error()))
 			return err
 		}
+		viewChanged = true
 	}
 
-	if len(resolution.Deletes) > 0 {
-		if err := removeColumnsFromView(&view, group.Group.DatabaseName, group.Group.SchemaName, group.Group.TableName, resolution.Deletes); err != nil {
-			log.Error("не удалось удалить колонки из view", slog.String("error", err.Error()))
-			return err
+	if len(resolution.DropInDWH) > 0 {
+		for _, name := range uniqueColumns(resolution.DropInDWH) {
+			dropQuery, err := sqlgenerator.GenerateDropColumnQuery(a.DWHDbName, "public", tableName, name)
+			if err != nil {
+				log.Error("не удалось подготовить запрос удаления колонки", slog.String("error", err.Error()))
+				return err
+			}
+
+			if err := a.DWHProvider.DropColumn(ctx, dropQuery); err != nil {
+				log.Error("не удалось удалить колонку в DWH", slog.String("error", err.Error()))
+				return err
+			}
+			columnsForViewRemoval = append(columnsForViewRemoval, name)
 		}
 	}
 
-	if err := a.SchemaProvider.UpdateView(ctx, view, int(group.Group.SchemaID)); err != nil {
-		log.Error("не удалось обновить view", slog.String("error", err.Error()))
-		return err
+	if len(columnsForViewRemoval) > 0 {
+		changed, err := removeColumnsFromView(&view, group.Group.DatabaseName, group.Group.SchemaName, group.Group.TableName, uniqueColumns(columnsForViewRemoval))
+		if err != nil {
+			log.Error("не удалось удалить колонки из view", slog.String("error", err.Error()))
+			return err
+		}
+		viewChanged = viewChanged || changed
+	}
+
+	if viewChanged {
+		if err := a.SchemaProvider.UpdateView(ctx, view, int(group.Group.SchemaID)); err != nil {
+			log.Error("не удалось обновить view", slog.String("error", err.Error()))
+			return err
+		}
 	}
 
 	if err := a.ColumnMismatchStorage.ResolveMismatchGroup(ctx, id); err != nil {
@@ -96,11 +119,13 @@ func (a *AnalyticsDataCenterService) ApplyColumnMismatchResolution(ctx context.C
 	return nil
 }
 
-func removeColumnsFromView(view *models.View, database, schema, table string, names []string) error {
+func removeColumnsFromView(view *models.View, database, schema, table string, names []string) (bool, error) {
 	nameSet := make(map[string]struct{}, len(names))
 	for _, n := range names {
 		nameSet[strings.ToLower(n)] = struct{}{}
 	}
+
+	changed := false
 
 	for si := range view.Sources {
 		source := &view.Sources[si]
@@ -121,6 +146,7 @@ func removeColumnsFromView(view *models.View, database, schema, table string, na
 				var filtered []models.Column
 				for _, col := range tbl.Columns {
 					if _, ok := nameSet[strings.ToLower(col.Name)]; ok {
+						changed = true
 						continue
 					}
 					filtered = append(filtered, col)
@@ -130,5 +156,21 @@ func removeColumnsFromView(view *models.View, database, schema, table string, na
 		}
 	}
 
-	return nil
+	return changed, nil
+}
+
+func uniqueColumns(columns []string) []string {
+	seen := make(map[string]struct{}, len(columns))
+	result := make([]string, 0, len(columns))
+
+	for _, col := range columns {
+		key := strings.ToLower(col)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, col)
+	}
+
+	return result
 }

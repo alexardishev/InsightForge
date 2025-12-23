@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -38,26 +39,38 @@ func GenerateInsertDataQueryClickhouse(
 	logger.Info("ДАТА ДЛЯ ВСТАВКИ", slog.Any("Нулевой элемент", selectData[0]))
 
 	columnNames := make(map[string]struct{})
+	resolveColumnName := func(col models.Column) string {
+		if col.Alias != "" {
+			return col.Alias
+		}
+		return col.Name
+	}
+
 	for _, src := range view.Sources {
 		for _, sch := range src.Schemas {
 			for _, tbl := range sch.Tables {
 				for _, clmn := range tbl.Columns {
+					finalName := resolveColumnName(clmn)
 					if clmn.Transform != nil && clmn.Transform.Type == transformTypeJSON && clmn.Transform.Mapping != nil {
 						for _, mapping := range clmn.Transform.Mapping.MappingJSON {
 							for _, outputCol := range mapping.Mapping {
 								columnNames[outputCol] = struct{}{}
 							}
 						}
-						columnNames[clmn.Name] = struct{}{}
+						columnNames[finalName] = struct{}{}
 					} else {
-						columnNames[clmn.Name] = struct{}{}
+						columnNames[finalName] = struct{}{}
 					}
 					if clmn.Transform != nil && clmn.Transform.Type == transformTypeFieldTransform && clmn.Transform.Mapping != nil {
 						mapping := clmn.Transform.Mapping
-						columnNames[mapping.AliasNewColumnTransform] = struct{}{}
-						columnNames[clmn.Name] = struct{}{}
+						aliasName := mapping.AliasNewColumnTransform
+						if aliasName == "" {
+							aliasName = clmn.Name + "_transformed"
+						}
+						columnNames[aliasName] = struct{}{}
+						columnNames[finalName] = struct{}{}
 					} else {
-						columnNames[clmn.Name] = struct{}{}
+						columnNames[finalName] = struct{}{}
 					}
 				}
 			}
@@ -69,6 +82,7 @@ func GenerateInsertDataQueryClickhouse(
 			columns = append(columns, colName)
 		}
 	}
+	sort.Strings(columns)
 
 	if len(columns) == 0 {
 		logger.Error("Не найдены колонки для вставки")
@@ -88,7 +102,7 @@ func GenerateInsertDataQueryClickhouse(
 				safe := strings.ReplaceAll(v, "'", "''")
 				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", safe))
 			case []byte:
-				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", string(v)))
+				valueStrings = append(valueStrings, formatClickhouseBytea(v))
 			case int, int64, float64:
 				valueStrings = append(valueStrings, fmt.Sprintf("%v", v))
 			case uuid.UUID:
@@ -101,6 +115,38 @@ func GenerateInsertDataQueryClickhouse(
 				}
 			case time.Time:
 				valueStrings = append(valueStrings, fmt.Sprintf("'%s'", v.Format("2006-01-02 15:04:05")))
+			case []interface{}:
+				valueStrings = append(valueStrings, formatClickhouseArray(v))
+			case []int:
+				arr := make([]interface{}, len(v))
+				for i, item := range v {
+					arr[i] = item
+				}
+				valueStrings = append(valueStrings, formatClickhouseArray(arr))
+			case []int64:
+				arr := make([]interface{}, len(v))
+				for i, item := range v {
+					arr[i] = item
+				}
+				valueStrings = append(valueStrings, formatClickhouseArray(arr))
+			case []float64:
+				arr := make([]interface{}, len(v))
+				for i, item := range v {
+					arr[i] = item
+				}
+				valueStrings = append(valueStrings, formatClickhouseArray(arr))
+			case []string:
+				arr := make([]interface{}, len(v))
+				for i, item := range v {
+					arr[i] = item
+				}
+				valueStrings = append(valueStrings, formatClickhouseArray(arr))
+			case []uuid.UUID:
+				arr := make([]interface{}, len(v))
+				for i, item := range v {
+					arr[i] = item.String()
+				}
+				valueStrings = append(valueStrings, formatClickhouseArray(arr))
 			default:
 				return models.Query{}, fmt.Errorf("неподдерживаемый тип значения для колонки %s (%T)", col, v)
 			}
@@ -121,4 +167,26 @@ func GenerateInsertDataQueryClickhouse(
 		Query:     finalQuery,
 		TableName: tempTableName,
 	}, nil
+}
+
+func formatClickhouseArray(items []interface{}) string {
+	parts := make([]string, 0, len(items))
+	for _, it := range items {
+		switch v := it.(type) {
+		case nil:
+			parts = append(parts, "NULL")
+		case string:
+			safe := strings.ReplaceAll(v, "'", "\\'")
+			parts = append(parts, fmt.Sprintf("'%s'", safe))
+		case []byte:
+			parts = append(parts, formatClickhouseBytea(v))
+		default:
+			parts = append(parts, fmt.Sprintf("%v", v))
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ","))
+}
+
+func formatClickhouseBytea(b []byte) string {
+	return fmt.Sprintf("unhex('%x')", b)
 }

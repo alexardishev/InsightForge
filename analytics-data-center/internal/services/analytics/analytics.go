@@ -221,7 +221,7 @@ func (a *AnalyticsDataCenterService) runETL(ctx context.Context, idView int64, t
 		if err != nil {
 			log.ErrorMsg(loggerpkg.MsgInsertDataFailed, slog.String("error", err.Error()))
 			a.TaskService.ChangeStatusTask(ctx, taskID, Error, ErrorSelectInsertData)
-			// return "", fmt.Errorf("%s:%s", op, err)
+			return
 		}
 
 		err = a.transferIndixesAndConstraint(ctx, &viewSchema, a.DWHDbName)

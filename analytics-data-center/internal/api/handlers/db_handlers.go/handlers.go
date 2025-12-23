@@ -96,6 +96,8 @@ func (d *DBHandlers) UploadSchema(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
+
+	schemaView.Name = strings.ToLower(schemaView.Name)
 	_, err := validate.Validate(schemaView)
 	if err != nil {
 		d.log.Error("failed validate", slog.String("error", err.Error()))

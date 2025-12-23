@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"regexp"
 	"strings"
+	"time"
 )
 
 func TransformIndexDefToSQLExpression(indexExpression models.Index, schemaFrom string, tableFrom string, schemaTo string, tableTo string, logger *slog.Logger) (string, error) {
@@ -20,7 +21,9 @@ func TransformIndexDefToSQLExpression(indexExpression models.Index, schemaFrom s
 
 	replacement := fmt.Sprintf("ON %s.%s", schemaTo, tableTo)
 	updated := re.ReplaceAllString(original, replacement)
-	new := fmt.Sprintf("%s_%s", originalIndexName, tableTo)
+	timePrefix := time.Now().UTC().Format("20060102_150405")
+	safeIndexName := sanitizeIndexName(originalIndexName)
+	new := fmt.Sprintf("idx_%s_%s", timePrefix, safeIndexName)
 	updated = strings.Replace(updated, originalIndexName, new, 1)
 	if updated == original {
 		logger.Warn("Регулярное выражение не сработало, замена не произведена",
@@ -31,4 +34,10 @@ func TransformIndexDefToSQLExpression(indexExpression models.Index, schemaFrom s
 	}
 
 	return updated, nil
+}
+
+func sanitizeIndexName(name string) string {
+	re := regexp.MustCompile(`[^\w]+`)
+	sanitized := re.ReplaceAllString(name, "_")
+	return strings.Trim(sanitized, "_")
 }
