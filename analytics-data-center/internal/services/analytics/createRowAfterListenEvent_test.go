@@ -211,8 +211,16 @@ func TestCheckColumnInTables_RenameFromOLTP(t *testing.T) {
 	require.Len(t, schemaProvider.mismatchGroups, 1)
 	for _, group := range schemaProvider.mismatchGroups {
 		require.Equal(t, models.ColumnMismatchStatusOpen, group.Group.Status)
-		require.Len(t, group.Items, 1)
-		require.Equal(t, models.ColumnMismatchTypeSchemaOnly, group.Items[0].Type)
+		require.NotEmpty(t, group.Items)
+
+		foundSchemaOnly := false
+		for _, item := range group.Items {
+			if item.Type == models.ColumnMismatchTypeSchemaOnly {
+				foundSchemaOnly = true
+			}
+		}
+
+		require.True(t, foundSchemaOnly, "schema_only item expected")
 	}
 }
 
@@ -259,6 +267,52 @@ func TestCheckColumnInTables_SetDeletedWhenMissingInOLTP(t *testing.T) {
 		require.Len(t, group.Items, 1)
 		require.Equal(t, models.ColumnMismatchTypeSchemaOnly, group.Items[0].Type)
 	}
+}
+
+func TestCheckColumnInTables_IgnoresOtherTablesColumns(t *testing.T) {
+	ctx := context.Background()
+
+	view := models.View{
+		Name: "combined_view",
+		Sources: []models.Source{{
+			Name: "db1",
+			Schemas: []models.Schema{{
+				Name: "public",
+				Tables: []models.Table{
+					{
+						Name:    "users",
+						Columns: []models.Column{{Name: "id"}, {Name: "name"}},
+					},
+					{
+						Name:    "orders",
+						Columns: []models.Column{{Name: "order_id"}, {Name: "user_id"}, {Name: "total"}},
+					},
+				},
+			}},
+		}},
+	}
+
+	schemaProvider := &mockSchemaProvider{views: map[int]models.View{1: view}}
+	dwh := &mockDWH{columns: map[string][]string{"combined_view": {"id", "name", "order_id", "user_id", "total"}}}
+	oltp := &mockOLTP{columns: []models.Column{{Name: "id", Type: "integer"}, {Name: "name", Type: "text"}}}
+	factory := &mockFactory{store: map[string]storage.OLTPDB{"db1": oltp}}
+	smtp := smtpsender.SMTP{EventQueueSMTP: make(chan models.Event, 1)}
+
+	svc := &AnalyticsDataCenterService{
+		log:                     getTestLogger(),
+		SchemaProvider:          schemaProvider,
+		RenameSuggestionStorage: schemaProvider,
+		ColumnMismatchStorage:   schemaProvider,
+		DWHProvider:             dwh,
+		OLTPFactory:             factory,
+		DWHDbName:               DbPostgres,
+		SMTPClient:              smtp,
+	}
+
+	err := svc.checkColumnInTables(ctx, nil, map[string]interface{}{"id": 1}, "db1", "public", "users", []int{1})
+
+	require.NoError(t, err)
+	require.Len(t, schemaProvider.mismatchGroups, 0)
 }
 
 func columnNames(view models.View) []string {

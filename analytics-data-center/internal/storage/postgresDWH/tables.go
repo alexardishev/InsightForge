@@ -142,3 +142,18 @@ func (p *PostgresDWH) RenameColumn(ctx context.Context, query string) error {
 
 	return nil
 }
+
+func (p *PostgresDWH) DropColumn(ctx context.Context, query string) error {
+	const op = "Storage.PostgreSQL.DropColumn"
+	log := p.Log.With(
+		slog.String("op", op),
+		slog.String("query", query),
+	)
+
+	if _, err := p.Db.ExecContext(ctx, query); err != nil {
+		log.Error("ошибка удаления колонки", slog.String("error", err.Error()))
+		return err
+	}
+
+	return nil
+}

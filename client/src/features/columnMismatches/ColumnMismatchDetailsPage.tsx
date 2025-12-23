@@ -43,7 +43,7 @@ interface ColumnMismatchGroupResponse {
   items: ColumnMismatchItem[];
 }
 
-type ActionChoice = 'none' | 'delete' | 'ignore';
+type ActionChoice = 'none' | 'delete_view' | 'delete_dwh' | 'ignore';
 
 type RenameKey = `${string}->${string}`;
 
@@ -124,6 +124,7 @@ const ColumnMismatchDetailsPage: React.FC = () => {
 
   const buildResolution = () => {
     const deletes = new Set<string>();
+    const dropInDwh = new Set<string>();
     const ignores = new Set<string>();
     const renames: { old_name: string; new_name: string }[] = [];
 
@@ -133,12 +134,20 @@ const ColumnMismatchDetailsPage: React.FC = () => {
     });
 
     Object.entries(schemaActions).forEach(([name, action]) => {
-      if (action === 'delete') deletes.add(name);
+      if (action === 'delete_view') deletes.add(name);
+      if (action === 'delete_dwh') {
+        dropInDwh.add(name);
+        deletes.add(name);
+      }
       if (action === 'ignore') ignores.add(name);
     });
 
     Object.entries(dwhActions).forEach(([name, action]) => {
-      if (action === 'delete') deletes.add(name);
+      if (action === 'delete_view') deletes.add(name);
+      if (action === 'delete_dwh') {
+        dropInDwh.add(name);
+        deletes.add(name);
+      }
       if (action === 'ignore') ignores.add(name);
     });
 
@@ -149,6 +158,7 @@ const ColumnMismatchDetailsPage: React.FC = () => {
     return {
       renames,
       deletes: Array.from(deletes),
+      drop_in_dwh: Array.from(dropInDwh),
       ignores: Array.from(ignores),
     };
   };
@@ -183,9 +193,12 @@ const ColumnMismatchDetailsPage: React.FC = () => {
     type: ColumnMismatchItem['type'],
     actions: Record<string, ActionChoice>,
     setter: React.Dispatch<React.SetStateAction<Record<string, ActionChoice>>>,
-    showDelete = true,
+    options: { showViewDelete?: boolean; showDwhDelete?: boolean } = {},
     disabled = false,
-  ) => (
+  ) => {
+    const { showViewDelete = true, showDwhDelete = false } = options;
+
+    return (
     <Card variant="surface" bg={sectionBg[type]}>
       <CardBody>
       <Heading size="md" mb={3}>{title}</Heading>
@@ -214,7 +227,8 @@ const ColumnMismatchDetailsPage: React.FC = () => {
                     >
                       <Stack direction="row">
                         <Radio value="none">Ничего</Radio>
-                        {showDelete && <Radio value="delete">Удалить из view</Radio>}
+                        {showViewDelete && <Radio value="delete_view">Удалить из view</Radio>}
+                        {showDwhDelete && <Radio value="delete_dwh">Удалить из DWH</Radio>}
                         <Radio value="ignore">Игнорировать</Radio>
                       </Stack>
                     </RadioGroup>
@@ -228,6 +242,7 @@ const ColumnMismatchDetailsPage: React.FC = () => {
       </CardBody>
     </Card>
   );
+  };
 
   const renderRenameCandidates = () => (
     <Card variant="surface" bg={sectionBg.rename_candidate}>
@@ -327,9 +342,9 @@ const ColumnMismatchDetailsPage: React.FC = () => {
       )}
 
       <Stack spacing={6}>
-        {renderActionTable('Колонки есть в схеме, но нет в OLTP (schema_only)', schemaOnly, 'schema_only', schemaActions, setSchemaActions, true, isResolved)}
-        {renderActionTable('Колонки есть в схеме и OLTP, но отсутствуют в DWH (missing_in_dwh)', missingInDwh, 'missing_in_dwh', missingActions, setMissingActions, false, isResolved)}
-        {renderActionTable('Колонки есть в DWH, но не описаны в схеме (dwh_only)', dwhOnly, 'dwh_only', dwhActions, setDwhActions, true, isResolved)}
+        {renderActionTable('Колонки есть в схеме, но нет в OLTP (schema_only)', schemaOnly, 'schema_only', schemaActions, setSchemaActions, { showViewDelete: true, showDwhDelete: true }, isResolved)}
+        {renderActionTable('Колонки есть в схеме и OLTP, но отсутствуют в DWH (missing_in_dwh)', missingInDwh, 'missing_in_dwh', missingActions, setMissingActions, { showViewDelete: false, showDwhDelete: false }, isResolved)}
+        {renderActionTable('Колонки есть в DWH, но не описаны в схеме (dwh_only)', dwhOnly, 'dwh_only', dwhActions, setDwhActions, { showViewDelete: false, showDwhDelete: true }, isResolved)}
         {renderRenameCandidates()}
       </Stack>
 

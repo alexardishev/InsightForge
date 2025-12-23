@@ -52,6 +52,7 @@ func (a *AnalyticsDataCenterService) ApplyColumnMismatchResolution(ctx context.C
 
 	tableName := strings.ToLower(view.Name)
 	viewChanged := false
+	columnsForViewRemoval := uniqueColumns(resolution.Deletes)
 
 	for _, decision := range resolution.Renames {
 		renameQuery, err := sqlgenerator.GenerateRenameColumnQuery(a.DWHDbName, "public", tableName, decision.OldName, decision.NewName)
@@ -78,8 +79,24 @@ func (a *AnalyticsDataCenterService) ApplyColumnMismatchResolution(ctx context.C
 		viewChanged = true
 	}
 
-	if len(resolution.Deletes) > 0 {
-		changed, err := removeColumnsFromView(&view, group.Group.DatabaseName, group.Group.SchemaName, group.Group.TableName, resolution.Deletes)
+	if len(resolution.DropInDWH) > 0 {
+		for _, name := range uniqueColumns(resolution.DropInDWH) {
+			dropQuery, err := sqlgenerator.GenerateDropColumnQuery(a.DWHDbName, "public", tableName, name)
+			if err != nil {
+				log.Error("не удалось подготовить запрос удаления колонки", slog.String("error", err.Error()))
+				return err
+			}
+
+			if err := a.DWHProvider.DropColumn(ctx, dropQuery); err != nil {
+				log.Error("не удалось удалить колонку в DWH", slog.String("error", err.Error()))
+				return err
+			}
+			columnsForViewRemoval = append(columnsForViewRemoval, name)
+		}
+	}
+
+	if len(columnsForViewRemoval) > 0 {
+		changed, err := removeColumnsFromView(&view, group.Group.DatabaseName, group.Group.SchemaName, group.Group.TableName, uniqueColumns(columnsForViewRemoval))
 		if err != nil {
 			log.Error("не удалось удалить колонки из view", slog.String("error", err.Error()))
 			return err
@@ -140,4 +157,20 @@ func removeColumnsFromView(view *models.View, database, schema, table string, na
 	}
 
 	return changed, nil
+}
+
+func uniqueColumns(columns []string) []string {
+	seen := make(map[string]struct{}, len(columns))
+	result := make([]string, 0, len(columns))
+
+	for _, col := range columns {
+		key := strings.ToLower(col)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, col)
+	}
+
+	return result
 }
