@@ -49,6 +49,7 @@ type TableProvider interface {
 	CreateIndex(ctx context.Context, query string) error
 	CreateConstraint(ctx context.Context, query string) error
 	RenameColumn(ctx context.Context, query string) error
+	DropColumn(ctx context.Context, query string) error
 }
 
 type DataProviderDWH interface {

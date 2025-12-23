@@ -51,9 +51,10 @@ type ColumnMismatchFilter struct {
 }
 
 type ColumnMismatchResolution struct {
-	Renames []RenameDecision `json:"renames"`
-	Deletes []string         `json:"deletes"`
-	Ignores []string         `json:"ignores"`
+	Renames   []RenameDecision `json:"renames"`
+	Deletes   []string         `json:"deletes"`
+	DropInDWH []string         `json:"drop_in_dwh"`
+	Ignores   []string         `json:"ignores"`
 }
 
 type RenameDecision struct {

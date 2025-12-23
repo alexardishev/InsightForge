@@ -28,6 +28,8 @@ type mockDWH struct {
 	indexErr     error
 	renameCalls  []string
 	renameErr    error
+	dropCalls    []string
+	dropErr      error
 }
 
 func (m *mockDWH) CreateTempTable(_ context.Context, _ string, name string) error {
@@ -58,6 +60,10 @@ func (m *mockDWH) InsertDataToDWH(_ context.Context, query string) error {
 func (m *mockDWH) RenameColumn(_ context.Context, query string) error {
 	m.renameCalls = append(m.renameCalls, query)
 	return m.renameErr
+}
+func (m *mockDWH) DropColumn(_ context.Context, query string) error {
+	m.dropCalls = append(m.dropCalls, query)
+	return m.dropErr
 }
 func (m *mockDWH) GetColumnsTables(_ context.Context, _ string, table string) ([]string, error) {
 	if cols, ok := m.columns[table]; ok {

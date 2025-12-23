@@ -102,3 +102,18 @@ func (c *ClickHouseDB) RenameColumn(ctx context.Context, query string) error {
 
 	return nil
 }
+
+func (c *ClickHouseDB) DropColumn(ctx context.Context, query string) error {
+	const op = "Storage.ClickHouseDB.DropColumn"
+	log := c.Log.With(
+		slog.String("op", op),
+		slog.String("query", query),
+	)
+
+	if _, err := c.Db.ExecContext(ctx, query); err != nil {
+		log.Error("ошибка удаления колонки", slog.String("error", err.Error()))
+		return err
+	}
+
+	return nil
+}

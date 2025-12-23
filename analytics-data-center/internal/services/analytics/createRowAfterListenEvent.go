@@ -243,6 +243,8 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 				slog.String("view", viewName))
 		}
 
+		columnTableMap := mapColumnTables(view, databaseEvt, schemaEvt)
+
 		// 2.1. Колонки в DWH для этого view
 		columns, err := a.DWHProvider.GetColumnsTables(ctx, dwhSchemaName, strings.ToLower(dwhTableName))
 		if err != nil {
@@ -258,9 +260,16 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 			return err
 		}
 
+		targetTable := strings.ToLower(tableEvt)
 		actualCols := make(map[string]struct{}, len(columns))
 		for _, col := range columns {
-			actualCols[strings.ToLower(col)] = struct{}{}
+			colLower := strings.ToLower(col)
+			if tables, ok := columnTableMap[colLower]; ok {
+				if _, belongs := tables[targetTable]; !belongs {
+					continue
+				}
+			}
+			actualCols[colLower] = struct{}{}
 		}
 
 		// 2.2. Колонки схемы (view) для этой таблицы
@@ -508,6 +517,39 @@ func lowerCaseColumns(columns []string) []string {
 		result = append(result, strings.ToLower(col))
 	}
 	sort.Strings(result)
+	return result
+}
+
+func mapColumnTables(view models.View, databaseName, schemaName string) map[string]map[string]struct{} {
+	result := make(map[string]map[string]struct{})
+
+	for _, source := range view.Sources {
+		if source.Name != databaseName {
+			continue
+		}
+		for _, sch := range source.Schemas {
+			if sch.Name != schemaName {
+				continue
+			}
+			for _, table := range sch.Tables {
+				tableNameLower := strings.ToLower(table.Name)
+
+				for _, column := range table.Columns {
+					targetName := column.Alias
+					if targetName == "" {
+						targetName = column.Name
+					}
+					colLower := strings.ToLower(targetName)
+
+					if _, ok := result[colLower]; !ok {
+						result[colLower] = make(map[string]struct{})
+					}
+					result[colLower][tableNameLower] = struct{}{}
+				}
+			}
+		}
+	}
+
 	return result
 }
 

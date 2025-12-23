@@ -127,6 +127,7 @@ func (d *testDWH) RenameColumn(_ context.Context, query string) error {
 	d.renameCalls = append(d.renameCalls, query)
 	return nil
 }
+func (d *testDWH) DropColumn(context.Context, string) error      { return nil }
 func (d *testDWH) InsertDataToDWH(context.Context, string) error { return nil }
 func (d *testDWH) GetColumnsTables(context.Context, string, string) ([]string, error) {
 	return nil, nil
