@@ -107,6 +107,8 @@ const TransformBuilderPage: React.FC = () => {
     navigate('/summary');
   };
 
+  const cardBackground = useColorModeValue('gray.50', 'gray.700');
+
   const renderColumn = (db: string, schema: string, table: string, column: any) => {
     const key = `${db}.${schema}.${table}.${column.name}`;
     if (!local[key]) return null;
@@ -129,7 +131,7 @@ const TransformBuilderPage: React.FC = () => {
         borderWidth="1px"
         borderRadius="md"
         mb={4}
-        background={useColorModeValue('gray.50', 'gray.700')}
+        background={cardBackground}
       >
         <Text mb={2} fontWeight="bold">{table}.{column.name}</Text>
         <Select
