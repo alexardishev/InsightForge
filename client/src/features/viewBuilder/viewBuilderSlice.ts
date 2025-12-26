@@ -20,17 +20,17 @@ export interface SourceSelection extends TableSelection {
   schema: string;
 }
 
-interface JoinSide {
-  db: string;
-  schema: string;
+export interface JoinInner {
   table: string;
-  column: string;
+  schema: string;
+  source: string;
+  main_table: string;
+  column_first: string;
+  column_second: string;
 }
 
 export interface JoinRule {
-  type: 'INNER';
-  left: JoinSide;
-  right: JoinSide;
+  inner: JoinInner;
 }
 
 export interface MappingJSON {
@@ -163,9 +163,7 @@ const viewBuilderSlice = createSlice({
         }
       });
 
-      state.joins = state.joins.filter(
-        (join) => nextDbs.has(join.left.db) && nextDbs.has(join.right.db),
-      );
+      state.joins = state.joins.filter((join) => join.inner && nextDbs.has(join.inner.source));
       pruneTransformations(state);
     },
     setSchemasForDb(state, action: PayloadAction<{ db: string; schemas: string[] }>) {
@@ -190,8 +188,7 @@ const viewBuilderSlice = createSlice({
       }
 
       state.joins = state.joins.filter(
-        (join) => !(join.left.db === db && !allowed.has(join.left.schema)) &&
-          !(join.right.db === db && !allowed.has(join.right.schema)),
+        (join) => !(join.inner?.source === db && !allowed.has(join.inner.schema)),
       );
 
       pruneTransformations(state);
