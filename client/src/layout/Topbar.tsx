@@ -22,7 +22,7 @@ interface TopbarProps {
 }
 
 const Topbar: React.FC<TopbarProps> = ({ onOpenMenu }) => {
-  const { selectedDb, selectedSchema, viewName } = useSelector(
+  const { currentDb, currentSchema, selectedSources, viewName } = useSelector(
     (state: RootState) => state.viewBuilder,
   );
   const background = useColorModeValue('white', 'bg.surface');
@@ -52,9 +52,21 @@ const Topbar: React.FC<TopbarProps> = ({ onOpenMenu }) => {
             <Text fontWeight="bold" fontSize="lg">
               {viewName || 'Data cockpit'}
             </Text>
-            <HStack spacing={2} color="text.muted" fontSize="sm">
-              {selectedDb && <Badge colorScheme="cyan">{selectedDb}</Badge>}
-              {selectedSchema && <Badge colorScheme="purple">{selectedSchema}</Badge>}
+            <HStack spacing={2} color="text.muted" fontSize="sm" flexWrap="wrap">
+              {(selectedSources.length
+                ? selectedSources.map((source) => (
+                    <Badge key={`${source.db}.${source.schema}`} colorScheme="cyan">
+                      {source.db}.{source.schema}
+                    </Badge>
+                  ))
+                : [
+                    currentDb && (
+                      <Badge key={currentDb} colorScheme="cyan">
+                        {currentDb}{currentSchema ? `.${currentSchema}` : ''}
+                      </Badge>
+                    ),
+                  ]
+              ).filter(Boolean)}
             </HStack>
           </Box>
         </HStack>

@@ -13,57 +13,68 @@ const SummaryPage: React.FC = () => {
 
   const data = settings.dataBaseInfo;
 
-  const selectedDatabase = data?.find((db: any) => db.name === builder.selectedDb);
-  const selectedSchemaData = selectedDatabase?.schemas?.find((s: any) => s.name === builder.selectedSchema);
+  const sources = builder.selectedSources
+    .map((source) => {
+      const selectedDatabase = data?.find((db: any) => db.name === source.db);
+      const selectedSchemaData = selectedDatabase?.schemas?.find(
+        (s: any) => s.name === source.schema,
+      );
+      if (!selectedSchemaData) return null;
+      return {
+        name: source.db,
+        schemas: [
+          {
+            name: source.schema,
+            tables: source.selectedTables.map((tableName) => {
+              const tableData = selectedSchemaData.tables.find(
+                (t: any) => t.name === tableName,
+              );
+              return {
+                name: tableName,
+                columns:
+                  tableData?.columns
+                    .filter((col: any) =>
+                      source.selectedColumns.some(
+                        (c) => c.table === tableName && c.column === col.name,
+                      ),
+                    )
+                    .map((col: any) => {
+                      const key = `${source.db}.${source.schema}.${tableName}.${col.name}`;
+                      const selectedColumn = source.selectedColumns.find(
+                        (c) => c.table === tableName && c.column === col.name,
+                      );
+                      const base = {
+                        name: col.name,
+                        alias: selectedColumn?.alias,
+                        type: col.type,
+                        is_nullable: col.is_nullable,
+                        is_primary_key: col.is_primary_key || col.is_pk,
+                        is_fk: col.is_fk,
+                        default: col.default,
+                        is_unq: col.is_unique,
+                        view_key:
+                          selectedColumn?.viewKey || col.view_key,
+                        is_update_key:
+                          selectedColumn?.isUpdateKey ??
+                          col.is_update_key ??
+                          (col.is_primary_key || col.is_pk || false),
+                      };
+                      const tr = builder.transformations[key];
+                      return tr ? { ...base, transform: tr } : base;
+                    }) || [],
+              };
+            }),
+          },
+        ],
+      };
+    })
+    .filter((source): source is NonNullable<typeof source> => Boolean(source));
 
-  if (!selectedSchemaData) return null;
-
-  const source = {
-    name: builder.selectedDb,
-    schemas: [
-      {
-        name: builder.selectedSchema,
-        tables: builder.selectedTables.map((tableName) => {
-          const tableData = selectedSchemaData.tables.find((t: any) => t.name === tableName);
-          return {
-            name: tableName,
-            columns: tableData.columns
-              .filter((col: any) => builder.selectedColumns.some((c) => c.table === tableName && c.column === col.name))
-              .map((col: any) => {
-                const key = `${tableName}.${col.name}`;
-                const selectedColumn = builder.selectedColumns.find(
-                  (c) => c.table === tableName && c.column === col.name,
-                );
-                const base = {
-                  name: col.name,
-                  alias: selectedColumn?.alias,
-                  type: col.type,
-                  is_nullable: col.is_nullable,
-                  is_primary_key: col.is_primary_key || col.is_pk,
-                  is_fk: col.is_fk,
-                  default: col.default,
-                  is_unq: col.is_unique,
-                  view_key:
-                    selectedColumn?.viewKey || col.view_key,
-                  is_update_key:
-                    selectedColumn?.isUpdateKey ??
-                col.is_update_key ??
-                    (col.is_primary_key ||
-                    col.is_pk ||
-                    false),
-                };
-                const tr = builder.transformations[key];
-                return tr ? { ...base, transform: tr } : base;
-              }),
-          };
-        }),
-      },
-    ],
-  };
+  if (sources.length === 0) return null;
 
   const view = {
     view_name: builder.viewName,
-    sources: [source],
+    sources,
     joins: builder.joins,
   };
 
@@ -82,9 +93,12 @@ const SummaryPage: React.FC = () => {
             Проверь выбранные источники, связи и трансформации перед запуском. Фокус на прозрачных
             предупреждениях и безопасности.
           </Text>
-          <HStack spacing={3} mt={3}>
-            <Badge colorScheme="cyan">{builder.selectedDb}</Badge>
-            <Badge colorScheme="purple">{builder.selectedSchema}</Badge>
+          <HStack spacing={3} mt={3} flexWrap="wrap">
+            {builder.selectedSources.map((source) => (
+              <Badge key={`${source.db}.${source.schema}`} colorScheme="cyan">
+                {source.db}.{source.schema}
+              </Badge>
+            ))}
           </HStack>
         </Box>
         <Divider borderColor="border.subtle" />

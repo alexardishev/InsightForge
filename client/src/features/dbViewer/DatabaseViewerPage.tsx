@@ -23,7 +23,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import type { RootState, AppDispatch } from '../../app/store';
 import DatabaseSelector from '../viewBuilder/components/DatabaseSelector';
 import SchemaSelector from '../viewBuilder/components/SchemaSelector';
-import { setSelectedDb, setSelectedSchema } from '../viewBuilder/viewBuilderSlice';
+import { setCurrentDb, setCurrentSchema } from '../viewBuilder/viewBuilderSlice';
 import { useHttp } from '../../hooks/http.hook';
 import { appendTables } from '../settings/settingsSlice';
 
@@ -36,12 +36,12 @@ const DatabaseViewerPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const data = useSelector((state: RootState) => state.settings.dataBaseInfo);
   const connectionsMap = useSelector((state: RootState) => state.settings.connectionsMap);
-  const { selectedDb, selectedSchema } = useSelector((state: RootState) => state.viewBuilder);
+  const { currentDb, currentSchema } = useSelector((state: RootState) => state.viewBuilder);
   const { request } = useHttp();
   const url = '/api';
 
-  const selectedDatabase = data?.find((db: any) => db.name === selectedDb);
-  const selectedSchemaData = selectedDatabase?.schemas?.find((s: any) => s.name === selectedSchema);
+  const selectedDatabase = data?.find((db: any) => db.name === currentDb);
+  const selectedSchemaData = selectedDatabase?.schemas?.find((s: any) => s.name === currentSchema);
 
   const [tablesState, setTablesState] = useState<TableRow[]>(selectedSchemaData?.tables || []);
   const [page, setPage] = useState(1);
@@ -66,12 +66,12 @@ const DatabaseViewerPage: React.FC = () => {
         page_size: pageSize,
       };
       const dbInfo = await request(`${url}/get-db`, 'POST', body);
-      const db = dbInfo.find((d: any) => d.name === selectedDb);
-      const schema = db?.schemas?.find((s: any) => s.name === selectedSchema);
+      const db = dbInfo.find((d: any) => d.name === currentDb);
+      const schema = db?.schemas?.find((s: any) => s.name === currentSchema);
       const newTables = schema?.tables || [];
       if (newTables.length > 0) {
         setTablesState((prev) => [...prev, ...newTables]);
-        dispatch(appendTables({ db: selectedDb, schema: selectedSchema, tables: newTables }));
+        dispatch(appendTables({ db: currentDb, schema: currentSchema, tables: newTables }));
         setPage(nextPage);
       }
     } catch (e) {
@@ -119,29 +119,29 @@ const DatabaseViewerPage: React.FC = () => {
           <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} alignItems="center">
             <DatabaseSelector
               data={data}
-              selectedDb={selectedDb}
-              onChange={(db) => dispatch(setSelectedDb(db))}
+              selectedDb={currentDb}
+              onChange={(db) => dispatch(setCurrentDb(db))}
             />
-            {selectedDb && selectedDatabase && (
+            {currentDb && selectedDatabase && (
               <SchemaSelector
                 selectedDatabase={selectedDatabase}
-                selectedSchema={selectedSchema}
-                onChange={(schema) => dispatch(setSelectedSchema(schema))}
+                selectedSchema={currentSchema}
+                onChange={(schema) => dispatch(setCurrentSchema(schema))}
               />
             )}
           </SimpleGrid>
         </CardBody>
       </Card>
 
-      {selectedSchema && (
+      {currentSchema && (
         <Stack spacing={4}>
           <Card variant="surface">
             <CardBody>
               <HStack justify="space-between" mb={3} align="center">
                 <HStack>
                   <Icon as={FiDatabase} />
-                  <Text fontWeight="bold">{selectedDb}</Text>
-                  <Badge>{selectedSchema}</Badge>
+                  <Text fontWeight="bold">{currentDb}</Text>
+                  <Badge>{currentSchema}</Badge>
                 </HStack>
                 <Button
                   leftIcon={<FiRefreshCw />}

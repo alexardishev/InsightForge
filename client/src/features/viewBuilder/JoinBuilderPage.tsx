@@ -38,37 +38,56 @@ const JoinBuilderPage: React.FC = () => {
   const navigate = useNavigate();
 
   const data = useSelector((state: RootState) => state.settings.dataBaseInfo);
-  const {
-    selectedDb,
-    selectedSchema,
-    selectedTables,
-    selectedColumns,
-    joins,
-    viewName,
-  } = useSelector((state: RootState) => state.viewBuilder);
+  const { selectedSources, joins, viewName } = useSelector(
+    (state: RootState) => state.viewBuilder,
+  );
 
-  const selectedDatabase = data?.find((db: any) => db.name === selectedDb);
-  const selectedSchemaData = selectedDatabase?.schemas?.find((s: any) => s.name === selectedSchema);
+  const selectedTables = selectedSources.flatMap((source) =>
+    source.selectedTables.map((table) => ({
+      db: source.db,
+      schema: source.schema,
+      table,
+    })),
+  );
+
+  const selectedColumns = selectedSources.flatMap((source) => source.selectedColumns);
 
   const [mainTable, setMainTable] = useState('');
   const [joinTable, setJoinTable] = useState('');
   const [mainColumn, setMainColumn] = useState('');
   const [joinColumn, setJoinColumn] = useState('');
 
+  const tableMetaMap = new Map(
+    selectedTables.map((item) => [
+      `${item.db}.${item.schema}.${item.table}`,
+      item,
+    ]),
+  );
+
   const requiresJoin = selectedTables.length > 1;
   const cartesianRisk = requiresJoin && joins.length === 0;
   const canProceed = !requiresJoin || joins.length > 0;
-  const columnsByTable = (tableName: string): Column[] =>
-    selectedSchemaData?.tables.find((t: any) => t.name === tableName)?.columns ?? [];
+  const columnsByTable = (tableKey: string): Column[] => {
+    const tableInfo = tableMetaMap.get(tableKey);
+    if (!tableInfo) return [];
+    const db = data?.find((d: any) => d.name === tableInfo.db);
+    const schema = db?.schemas?.find((s: any) => s.name === tableInfo.schema);
+    return schema?.tables.find((t: any) => t.name === tableInfo.table)?.columns ?? [];
+  };
 
   const handleAddJoin = () => {
     if (!mainTable || !joinTable || !mainColumn || !joinColumn) return;
+    const mainMeta = tableMetaMap.get(mainTable);
+    const joinMeta = tableMetaMap.get(joinTable);
+    if (!mainMeta || !joinMeta) return;
+    if (mainMeta.db !== joinMeta.db || mainMeta.schema !== joinMeta.schema) return;
+
     const join = {
       inner: {
-        source: selectedDb,
-        schema: selectedSchema,
-        table: joinTable,
-        main_table: mainTable,
+        source: mainMeta.db,
+        schema: mainMeta.schema,
+        table: joinMeta.table,
+        main_table: mainMeta.table,
         column_first: mainColumn,
         column_second: joinColumn,
       },
@@ -117,10 +136,11 @@ const JoinBuilderPage: React.FC = () => {
             </HStack>
             <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
               {selectedTables.map((table) => {
-                const cols = columnsByTable(table) as Column[];
+                const key = `${table.db}.${table.schema}.${table.table}`;
+                const cols = columnsByTable(key) as Column[];
                 return (
                   <Box
-                    key={table}
+                    key={key}
                     p={3}
                     border="1px solid"
                     borderColor="border.subtle"
@@ -130,20 +150,30 @@ const JoinBuilderPage: React.FC = () => {
                     <HStack justify="space-between" mb={2}>
                       <HStack spacing={2}>
                         <Icon as={FiLink2} color="accent.primary" />
-                        <Text fontWeight="bold">{table}</Text>
+                        <Text fontWeight="bold">{key}</Text>
                       </HStack>
                       <Tag colorScheme="purple">{cols.length} колонок</Tag>
                     </HStack>
                     <HStack spacing={2} flexWrap="wrap">
                       {selectedColumns
-                        .filter((c) => c.table === table)
+                        .filter(
+                          (c) =>
+                            c.table === table.table &&
+                            c.db === table.db &&
+                            c.schema === table.schema,
+                        )
                         .slice(0, 6)
                         .map((c: { column: string }) => (
                           <Tag key={c.column} colorScheme="cyan" variant="subtle">
                             {c.column}
                           </Tag>
                         ))}
-                      {selectedColumns.filter((c) => c.table === table).length > 6 && (
+                      {selectedColumns.filter(
+                        (c) =>
+                          c.table === table.table &&
+                          c.db === table.db &&
+                          c.schema === table.schema,
+                      ).length > 6 && (
                         <Tag variant="outline">…</Tag>
                       )}
                     </HStack>
@@ -180,11 +210,14 @@ const JoinBuilderPage: React.FC = () => {
                 variant="filled"
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMainTable(e.target.value)}
               >
-                {selectedTables.map((t: string) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
+                {selectedTables.map((t) => {
+                  const key = `${t.db}.${t.schema}.${t.table}`;
+                  return (
+                    <option key={key} value={key}>
+                      {key}
+                    </option>
+                  );
+                })}
               </Select>
               <Select
                 placeholder="Колонка"
@@ -204,11 +237,14 @@ const JoinBuilderPage: React.FC = () => {
                 variant="filled"
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setJoinTable(e.target.value)}
               >
-                {selectedTables.map((t: string) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
+                {selectedTables.map((t) => {
+                  const key = `${t.db}.${t.schema}.${t.table}`;
+                  return (
+                    <option key={key} value={key}>
+                      {key}
+                    </option>
+                  );
+                })}
               </Select>
               <Select
                 placeholder="Колонка"

@@ -4,8 +4,8 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import type { RootState, AppDispatch } from '../../app/store';
 import {
-  setSelectedDb,
-  setSelectedSchema,
+  setCurrentDb,
+  setCurrentSchema,
   toggleTable,
   toggleColumn,
   setTableColumns,
@@ -27,8 +27,9 @@ const ViewBuilderPage: React.FC = () => {
   const connectionsMap = useSelector(
     (state: RootState) => state.settings.connectionsMap,
   );
-  const { selectedDb, selectedSchema, selectedTables, selectedColumns } =
-    useSelector((state: RootState) => state.viewBuilder);
+  const { currentDb, currentSchema, selectedSources } = useSelector(
+    (state: RootState) => state.viewBuilder,
+  );
   const { request } = useHttp();
   const url = '/api';
 
@@ -38,15 +39,19 @@ const ViewBuilderPage: React.FC = () => {
 
 
   const handleToggleTable = (table: string) => {
-    dispatch(toggleTable(table));
+    if (!currentDb || !currentSchema) return;
+    dispatch(toggleTable({ db: currentDb, schema: currentSchema, table }));
   };
 
   const handleToggleColumn = (
     table: string,
     column: any,
   ) => {
+    if (!currentDb || !currentSchema) return;
     dispatch(
       toggleColumn({
+        db: currentDb,
+        schema: currentSchema,
         table,
         column: column.name,
         isPrimaryKey: column.is_primary_key || column.is_pk,
@@ -56,8 +61,11 @@ const ViewBuilderPage: React.FC = () => {
   };
 
   const handleSetTableColumns = (table: string, columns: any[]) => {
+    if (!currentDb || !currentSchema) return;
     dispatch(
       setTableColumns({
+        db: currentDb,
+        schema: currentSchema,
         table,
         columns: columns.map((col) => ({
           name: col.name,
@@ -69,11 +77,18 @@ const ViewBuilderPage: React.FC = () => {
   };
 
   const handleAliasChange = (table: string, column: string, alias: string) => {
-    dispatch(setColumnAlias({ table, column, alias }));
+    if (!currentDb || !currentSchema) return;
+    dispatch(setColumnAlias({ db: currentDb, schema: currentSchema, table, column, alias }));
   };
 
-  const selectedDatabase = data?.find((db: any) => db.name === selectedDb);
-  const selectedSchemaData = selectedDatabase?.schemas?.find((schema: any) => schema.name === selectedSchema);
+  const selectedDatabase = data?.find((db: any) => db.name === currentDb);
+  const selectedSchemaData = selectedDatabase?.schemas?.find((schema: any) => schema.name === currentSchema);
+
+  const currentSelection = selectedSources.find(
+    (source) => source.db === currentDb && source.schema === currentSchema,
+  );
+  const selectedTables = currentSelection?.selectedTables ?? [];
+  const selectedColumns = currentSelection?.selectedColumns ?? [];
 
   useEffect(() => {
     setTablesState(selectedSchemaData?.tables || []);
@@ -93,12 +108,12 @@ const ViewBuilderPage: React.FC = () => {
         page_size: pageSize,
       };
       const dbInfo = await request(`${url}/get-db`, 'POST', body);
-      const db = dbInfo.find((d: any) => d.name === selectedDb);
-      const schema = db?.schemas?.find((s: any) => s.name === selectedSchema);
+      const db = dbInfo.find((d: any) => d.name === currentDb);
+      const schema = db?.schemas?.find((s: any) => s.name === currentSchema);
       const newTables = schema?.tables || [];
       if (newTables.length > 0) {
         setTablesState(prev => [...prev, ...newTables]);
-        dispatch(appendTables({ db: selectedDb, schema: selectedSchema, tables: newTables }));
+        dispatch(appendTables({ db: currentDb, schema: currentSchema, tables: newTables }));
         setPage(nextPage);
       }
     } catch (e) {
@@ -118,7 +133,7 @@ const ViewBuilderPage: React.FC = () => {
       onNext={handleBuildView}
       primaryLabel="Перейти к джоинам"
       secondaryLabel="К подключениям"
-      isNextDisabled={selectedColumns.length === 0}
+      isNextDisabled={selectedSources.every((source) => source.selectedColumns.length === 0)}
     >
       <VStack align="stretch" spacing={6}>
         <Box>
@@ -139,22 +154,22 @@ const ViewBuilderPage: React.FC = () => {
         <Box>
           <DatabaseSelector
             data={data}
-            selectedDb={selectedDb}
-            onChange={(db) => dispatch(setSelectedDb(db))}
+            selectedDb={currentDb}
+            onChange={(db) => dispatch(setCurrentDb(db))}
           />
         </Box>
 
-        {selectedDb && selectedDatabase && (
+        {currentDb && selectedDatabase && (
           <Box>
             <SchemaSelector
               selectedDatabase={selectedDatabase}
-              selectedSchema={selectedSchema}
-              onChange={(schema) => dispatch(setSelectedSchema(schema))}
+              selectedSchema={currentSchema}
+              onChange={(schema) => dispatch(setCurrentSchema(schema))}
             />
           </Box>
         )}
 
-        {selectedSchema && schemaDataWithTables && (
+        {currentSchema && schemaDataWithTables && (
           <TableSelector
             selectedSchemaData={schemaDataWithTables}
             selectedTables={selectedTables}
@@ -172,7 +187,7 @@ const ViewBuilderPage: React.FC = () => {
           onAliasChange={handleAliasChange}
         />
 
-        {selectedColumns.length === 0 && (
+        {selectedSources.every((source) => source.selectedColumns.length === 0) && (
           <Box
             p={4}
             border="1px dashed"

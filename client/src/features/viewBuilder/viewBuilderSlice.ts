@@ -1,11 +1,20 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
 interface SelectedColumn {
+  db: string;
+  schema: string;
   table: string;
   column: string;
   viewKey?: string;
   isUpdateKey?: boolean;
   alias?: string;
+}
+
+interface SourceSelection {
+  db: string;
+  schema: string;
+  selectedTables: string[];
+  selectedColumns: SelectedColumn[];
 }
 
 interface JoinSide {
@@ -22,10 +31,9 @@ interface Join {
 }
 
 interface ViewBuilderState {
-  selectedDb: string;
-  selectedSchema: string;
-  selectedTables: string[];
-  selectedColumns: SelectedColumn[];
+  currentDb: string;
+  currentSchema: string;
+  selectedSources: SourceSelection[];
   joins: Join[];
   viewName: string;
   transformations: Record<string, Transform>;
@@ -52,38 +60,68 @@ export interface Transform {
 }
 
 const initialState: ViewBuilderState = {
-  selectedDb: '',
-  selectedSchema: '',
-  selectedTables: [],
-  selectedColumns: [],
+  currentDb: '',
+  currentSchema: '',
+  selectedSources: [],
   joins: [],
   viewName: 'MyView',
   transformations: {},
+};
+
+const columnKey = (payload: {
+  db: string;
+  schema: string;
+  table: string;
+  column: string;
+}) => `${payload.db}.${payload.schema}.${payload.table}.${payload.column}`;
+
+const findOrCreateSource = (
+  state: ViewBuilderState,
+  db: string,
+  schema: string,
+): SourceSelection => {
+  let source = state.selectedSources.find(
+    (s) => s.db === db && s.schema === schema,
+  );
+  if (!source) {
+    source = { db, schema, selectedTables: [], selectedColumns: [] };
+    state.selectedSources.push(source);
+  }
+  return source;
+};
+
+const cleanupEmptySources = (state: ViewBuilderState) => {
+  state.selectedSources = state.selectedSources.filter(
+    (source) => source.selectedTables.length > 0 || source.selectedColumns.length > 0,
+  );
 };
 
 const viewBuilderSlice = createSlice({
   name: 'viewBuilder',
   initialState,
   reducers: {
-    setSelectedDb(state, action: PayloadAction<string>) {
-      state.selectedDb = action.payload;
-      state.selectedSchema = '';
-      state.selectedTables = [];
-      state.selectedColumns = [];
+    setCurrentDb(state, action: PayloadAction<string>) {
+      state.currentDb = action.payload;
+      state.currentSchema = '';
     },
-    setSelectedSchema(state, action: PayloadAction<string>) {
-      state.selectedSchema = action.payload;
-      state.selectedTables = [];
-      state.selectedColumns = [];
+    setCurrentSchema(state, action: PayloadAction<string>) {
+      state.currentSchema = action.payload;
     },
-    toggleTable(state, action: PayloadAction<string>) {
-      const table = action.payload;
-      if (state.selectedTables.includes(table)) {
-        state.selectedTables = state.selectedTables.filter((t) => t !== table);
-        state.selectedColumns = state.selectedColumns.filter((c) => c.table !== table);
+    toggleTable(
+      state,
+      action: PayloadAction<{ db: string; schema: string; table: string }>,
+    ) {
+      const { db, schema, table } = action.payload;
+      const source = findOrCreateSource(state, db, schema);
+      if (source.selectedTables.includes(table)) {
+        source.selectedTables = source.selectedTables.filter((t) => t !== table);
+        source.selectedColumns = source.selectedColumns.filter(
+          (c) => !(c.table === table && c.db === db && c.schema === schema),
+        );
       } else {
-        state.selectedTables.push(table);
+        source.selectedTables.push(table);
       }
+      cleanupEmptySources(state);
     },
     toggleColumn(
       state,
@@ -91,14 +129,20 @@ const viewBuilderSlice = createSlice({
         SelectedColumn & { isPrimaryKey?: boolean; isUpdateKey?: boolean }
       >,
     ) {
-      const { table, column, isPrimaryKey, isUpdateKey } = action.payload;
-      const idx = state.selectedColumns.findIndex(
+      const { db, schema, table, column, isPrimaryKey, isUpdateKey } =
+        action.payload;
+      const source = findOrCreateSource(state, db, schema);
+      const idx = source.selectedColumns.findIndex(
         (c) => c.table === table && c.column === column,
       );
+      const key = columnKey({ db, schema, table, column });
       if (idx !== -1) {
-        state.selectedColumns.splice(idx, 1);
+        source.selectedColumns.splice(idx, 1);
+        delete state.transformations[key];
       } else {
-        state.selectedColumns.push({
+        source.selectedColumns.push({
+          db,
+          schema,
           table,
           column,
           isUpdateKey: isUpdateKey ?? isPrimaryKey ?? false,
@@ -108,14 +152,17 @@ const viewBuilderSlice = createSlice({
     setTableColumns(
       state,
       action: PayloadAction<{
+        db: string;
+        schema: string;
         table: string;
         columns: { name: string; isPrimaryKey?: boolean; isUpdateKey?: boolean }[];
       }>,
     ) {
-      const { table, columns } = action.payload;
-      const otherTables = state.selectedColumns.filter((c) => c.table !== table);
+      const { db, schema, table, columns } = action.payload;
+      const source = findOrCreateSource(state, db, schema);
+      const otherTables = source.selectedColumns.filter((c) => c.table !== table);
       const existingMap = new Map(
-        state.selectedColumns
+        source.selectedColumns
           .filter((c) => c.table === table)
           .map((c) => [c.column, c]),
       );
@@ -126,6 +173,8 @@ const viewBuilderSlice = createSlice({
           existing?.isUpdateKey ?? col.isUpdateKey ?? col.isPrimaryKey ?? false;
 
         return {
+          db,
+          schema,
           table,
           column: col.name,
           viewKey: existing?.viewKey,
@@ -134,14 +183,24 @@ const viewBuilderSlice = createSlice({
         } as SelectedColumn;
       });
 
-      state.selectedColumns = [...otherTables, ...updatedColumns];
+      source.selectedColumns = [...otherTables, ...updatedColumns];
+      if (columns.length === 0) {
+        cleanupEmptySources(state);
+      }
     },
     setViewKey(
       state,
-      action: PayloadAction<{ table: string; column: string; viewKey: string }>,
+      action: PayloadAction<{
+        db: string;
+        schema: string;
+        table: string;
+        column: string;
+        viewKey: string;
+      }>,
     ) {
-      const { table, column, viewKey } = action.payload;
-      const col = state.selectedColumns.find(
+      const { db, schema, table, column, viewKey } = action.payload;
+      const source = findOrCreateSource(state, db, schema);
+      const col = source.selectedColumns.find(
         (c) => c.table === table && c.column === column,
       );
       if (col) {
@@ -151,13 +210,16 @@ const viewBuilderSlice = createSlice({
     setUpdateKey(
       state,
       action: PayloadAction<{
+        db: string;
+        schema: string;
         table: string;
         column: string;
         isUpdateKey: boolean;
       }>,
     ) {
-      const { table, column, isUpdateKey } = action.payload;
-      const col = state.selectedColumns.find(
+      const { db, schema, table, column, isUpdateKey } = action.payload;
+      const source = findOrCreateSource(state, db, schema);
+      const col = source.selectedColumns.find(
         (c) => c.table === table && c.column === column,
       );
       if (col) {
@@ -166,10 +228,17 @@ const viewBuilderSlice = createSlice({
     },
     setColumnAlias(
       state,
-      action: PayloadAction<{ table: string; column: string; alias: string }>,
+      action: PayloadAction<{
+        db: string;
+        schema: string;
+        table: string;
+        column: string;
+        alias: string;
+      }>,
     ) {
-      const { table, column, alias } = action.payload;
-      const col = state.selectedColumns.find(
+      const { db, schema, table, column, alias } = action.payload;
+      const source = findOrCreateSource(state, db, schema);
+      const col = source.selectedColumns.find(
         (c) => c.table === table && c.column === column,
       );
       if (col) {
@@ -184,9 +253,15 @@ const viewBuilderSlice = createSlice({
     },
     setTransformation(
       state,
-      action: PayloadAction<{ table: string; column: string; transform: Transform | null }>,
+      action: PayloadAction<{
+        db: string;
+        schema: string;
+        table: string;
+        column: string;
+        transform: Transform | null;
+      }>,
     ) {
-      const key = `${action.payload.table}.${action.payload.column}`;
+      const key = columnKey(action.payload);
       if (action.payload.transform) {
         state.transformations[key] = action.payload.transform;
       } else {
@@ -197,10 +272,9 @@ const viewBuilderSlice = createSlice({
       state.viewName = action.payload;
     },
     resetSelections(state) {
-      state.selectedDb = '';
-      state.selectedSchema = '';
-      state.selectedTables = [];
-      state.selectedColumns = [];
+      state.currentDb = '';
+      state.currentSchema = '';
+      state.selectedSources = [];
       state.joins = [];
       state.viewName = 'MyView';
       state.transformations = {};
@@ -209,8 +283,8 @@ const viewBuilderSlice = createSlice({
 });
 
 export const {
-  setSelectedDb,
-  setSelectedSchema,
+  setCurrentDb,
+  setCurrentSchema,
   toggleTable,
   toggleColumn,
   setTableColumns,
@@ -223,5 +297,7 @@ export const {
   setViewName,
   resetSelections,
 } = viewBuilderSlice.actions;
+
+export const getColumnKey = columnKey;
 
 export default viewBuilderSlice.reducer;
