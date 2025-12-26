@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Box,
   Heading,
@@ -19,7 +19,7 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import type { RootState, AppDispatch } from '../../app/store';
-import { setTransformation, setUpdateKey, setViewKey } from './viewBuilderSlice';
+import { setTransformation, setUpdateKey, setViewKey, flattenSelections } from './viewBuilderSlice';
 import { InfoIcon } from '@chakra-ui/icons';
 import FlowLayout from '../../components/FlowLayout';
 import { builderSteps } from './flowSteps';
@@ -36,9 +36,9 @@ const TransformBuilderPage: React.FC = () => {
   const navigate = useNavigate();
 
   const data = useSelector((state: RootState) => state.settings.dataBaseInfo);
-  const { selectedSources, transformations } = useSelector(
-    (state: RootState) => state.viewBuilder,
-  );
+  const builder = useSelector((state: RootState) => state.viewBuilder);
+  const selectedSources = useMemo(() => flattenSelections(builder), [builder]);
+  const { transformations } = builder;
 
   const [local, setLocal] = useState<Record<string, LocalTransformState>>({});
 

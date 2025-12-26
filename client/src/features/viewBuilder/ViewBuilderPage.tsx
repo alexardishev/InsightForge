@@ -1,15 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Heading, VStack, Text, HStack, Badge, Divider } from '@chakra-ui/react';
+import React from 'react';
+import { Box, Heading, VStack, Text, HStack, Badge, Divider, Stack } from '@chakra-ui/react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import type { RootState, AppDispatch } from '../../app/store';
 import {
-  setCurrentDb,
-  setCurrentSchema,
+  setSelectedDatabases,
+  setSchemasForDb,
   toggleTable,
   toggleColumn,
   setTableColumns,
   setColumnAlias,
+  flattenSelections,
+  setTableStatus,
+  setSchemaStatus,
 } from './viewBuilderSlice';
 import DatabaseSelector from './components/DatabaseSelector';
 import SchemaSelector from './components/SchemaSelector';
@@ -20,38 +23,55 @@ import { appendTables } from '../settings/settingsSlice';
 import FlowLayout from '../../components/FlowLayout';
 import { builderSteps } from './flowSteps';
 
+interface DatabaseInfo {
+  name: string;
+  schemas?: SchemaInfo[];
+}
+
+interface SchemaInfo {
+  name: string;
+  tables?: TableInfo[];
+}
+
+interface TableInfo {
+  name: string;
+  columns?: any[];
+  rows?: number;
+}
+
 const ViewBuilderPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
-  const data = useSelector((state: RootState) => state.settings.dataBaseInfo);
+  const data = useSelector((state: RootState) => state.settings.dataBaseInfo) as DatabaseInfo[];
   const selectedConnections = useSelector(
     (state: RootState) => state.settings.selectedConnections,
   );
-  const { currentDb, currentSchema, selectedSources } = useSelector(
-    (state: RootState) => state.viewBuilder,
-  );
+  const builder = useSelector((state: RootState) => state.viewBuilder);
+  const selectedSources = React.useMemo(() => flattenSelections(builder), [builder]);
+
+  const { selectedDatabases, selectedSchemasByDb, selectionsByDbSchema } = builder;
+
   const { request } = useHttp();
   const url = '/api';
-
-  const [tablesState, setTablesState] = useState<any[]>([]);
-  const [page, setPage] = useState(1);
   const pageSize = 20;
 
-
-  const handleToggleTable = (table: string) => {
-    if (!currentDb || !currentSchema) return;
-    dispatch(toggleTable({ db: currentDb, schema: currentSchema, table }));
+  const handleDatabaseChange = (dbs: string[]) => {
+    dispatch(setSelectedDatabases(dbs));
   };
 
-  const handleToggleColumn = (
-    table: string,
-    column: any,
-  ) => {
-    if (!currentDb || !currentSchema) return;
+  const handleSchemaChange = (db: string, schemas: string[]) => {
+    dispatch(setSchemasForDb({ db, schemas }));
+  };
+
+  const handleToggleTable = (db: string, schema: string, table: string) => {
+    dispatch(toggleTable({ db, schema, table }));
+  };
+
+  const handleToggleColumn = (db: string, schema: string, table: string, column: any) => {
     dispatch(
       toggleColumn({
-        db: currentDb,
-        schema: currentSchema,
+        db,
+        schema,
         table,
         column: column.name,
         isPrimaryKey: column.is_primary_key || column.is_pk,
@@ -60,12 +80,11 @@ const ViewBuilderPage: React.FC = () => {
     );
   };
 
-  const handleSetTableColumns = (table: string, columns: any[]) => {
-    if (!currentDb || !currentSchema) return;
+  const handleSetTableColumns = (db: string, schema: string, table: string, columns: any[]) => {
     dispatch(
       setTableColumns({
-        db: currentDb,
-        schema: currentSchema,
+        db,
+        schema,
         table,
         columns: columns.map((col) => ({
           name: col.name,
@@ -76,31 +95,25 @@ const ViewBuilderPage: React.FC = () => {
     );
   };
 
-  const handleAliasChange = (table: string, column: string, alias: string) => {
-    if (!currentDb || !currentSchema) return;
-    dispatch(setColumnAlias({ db: currentDb, schema: currentSchema, table, column, alias }));
+  const handleAliasChange = (
+    db: string,
+    schema: string,
+    table: string,
+    column: string,
+    alias: string,
+  ) => {
+    dispatch(setColumnAlias({ db, schema, table, column, alias }));
   };
 
-  const selectedDatabase = data?.find((db: any) => db.name === currentDb);
-  const selectedSchemaData = selectedDatabase?.schemas?.find((schema: any) => schema.name === currentSchema);
-
-  const currentSelection = selectedSources.find(
-    (source) => source.db === currentDb && source.schema === currentSchema,
-  );
-  const selectedTables = currentSelection?.selectedTables ?? [];
-  const selectedColumns = currentSelection?.selectedColumns ?? [];
-
-  useEffect(() => {
-    setTablesState(selectedSchemaData?.tables || []);
-    setPage(1);
-  }, [selectedSchemaData]);
-
-  const schemaDataWithTables = selectedSchemaData
-    ? { ...selectedSchemaData, tables: tablesState }
-    : undefined;
-
-  const loadMore = async () => {
-    const nextPage = page + 1;
+  const loadMore = async (db: string, schema: string) => {
+    const status = builder.tableStatusByDbSchema[db]?.[schema] || {
+      page: 1,
+      hasMore: true,
+      loading: false,
+    };
+    if (status.loading || !status.hasMore) return;
+    const nextPage = status.page + 1;
+    dispatch(setTableStatus({ db, schema, status: { loading: true } }));
     try {
       const body = {
         connection_strings: selectedConnections.map((connection_string) => ({
@@ -110,18 +123,63 @@ const ViewBuilderPage: React.FC = () => {
         page_size: pageSize,
       };
       const dbInfo = await request(`${url}/get-db`, 'POST', body);
-      const db = dbInfo.find((d: any) => d.name === currentDb);
-      const schema = db?.schemas?.find((s: any) => s.name === currentSchema);
-      const newTables = schema?.tables || [];
+      const responseDb = dbInfo.find((d: DatabaseInfo) => d.name === db);
+      const responseSchema = responseDb?.schemas?.find((s: SchemaInfo) => s.name === schema);
+      const newTables = responseSchema?.tables || [];
       if (newTables.length > 0) {
-        setTablesState(prev => [...prev, ...newTables]);
-        dispatch(appendTables({ db: currentDb, schema: currentSchema, tables: newTables }));
-        setPage(nextPage);
+        dispatch(appendTables({ db, schema, tables: newTables }));
       }
+      dispatch(
+        setTableStatus({
+          db,
+          schema,
+          status: {
+            loading: false,
+            page: nextPage,
+            hasMore: newTables.length >= pageSize,
+            error: undefined,
+          },
+        }),
+      );
     } catch (e) {
       console.error(e);
+      dispatch(setTableStatus({ db, schema, status: { loading: false, error: 'Ошибка загрузки' } }));
     }
   };
+
+  React.useEffect(() => {
+    selectedDatabases.forEach((dbName) => {
+      const hasSchemas =
+        data?.find((db) => db.name === dbName)?.schemas &&
+        (data.find((db) => db.name === dbName)?.schemas?.length ?? 0) > 0;
+      if (hasSchemas) {
+        dispatch(setSchemaStatus({ db: dbName, status: { loaded: true, loading: false } }));
+      }
+    });
+  }, [data, dispatch, selectedDatabases]);
+
+  const selectedSchemaViews = React.useMemo(
+    () =>
+      selectedDatabases.flatMap((db) => {
+        const dbData = data?.find((item) => item.name === db);
+        const schemaNames = selectedSchemasByDb[db] || [];
+        return schemaNames.map((schema) => {
+          const schemaData = dbData?.schemas?.find((s) => s.name === schema);
+          const selection = selectionsByDbSchema[db]?.[schema];
+          return {
+            db,
+            schema,
+            schemaData,
+            selectedTables: selection?.selectedTables || [],
+            selectedColumns: selection?.selectedColumns || [],
+            tableStatus: builder.tableStatusByDbSchema[db]?.[schema],
+          };
+        });
+      }),
+    [builder.tableStatusByDbSchema, data, selectedDatabases, selectedSchemasByDb, selectionsByDbSchema],
+  );
+
+  const isNextDisabled = selectedSources.every((source) => source.selectedColumns.length === 0);
 
   const handleBuildView = () => {
     navigate('/joins');
@@ -135,7 +193,7 @@ const ViewBuilderPage: React.FC = () => {
       onNext={handleBuildView}
       primaryLabel="Перейти к джоинам"
       secondaryLabel="К подключениям"
-      isNextDisabled={selectedSources.every((source) => source.selectedColumns.length === 0)}
+      isNextDisabled={isNextDisabled}
     >
       <VStack align="stretch" spacing={6}>
         <Box>
@@ -155,41 +213,64 @@ const ViewBuilderPage: React.FC = () => {
 
         <Box>
           <DatabaseSelector
-            data={data}
-            selectedDb={currentDb}
-            onChange={(db) => dispatch(setCurrentDb(db))}
+            data={data || []}
+            selectedDbs={selectedDatabases}
+            onChange={handleDatabaseChange}
           />
         </Box>
 
-        {currentDb && selectedDatabase && (
-          <Box>
-            <SchemaSelector
-              selectedDatabase={selectedDatabase}
-              selectedSchema={currentSchema}
-              onChange={(schema) => dispatch(setCurrentSchema(schema))}
-            />
-          </Box>
-        )}
+        <Stack spacing={6}>
+          {selectedDatabases.map((db) => {
+            const dbData = data?.find((item) => item.name === db);
+            const schemas = dbData?.schemas || [];
+            const selectedSchemas = selectedSchemasByDb[db] || [];
+            return (
+              <Box key={db} borderWidth="1px" borderRadius="lg" p={4}>
+                <VStack align="stretch" spacing={4}>
+                  <HStack justify="space-between">
+                    <Heading size="md">{db}</Heading>
+                    <Badge colorScheme="cyan">{selectedSchemas.length} схем</Badge>
+                  </HStack>
+                  <SchemaSelector
+                    database={db}
+                    schemas={schemas}
+                    selectedSchemas={selectedSchemas}
+                    onChange={(schemasValue) => handleSchemaChange(db, schemasValue)}
+                  />
 
-        {currentSchema && schemaDataWithTables && (
-          <TableSelector
-            selectedSchemaData={schemaDataWithTables}
-            selectedTables={selectedTables}
-            onToggleTable={handleToggleTable}
-            onLoadMore={loadMore}
-          />
-        )}
+                  {selectedSchemas.map((schema) => {
+                    const schemaData = schemas.find((s) => s.name === schema);
+                    const selection = selectionsByDbSchema[db]?.[schema];
+                    const tableStatus = builder.tableStatusByDbSchema[db]?.[schema];
+                    return (
+                      <Box key={`${db}-${schema}`} borderWidth="1px" borderRadius="lg" p={3}>
+                        <TableSelector
+                          selectedSchemaData={schemaData}
+                          selectedTables={selection?.selectedTables || []}
+                          onToggleTable={(table) => handleToggleTable(db, schema, table)}
+                          onLoadMore={() => loadMore(db, schema)}
+                          hasMore={tableStatus?.hasMore ?? true}
+                          isLoading={tableStatus?.loading}
+                          dbLabel={db}
+                          schemaLabel={schema}
+                        />
+                      </Box>
+                    );
+                  })}
+                </VStack>
+              </Box>
+            );
+          })}
+        </Stack>
 
         <ColumnsGrid
-          selectedTables={selectedTables}
-          selectedSchemaData={schemaDataWithTables}
-          selectedColumns={selectedColumns}
+          sources={selectedSchemaViews}
           onToggleColumn={handleToggleColumn}
           onSetTableColumns={handleSetTableColumns}
           onAliasChange={handleAliasChange}
         />
 
-        {selectedSources.every((source) => source.selectedColumns.length === 0) && (
+        {isNextDisabled && (
           <Box
             p={4}
             border="1px dashed"

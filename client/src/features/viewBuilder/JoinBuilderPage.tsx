@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Box,
   Heading,
@@ -23,7 +23,7 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import type { RootState, AppDispatch } from '../../app/store';
-import { addJoin, removeJoin, setViewName } from './viewBuilderSlice';
+import { addJoin, removeJoin, setViewName, flattenSelections } from './viewBuilderSlice';
 import { DeleteIcon } from '@chakra-ui/icons';
 import { FiKey, FiLink2 } from 'react-icons/fi';
 import FlowLayout from '../../components/FlowLayout';
@@ -38,9 +38,9 @@ const JoinBuilderPage: React.FC = () => {
   const navigate = useNavigate();
 
   const data = useSelector((state: RootState) => state.settings.dataBaseInfo);
-  const { selectedSources, joins, viewName } = useSelector(
-    (state: RootState) => state.viewBuilder,
-  );
+  const builder = useSelector((state: RootState) => state.viewBuilder);
+  const selectedSources = useMemo(() => flattenSelections(builder), [builder]);
+  const { joins, viewName } = builder;
 
   const selectedTables = selectedSources.flatMap((source) =>
     source.selectedTables.map((table) => ({
@@ -81,14 +81,22 @@ const JoinBuilderPage: React.FC = () => {
     const joinMeta = tableMetaMap.get(joinTable);
     if (!mainMeta || !joinMeta) return;
 
+    const [mainDb, mainSchema, mainTableName] = mainTable.split('.');
+    const [joinDb, joinSchema, joinTableName] = joinTable.split('.');
+
     const join = {
-      inner: {
-        source: joinMeta.db,
-        schema: joinMeta.schema,
-        table: joinMeta.table,
-        main_table: mainMeta.table,
-        column_first: mainColumn,
-        column_second: joinColumn,
+      type: 'INNER' as const,
+      left: {
+        db: mainDb,
+        schema: mainSchema,
+        table: mainTableName,
+        column: mainColumn,
+      },
+      right: {
+        db: joinDb,
+        schema: joinSchema,
+        table: joinTableName,
+        column: joinColumn,
       },
     };
     dispatch(addJoin(join));
@@ -277,7 +285,7 @@ const JoinBuilderPage: React.FC = () => {
             ) : (
               <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
                 {joins.map((j: any, idx: number) => (
-                  <Card key={`${j.inner.main_table}-${idx}`} variant="glass">
+                  <Card key={`${j.left.table}-${idx}`} variant="glass">
                     <CardBody>
                       <HStack justify="space-between" mb={2}>
                         <HStack>
@@ -294,14 +302,14 @@ const JoinBuilderPage: React.FC = () => {
                       </HStack>
                       <VStack align="stretch" spacing={2} fontSize="sm">
                         <HStack>
-                          <Tag colorScheme="cyan">{j.inner.main_table}</Tag>
+                          <Tag colorScheme="cyan">{`${j.left.db}.${j.left.schema}.${j.left.table}`}</Tag>
                           <Icon as={FiKey} />
-                          <Text>{j.inner.column_first}</Text>
+                          <Text>{j.left.column}</Text>
                         </HStack>
                         <HStack>
-                          <Tag colorScheme="purple">{j.inner.table}</Tag>
+                          <Tag colorScheme="purple">{`${j.right.db}.${j.right.schema}.${j.right.table}`}</Tag>
                           <Icon as={FiKey} />
-                          <Text>{j.inner.column_second}</Text>
+                          <Text>{j.right.column}</Text>
                         </HStack>
                         <Tooltip label="Мы блокируем cartesian join, если ключ не указан" placement="top">
                           <Text color="text.muted">Ключи обязательно должны быть выбраны.</Text>

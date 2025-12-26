@@ -1,6 +1,6 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
-interface SelectedColumn {
+export interface SelectedColumn {
   db: string;
   schema: string;
   table: string;
@@ -10,33 +10,27 @@ interface SelectedColumn {
   alias?: string;
 }
 
-interface SourceSelection {
-  db: string;
-  schema: string;
+export interface TableSelection {
   selectedTables: string[];
   selectedColumns: SelectedColumn[];
 }
 
+export interface SourceSelection extends TableSelection {
+  db: string;
+  schema: string;
+}
+
 interface JoinSide {
-  source: string;
+  db: string;
   schema: string;
   table: string;
-  main_table: string;
-  column_first: string;
-  column_second: string;
+  column: string;
 }
 
-interface Join {
-  inner: JoinSide;
-}
-
-interface ViewBuilderState {
-  currentDb: string;
-  currentSchema: string;
-  selectedSources: SourceSelection[];
-  joins: Join[];
-  viewName: string;
-  transformations: Record<string, Transform>;
+export interface JoinRule {
+  type: 'INNER';
+  left: JoinSide;
+  right: JoinSide;
 }
 
 export interface MappingJSON {
@@ -59,14 +53,49 @@ export interface Transform {
   mapping: Mapping;
 }
 
+interface LoadState {
+  loading: boolean;
+  loaded?: boolean;
+  error?: string;
+}
+
+interface TableLoadState extends LoadState {
+  page: number;
+  hasMore: boolean;
+}
+
+export interface ViewBuilderState {
+  selectedDatabases: string[];
+  selectedSchemasByDb: Record<string, string[]>;
+  selectionsByDbSchema: Record<string, Record<string, TableSelection>>;
+  schemaStatusByDb: Record<string, LoadState>;
+  tableStatusByDbSchema: Record<string, Record<string, TableLoadState>>;
+  joins: JoinRule[];
+  viewName: string;
+  transformations: Record<string, Transform>;
+}
+
 const initialState: ViewBuilderState = {
-  currentDb: '',
-  currentSchema: '',
-  selectedSources: [],
+  selectedDatabases: [],
+  selectedSchemasByDb: {},
+  selectionsByDbSchema: {},
+  schemaStatusByDb: {},
+  tableStatusByDbSchema: {},
   joins: [],
   viewName: 'MyView',
   transformations: {},
 };
+
+export function flattenSelections(state: ViewBuilderState): SourceSelection[] {
+  return Object.entries(state.selectionsByDbSchema).flatMap(([db, schemas]) =>
+    Object.entries(schemas).map(([schema, selection]) => ({
+      db,
+      schema,
+      selectedTables: selection.selectedTables,
+      selectedColumns: selection.selectedColumns,
+    })),
+  );
+}
 
 const columnKey = (payload: {
   db: string;
@@ -75,53 +104,111 @@ const columnKey = (payload: {
   column: string;
 }) => `${payload.db}.${payload.schema}.${payload.table}.${payload.column}`;
 
-const findOrCreateSource = (
+const getSelection = (
   state: ViewBuilderState,
   db: string,
   schema: string,
-): SourceSelection => {
-  let source = state.selectedSources.find(
-    (s) => s.db === db && s.schema === schema,
-  );
-  if (!source) {
-    source = { db, schema, selectedTables: [], selectedColumns: [] };
-    state.selectedSources.push(source);
+): TableSelection => {
+  if (!state.selectionsByDbSchema[db]) {
+    state.selectionsByDbSchema[db] = {};
   }
-  return source;
+  if (!state.selectionsByDbSchema[db][schema]) {
+    state.selectionsByDbSchema[db][schema] = { selectedTables: [], selectedColumns: [] };
+  }
+  return state.selectionsByDbSchema[db][schema];
 };
 
-const cleanupEmptySources = (state: ViewBuilderState) => {
-  state.selectedSources = state.selectedSources.filter(
-    (source) => source.selectedTables.length > 0 || source.selectedColumns.length > 0,
+const pruneTransformations = (state: ViewBuilderState) => {
+  const validKeys = new Set(
+    flattenSelections(state).flatMap((selection) =>
+      selection.selectedColumns.map((column) => columnKey(column)),
+    ),
   );
+  Object.keys(state.transformations).forEach((key) => {
+    if (!validKeys.has(key)) {
+      delete state.transformations[key];
+    }
+  });
 };
 
 const viewBuilderSlice = createSlice({
   name: 'viewBuilder',
   initialState,
   reducers: {
-    setCurrentDb(state, action: PayloadAction<string>) {
-      state.currentDb = action.payload;
-      state.currentSchema = '';
+    setSelectedDatabases(state, action: PayloadAction<string[]>) {
+      const nextDbs = new Set(action.payload);
+      state.selectedDatabases = action.payload;
+
+      Object.keys(state.selectedSchemasByDb).forEach((db) => {
+        if (!nextDbs.has(db)) {
+          delete state.selectedSchemasByDb[db];
+        }
+      });
+
+      Object.keys(state.selectionsByDbSchema).forEach((db) => {
+        if (!nextDbs.has(db)) {
+          delete state.selectionsByDbSchema[db];
+        }
+      });
+
+      Object.keys(state.schemaStatusByDb).forEach((db) => {
+        if (!nextDbs.has(db)) {
+          delete state.schemaStatusByDb[db];
+        }
+      });
+
+      Object.keys(state.tableStatusByDbSchema).forEach((db) => {
+        if (!nextDbs.has(db)) {
+          delete state.tableStatusByDbSchema[db];
+        }
+      });
+
+      state.joins = state.joins.filter(
+        (join) => nextDbs.has(join.left.db) && nextDbs.has(join.right.db),
+      );
+      pruneTransformations(state);
     },
-    setCurrentSchema(state, action: PayloadAction<string>) {
-      state.currentSchema = action.payload;
+    setSchemasForDb(state, action: PayloadAction<{ db: string; schemas: string[] }>) {
+      const { db, schemas } = action.payload;
+      const allowed = new Set(schemas);
+      state.selectedSchemasByDb[db] = schemas;
+
+      if (state.selectionsByDbSchema[db]) {
+        Object.keys(state.selectionsByDbSchema[db]).forEach((schema) => {
+          if (!allowed.has(schema)) {
+            delete state.selectionsByDbSchema[db][schema];
+          }
+        });
+      }
+
+      if (state.tableStatusByDbSchema[db]) {
+        Object.keys(state.tableStatusByDbSchema[db]).forEach((schema) => {
+          if (!allowed.has(schema)) {
+            delete state.tableStatusByDbSchema[db][schema];
+          }
+        });
+      }
+
+      state.joins = state.joins.filter(
+        (join) => !(join.left.db === db && !allowed.has(join.left.schema)) &&
+          !(join.right.db === db && !allowed.has(join.right.schema)),
+      );
+
+      pruneTransformations(state);
     },
     toggleTable(
       state,
       action: PayloadAction<{ db: string; schema: string; table: string }>,
     ) {
       const { db, schema, table } = action.payload;
-      const source = findOrCreateSource(state, db, schema);
-      if (source.selectedTables.includes(table)) {
-        source.selectedTables = source.selectedTables.filter((t) => t !== table);
-        source.selectedColumns = source.selectedColumns.filter(
-          (c) => !(c.table === table && c.db === db && c.schema === schema),
-        );
+      const selection = getSelection(state, db, schema);
+      if (selection.selectedTables.includes(table)) {
+        selection.selectedTables = selection.selectedTables.filter((t) => t !== table);
+        selection.selectedColumns = selection.selectedColumns.filter((c) => c.table !== table);
       } else {
-        source.selectedTables.push(table);
+        selection.selectedTables.push(table);
       }
-      cleanupEmptySources(state);
+      pruneTransformations(state);
     },
     toggleColumn(
       state,
@@ -129,18 +216,17 @@ const viewBuilderSlice = createSlice({
         SelectedColumn & { isPrimaryKey?: boolean; isUpdateKey?: boolean }
       >,
     ) {
-      const { db, schema, table, column, isPrimaryKey, isUpdateKey } =
-        action.payload;
-      const source = findOrCreateSource(state, db, schema);
-      const idx = source.selectedColumns.findIndex(
+      const { db, schema, table, column, isPrimaryKey, isUpdateKey } = action.payload;
+      const selection = getSelection(state, db, schema);
+      const idx = selection.selectedColumns.findIndex(
         (c) => c.table === table && c.column === column,
       );
       const key = columnKey({ db, schema, table, column });
       if (idx !== -1) {
-        source.selectedColumns.splice(idx, 1);
+        selection.selectedColumns.splice(idx, 1);
         delete state.transformations[key];
       } else {
-        source.selectedColumns.push({
+        selection.selectedColumns.push({
           db,
           schema,
           table,
@@ -159,10 +245,10 @@ const viewBuilderSlice = createSlice({
       }>,
     ) {
       const { db, schema, table, columns } = action.payload;
-      const source = findOrCreateSource(state, db, schema);
-      const otherTables = source.selectedColumns.filter((c) => c.table !== table);
+      const selection = getSelection(state, db, schema);
+      const otherTables = selection.selectedColumns.filter((c) => c.table !== table);
       const existingMap = new Map(
-        source.selectedColumns
+        selection.selectedColumns
           .filter((c) => c.table === table)
           .map((c) => [c.column, c]),
       );
@@ -183,10 +269,8 @@ const viewBuilderSlice = createSlice({
         } as SelectedColumn;
       });
 
-      source.selectedColumns = [...otherTables, ...updatedColumns];
-      if (columns.length === 0) {
-        cleanupEmptySources(state);
-      }
+      selection.selectedColumns = [...otherTables, ...updatedColumns];
+      pruneTransformations(state);
     },
     setViewKey(
       state,
@@ -199,8 +283,8 @@ const viewBuilderSlice = createSlice({
       }>,
     ) {
       const { db, schema, table, column, viewKey } = action.payload;
-      const source = findOrCreateSource(state, db, schema);
-      const col = source.selectedColumns.find(
+      const selection = getSelection(state, db, schema);
+      const col = selection.selectedColumns.find(
         (c) => c.table === table && c.column === column,
       );
       if (col) {
@@ -218,8 +302,8 @@ const viewBuilderSlice = createSlice({
       }>,
     ) {
       const { db, schema, table, column, isUpdateKey } = action.payload;
-      const source = findOrCreateSource(state, db, schema);
-      const col = source.selectedColumns.find(
+      const selection = getSelection(state, db, schema);
+      const col = selection.selectedColumns.find(
         (c) => c.table === table && c.column === column,
       );
       if (col) {
@@ -237,15 +321,15 @@ const viewBuilderSlice = createSlice({
       }>,
     ) {
       const { db, schema, table, column, alias } = action.payload;
-      const source = findOrCreateSource(state, db, schema);
-      const col = source.selectedColumns.find(
+      const selection = getSelection(state, db, schema);
+      const col = selection.selectedColumns.find(
         (c) => c.table === table && c.column === column,
       );
       if (col) {
         col.alias = alias || undefined;
       }
     },
-    addJoin(state, action: PayloadAction<Join>) {
+    addJoin(state, action: PayloadAction<JoinRule>) {
       state.joins.push(action.payload);
     },
     removeJoin(state, action: PayloadAction<number>) {
@@ -271,20 +355,40 @@ const viewBuilderSlice = createSlice({
     setViewName(state, action: PayloadAction<string>) {
       state.viewName = action.payload;
     },
-    resetSelections(state) {
-      state.currentDb = '';
-      state.currentSchema = '';
-      state.selectedSources = [];
-      state.joins = [];
-      state.viewName = 'MyView';
-      state.transformations = {};
+    setSchemaStatus(
+      state,
+      action: PayloadAction<{ db: string; status: Partial<LoadState> }>,
+    ) {
+      const { db, status } = action.payload;
+      const prev = state.schemaStatusByDb[db] || { loading: false };
+      state.schemaStatusByDb[db] = { ...prev, ...status };
+    },
+    setTableStatus(
+      state,
+      action: PayloadAction<{ db: string; schema: string; status: Partial<TableLoadState> }>,
+    ) {
+      const { db, schema, status } = action.payload;
+      if (!state.tableStatusByDbSchema[db]) {
+        state.tableStatusByDbSchema[db] = {};
+      }
+      const prev = state.tableStatusByDbSchema[db][schema] || {
+        loading: false,
+        page: 1,
+        hasMore: true,
+      };
+      state.tableStatusByDbSchema[db][schema] = { ...prev, ...status };
+    },
+    resetSelections() {
+      return initialState;
     },
   },
 });
 
+export const getColumnKey = columnKey;
+
 export const {
-  setCurrentDb,
-  setCurrentSchema,
+  setSelectedDatabases,
+  setSchemasForDb,
   toggleTable,
   toggleColumn,
   setTableColumns,
@@ -295,9 +399,9 @@ export const {
   removeJoin,
   setTransformation,
   setViewName,
+  setSchemaStatus,
+  setTableStatus,
   resetSelections,
 } = viewBuilderSlice.actions;
-
-export const getColumnKey = columnKey;
 
 export default viewBuilderSlice.reducer;

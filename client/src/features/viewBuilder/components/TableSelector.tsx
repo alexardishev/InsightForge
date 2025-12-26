@@ -10,6 +10,8 @@ import {
   Badge,
   Icon,
   Button,
+  Heading,
+  HStack,
 } from '@chakra-ui/react';
 import { FaDatabase } from 'react-icons/fa';
 
@@ -19,10 +21,14 @@ interface Table {
 }
 
 interface Props {
-  selectedSchemaData: { tables: Table[] };
+  selectedSchemaData?: { name?: string; tables?: Table[] };
   selectedTables: string[];
   onToggleTable: (table: string) => void;
   onLoadMore?: () => void;
+  hasMore?: boolean;
+  isLoading?: boolean;
+  dbLabel?: string;
+  schemaLabel?: string;
 }
 
 const TableSelector: React.FC<Props> = ({
@@ -30,25 +36,26 @@ const TableSelector: React.FC<Props> = ({
   selectedTables,
   onToggleTable,
   onLoadMore,
+  hasMore = true,
+  isLoading = false,
+  dbLabel,
+  schemaLabel,
 }) => {
   if (!selectedSchemaData) return null;
 
-  const cardBg = useColorModeValue('gray.100', 'gray.800');        // фон карточки
-  const textColor = useColorModeValue('gray.800', 'yellow.200');  // основной текст
-  const iconColor = useColorModeValue('teal.600', 'teal.300');    // цвет иконки
-  const badgeColorScheme = useColorModeValue('green', 'teal');    // бейдж в обеих темах
+  const cardBg = useColorModeValue('gray.100', 'gray.800');
+  const textColor = useColorModeValue('gray.800', 'yellow.200');
+  const iconColor = useColorModeValue('teal.600', 'teal.300');
+  const badgeColorScheme = useColorModeValue('green', 'teal');
 
   return (
     <Box w="100%" px={4} py={6}>
-      <Text
-        mb={6}
-        fontWeight="bold"
-        textAlign="center"
-        fontSize="xl"
-        color={textColor}
-      >
-        Выберите таблицы:
-      </Text>
+      <HStack mb={4} justify="space-between" flexWrap="wrap" gap={2}>
+        <Heading size="md">
+          {dbLabel ? `${dbLabel}.${schemaLabel}` : 'Выберите таблицы:'}
+        </Heading>
+        <Badge colorScheme="cyan">{selectedTables.length} выбрано</Badge>
+      </HStack>
 
       <SimpleGrid
         columns={{ base: 1, sm: 2, md: 3, lg: 4 }}
@@ -90,9 +97,11 @@ const TableSelector: React.FC<Props> = ({
           </Fade>
         ))}
       </SimpleGrid>
-      {onLoadMore && (
+      {onLoadMore && hasMore && (
         <Box textAlign="center" mt={4}>
-          <Button onClick={onLoadMore}>Загрузить ещё</Button>
+          <Button onClick={onLoadMore} isLoading={isLoading}>
+            Загрузить ещё
+          </Button>
         </Box>
       )}
     </Box>

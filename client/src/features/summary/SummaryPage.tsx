@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Box, Heading, Text, VStack, Divider, Badge, HStack } from '@chakra-ui/react';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../../app/store';
@@ -6,14 +6,16 @@ import ViewPreview from './components/ViewPreview';
 import SummaryActions from './components/SummaryActions';
 import FlowLayout from '../../components/FlowLayout';
 import { builderSteps } from '../viewBuilder/flowSteps';
+import { flattenSelections } from '../viewBuilder/viewBuilderSlice';
 
 const SummaryPage: React.FC = () => {
   const settings = useSelector((state: RootState) => state.settings);
   const builder = useSelector((state: RootState) => state.viewBuilder);
 
   const data = settings.dataBaseInfo;
+  const selectedSources = useMemo(() => flattenSelections(builder), [builder]);
 
-  const sources = builder.selectedSources
+  const sources = selectedSources
     .map((source) => {
       const selectedDatabase = data?.find((db: any) => db.name === source.db);
       const selectedSchemaData = selectedDatabase?.schemas?.find(
@@ -94,7 +96,7 @@ const SummaryPage: React.FC = () => {
             предупреждениях и безопасности.
           </Text>
           <HStack spacing={3} mt={3} flexWrap="wrap">
-            {builder.selectedSources.map((source) => (
+            {selectedSources.map((source) => (
               <Badge key={`${source.db}.${source.schema}`} colorScheme="cyan">
                 {source.db}.{source.schema}
               </Badge>

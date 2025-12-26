@@ -23,7 +23,6 @@ import { useSelector, useDispatch } from 'react-redux';
 import type { RootState, AppDispatch } from '../../app/store';
 import DatabaseSelector from '../viewBuilder/components/DatabaseSelector';
 import SchemaSelector from '../viewBuilder/components/SchemaSelector';
-import { setCurrentDb, setCurrentSchema } from '../viewBuilder/viewBuilderSlice';
 import { useHttp } from '../../hooks/http.hook';
 import { appendTables } from '../settings/settingsSlice';
 
@@ -38,10 +37,13 @@ const DatabaseViewerPage: React.FC = () => {
   const selectedConnections = useSelector(
     (state: RootState) => state.settings.selectedConnections,
   );
-  const { currentDb, currentSchema } = useSelector((state: RootState) => state.viewBuilder);
+  const [selectedDbs, setSelectedDbs] = useState<string[]>([]);
+  const [selectedSchemas, setSelectedSchemas] = useState<string[]>([]);
   const { request } = useHttp();
   const url = '/api';
 
+  const currentDb = selectedDbs[0] || '';
+  const currentSchema = selectedSchemas[0] || '';
   const selectedDatabase = data?.find((db: any) => db.name === currentDb);
   const selectedSchemaData = selectedDatabase?.schemas?.find((s: any) => s.name === currentSchema);
 
@@ -52,6 +54,23 @@ const DatabaseViewerPage: React.FC = () => {
 
   const blueprintBg = useColorModeValue('radial-gradient(circle at 20% 20%, rgba(0, 255, 255, 0.06), transparent 35%), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(180deg, rgba(255,255,255,0.04) 1px, transparent 1px)',
     'radial-gradient(circle at 20% 20%, rgba(0, 255, 255, 0.08), transparent 35%), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(180deg, rgba(255,255,255,0.06) 1px, transparent 1px)');
+
+  useEffect(() => {
+    if (!currentDb && data?.length) {
+      const firstDb = data[0];
+      setSelectedDbs([firstDb.name]);
+      if (firstDb.schemas?.length) {
+        setSelectedSchemas([firstDb.schemas[0].name]);
+      }
+    }
+  }, [currentDb, data]);
+
+  useEffect(() => {
+    if (selectedDatabase && selectedDatabase.schemas?.length && !currentSchema) {
+      const fallback = selectedDatabase.schemas[0]?.name;
+      if (fallback) setSelectedSchemas([fallback]);
+    }
+  }, [currentDb, currentSchema, selectedDatabase]);
 
   useEffect(() => {
     setTablesState(selectedSchemaData?.tables || []);
@@ -123,14 +142,15 @@ const DatabaseViewerPage: React.FC = () => {
           <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} alignItems="center">
             <DatabaseSelector
               data={data}
-              selectedDb={currentDb}
-              onChange={(db) => dispatch(setCurrentDb(db))}
+              selectedDbs={selectedDbs}
+              onChange={(dbs) => setSelectedDbs(dbs.slice(-1))}
             />
             {currentDb && selectedDatabase && (
               <SchemaSelector
-                selectedDatabase={selectedDatabase}
-                selectedSchema={currentSchema}
-                onChange={(schema) => dispatch(setCurrentSchema(schema))}
+                database={currentDb}
+                schemas={selectedDatabase.schemas || []}
+                selectedSchemas={selectedSchemas}
+                onChange={(schemas) => setSelectedSchemas(schemas.slice(-1))}
               />
             )}
           </SimpleGrid>

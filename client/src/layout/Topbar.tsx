@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Box,
   Flex,
@@ -16,15 +16,16 @@ import { FiMenu, FiSearch, FiWifi } from 'react-icons/fi';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../app/store';
 import ThemeToggle from '../components/ThemeToggle';
+import { flattenSelections } from '../features/viewBuilder/viewBuilderSlice';
 
 interface TopbarProps {
   onOpenMenu: () => void;
 }
 
 const Topbar: React.FC<TopbarProps> = ({ onOpenMenu }) => {
-  const { currentDb, currentSchema, selectedSources, viewName } = useSelector(
-    (state: RootState) => state.viewBuilder,
-  );
+  const builder = useSelector((state: RootState) => state.viewBuilder);
+  const selectedSources = useMemo(() => flattenSelections(builder), [builder]);
+  const { viewName } = builder;
   const background = useColorModeValue('white', 'bg.surface');
 
   return (
@@ -53,20 +54,14 @@ const Topbar: React.FC<TopbarProps> = ({ onOpenMenu }) => {
               {viewName || 'Data cockpit'}
             </Text>
             <HStack spacing={2} color="text.muted" fontSize="sm" flexWrap="wrap">
-              {(selectedSources.length
-                ? selectedSources.map((source) => (
-                    <Badge key={`${source.db}.${source.schema}`} colorScheme="cyan">
-                      {source.db}.{source.schema}
-                    </Badge>
-                  ))
-                : [
-                    currentDb && (
-                      <Badge key={currentDb} colorScheme="cyan">
-                        {currentDb}{currentSchema ? `.${currentSchema}` : ''}
-                      </Badge>
-                    ),
-                  ]
-              ).filter(Boolean)}
+              {selectedSources.length === 0 && (
+                <Badge colorScheme="gray">Источники не выбраны</Badge>
+              )}
+              {selectedSources.map((source) => (
+                <Badge key={`${source.db}.${source.schema}`} colorScheme="cyan">
+                  {source.db}.{source.schema}
+                </Badge>
+              ))}
             </HStack>
           </Box>
         </HStack>
