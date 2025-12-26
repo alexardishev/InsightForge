@@ -20,8 +20,13 @@ const NavigationMenu: React.FC = () => {
   const settings = useSelector((state: RootState) => state.settings);
   const builder = useSelector((state: RootState) => state.viewBuilder);
 
+  const selectedColumnsCount = builder.selectedSources.reduce(
+    (acc, source) => acc + source.selectedColumns.length,
+    0,
+  );
+
   const canBuilder = !!settings.dataBaseInfo;
-  const canJoins = builder.selectedColumns.length > 0;
+  const canJoins = selectedColumnsCount > 0;
   const canTransforms = canJoins;
   const canSummary = canTransforms;
 
