@@ -231,7 +231,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 		log.Error("Ошибка", slog.String("error", err.Error()))
 		return false, err
 	}
-
+	log.Info("Запрос на мердж", slog.String("Запрос", query.Query))
 	a.DWHProvider.MergeTempTables(ctx, query.Query)
 	_ = a.DeleteTempTables(ctx, tempTbl)
 	return true, nil

@@ -45,7 +45,10 @@ const TransformBuilderPage: React.FC = () => {
   const buildKey = (payload: { db: string; schema: string; table: string; column: string }) =>
     `${payload.db}.${payload.schema}.${payload.table}.${payload.column}`;
 
-  const selectedColumns = selectedSources.flatMap((source) => source.selectedColumns);
+  const selectedColumns = useMemo(
+    () => selectedSources.flatMap((source) => source.selectedColumns),
+    [selectedSources],
+  );
 
   const rebuildLocal = () => {
     const next: Record<string, LocalTransformState> = {};
