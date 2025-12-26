@@ -35,7 +35,9 @@ interface TableRow {
 const DatabaseViewerPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const data = useSelector((state: RootState) => state.settings.dataBaseInfo);
-  const connectionsMap = useSelector((state: RootState) => state.settings.connectionsMap);
+  const selectedConnections = useSelector(
+    (state: RootState) => state.settings.selectedConnections,
+  );
   const { currentDb, currentSchema } = useSelector((state: RootState) => state.viewBuilder);
   const { request } = useHttp();
   const url = '/api';
@@ -61,7 +63,9 @@ const DatabaseViewerPage: React.FC = () => {
     const nextPage = page + 1;
     try {
       const body = {
-        connection_strings: [{ connection_string: connectionsMap }],
+        connection_strings: selectedConnections.map((connection_string) => ({
+          connection_string,
+        })),
         page: nextPage,
         page_size: pageSize,
       };

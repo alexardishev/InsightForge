@@ -14,7 +14,12 @@ import {
 } from '@chakra-ui/react';
 // import { ChevronDownIcon } from '@chakra-ui/icons';
 import {useDispatch} from 'react-redux';
-import {setConnectionString, setDataForConnection, setSavedConnections, setConnectionsMap} from './settingsSlice';
+import {
+    setConnectionString,
+    setDataForConnection,
+    setSavedConnections,
+    setSelectedConnections,
+} from './settingsSlice';
 import {useNavigate} from 'react-router-dom';
 import {useHttp} from '../../hooks/http.hook';
 
@@ -24,24 +29,20 @@ const SettingsPage : React.FC = () => {
     const {request} = useHttp();
 
     const [selectedConnections,
-        setSelectedConnections] = useState < string[] > ([]);
+        setSelectedConnectionsState] = useState < string[] > ([]);
     const [availableConnections,
         setAvailableConnections] = useState < string[] > ([]);
     const [loading,
         setLoading] = useState(false);
 
     const url = '/api';
-const [rawData, setRawData] = useState<Record<string, string>>({});
-
     const fetchConnections = async() => {
         setLoading(true);
         try {
             const rawData = await request(`${url}/get-connections`);
-            setRawData(rawData);
             const data : string[] = Object.values(rawData);
             setAvailableConnections(data);
             dispatch(setSavedConnections(data));
-            dispatch(setConnectionsMap(rawData));
         } catch (e) {
             console.error('Ошибка при получении списка подключений:', e);
         } finally {
@@ -50,7 +51,7 @@ const [rawData, setRawData] = useState<Record<string, string>>({});
     };
 
     const handleToggle = (conn : string) => {
-        setSelectedConnections((prev) => prev.includes(conn)
+        setSelectedConnectionsState((prev) => prev.includes(conn)
             ? prev.filter((c) => c !== conn)
             : [
                 ...prev,
@@ -64,10 +65,13 @@ const [rawData, setRawData] = useState<Record<string, string>>({});
         
         const conn = selectedConnections[0];
         dispatch(setConnectionString(conn));
+        dispatch(setSelectedConnections(selectedConnections));
 
         try {
         const body = {
-            connection_strings: [{ connection_string: rawData }],
+            connection_strings: selectedConnections.map((connection_string) => ({
+                connection_string,
+            })),
             page: 1,
             page_size: 20,
         };

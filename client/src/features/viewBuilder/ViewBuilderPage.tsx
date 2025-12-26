@@ -24,8 +24,8 @@ const ViewBuilderPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const data = useSelector((state: RootState) => state.settings.dataBaseInfo);
-  const connectionsMap = useSelector(
-    (state: RootState) => state.settings.connectionsMap,
+  const selectedConnections = useSelector(
+    (state: RootState) => state.settings.selectedConnections,
   );
   const { currentDb, currentSchema, selectedSources } = useSelector(
     (state: RootState) => state.viewBuilder,
@@ -103,7 +103,9 @@ const ViewBuilderPage: React.FC = () => {
     const nextPage = page + 1;
     try {
       const body = {
-        connection_strings: [{ connection_string: connectionsMap }],
+        connection_strings: selectedConnections.map((connection_string) => ({
+          connection_string,
+        })),
         page: nextPage,
         page_size: pageSize,
       };

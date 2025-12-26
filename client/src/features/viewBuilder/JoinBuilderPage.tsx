@@ -80,12 +80,11 @@ const JoinBuilderPage: React.FC = () => {
     const mainMeta = tableMetaMap.get(mainTable);
     const joinMeta = tableMetaMap.get(joinTable);
     if (!mainMeta || !joinMeta) return;
-    if (mainMeta.db !== joinMeta.db || mainMeta.schema !== joinMeta.schema) return;
 
     const join = {
       inner: {
-        source: mainMeta.db,
-        schema: mainMeta.schema,
+        source: joinMeta.db,
+        schema: joinMeta.schema,
         table: joinMeta.table,
         main_table: mainMeta.table,
         column_first: mainColumn,
