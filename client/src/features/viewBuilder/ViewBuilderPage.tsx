@@ -43,6 +43,7 @@ const ViewBuilderPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const data = useSelector((state: RootState) => state.settings.dataBaseInfo) as DatabaseInfo[];
+  const savedConnections = useSelector((state: RootState) => state.settings.savedConnections);
   const selectedConnections = useSelector(
     (state: RootState) => state.settings.selectedConnections,
   );
@@ -115,9 +116,15 @@ const ViewBuilderPage: React.FC = () => {
     const nextPage = status.page + 1;
     dispatch(setTableStatus({ db, schema, status: { loading: true } }));
     try {
+      const connectionStrings = selectedConnections
+        .map((key) => ({ key, value: savedConnections[key] }))
+        .filter((item): item is { key: string; value: string } => Boolean(item.value));
+
       const body = {
-        connection_strings: selectedConnections.map((connection_string) => ({
-          connection_string,
+        connection_strings: connectionStrings.map(({ key, value }) => ({
+          connection_string: {
+            [key]: value,
+          },
         })),
         page: nextPage,
         page_size: pageSize,

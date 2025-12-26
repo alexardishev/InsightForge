@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {
     Box,
     Button,
@@ -31,7 +31,7 @@ const SettingsPage : React.FC = () => {
     const [selectedConnections,
         setSelectedConnectionsState] = useState < string[] > ([]);
     const [availableConnections,
-        setAvailableConnections] = useState < string[] > ([]);
+        setAvailableConnections] = useState<Record<string, string>>({});
     const [loading,
         setLoading] = useState(false);
 
@@ -40,9 +40,8 @@ const SettingsPage : React.FC = () => {
         setLoading(true);
         try {
             const rawData = await request(`${url}/get-connections`);
-            const data : string[] = Object.values(rawData);
-            setAvailableConnections(data);
-            dispatch(setSavedConnections(data));
+            setAvailableConnections(rawData);
+            dispatch(setSavedConnections(rawData));
         } catch (e) {
             console.error('Ошибка при получении списка подключений:', e);
         } finally {
@@ -59,26 +58,37 @@ const SettingsPage : React.FC = () => {
             ]);
     };
 
+    const chosenConnectionStrings = useMemo(
+        () =>
+            selectedConnections
+                .map((key) => ({
+                    key,
+                    value: availableConnections[key],
+                }))
+                .filter((item): item is { key: string; value: string } => Boolean(item.value)),
+        [availableConnections, selectedConnections],
+    );
+
     const handleChoose = async() => {
-        if (selectedConnections.length === 0) 
+        if (chosenConnectionStrings.length === 0)
             return;
-        
-        const conn = selectedConnections[0];
-        dispatch(setConnectionString(conn));
-        dispatch(setSelectedConnections(selectedConnections));
+
+        const firstConnection = chosenConnectionStrings[0]?.value ?? '';
+        dispatch(setConnectionString(firstConnection));
+        dispatch(setSelectedConnections(chosenConnectionStrings.map(({key}) => key)));
 
         try {
         const body = {
-            connection_strings: selectedConnections.map((connection_string) => ({
-                connection_string,
+            connection_strings: chosenConnectionStrings.map(({key, value}) => ({
+                connection_string: {
+                    [key]: value,
+                },
             })),
             page: 1,
             page_size: 20,
         };
-        console.log(JSON.stringify(body, null, 2));
         const dbInfo = await request(`${url}/get-db`, "POST", body);
             dispatch(setDataForConnection(dbInfo));
-            console.log(dbInfo)
             navigate('/builder');
         } catch (e) {
             console.error('Ошибка при получении информации о БД:', e);
@@ -113,8 +123,8 @@ const SettingsPage : React.FC = () => {
                                 <MenuItem><Spinner size="sm"/>
                                     Загрузка...</MenuItem>
                             )
-                            : (availableConnections.map((connStr, idx) => (
-                                <MenuItem key={idx} closeOnSelect={false}>
+                            : (Object.entries(availableConnections).map(([key, connStr]) => (
+                                <MenuItem key={key} closeOnSelect={false}>
                                     <Tooltip
                                         label={connStr}
                                         hasArrow
@@ -123,9 +133,9 @@ const SettingsPage : React.FC = () => {
                                         closeDelay={100}>
                                         <Box w="100%">
                                             <Checkbox
-                                                isChecked={selectedConnections.includes(connStr)}
-                                                onChange={() => handleToggle(connStr)}>
-                                                {connStr.slice(0, connStr.length - 10)}
+                                                isChecked={selectedConnections.includes(key)}
+                                                onChange={() => handleToggle(key)}>
+                                                {key}
                                             </Checkbox>
                                         </Box>
                                     </Tooltip>

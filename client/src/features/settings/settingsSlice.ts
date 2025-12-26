@@ -2,14 +2,14 @@ import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
 interface SettingsState {
   connectionString: string;
-  savedConnections: string[];
+  savedConnections: Record<string, string>;
   dataBaseInfo: any;
   selectedConnections: string[];
 }
 
 const initialState: SettingsState = {
   connectionString: '',
-  savedConnections: [],
+  savedConnections: {},
   dataBaseInfo: null,
   selectedConnections: [],
 };
@@ -21,7 +21,7 @@ const settingsSlice = createSlice({
     setConnectionString(state, action: PayloadAction<string>) {
       state.connectionString = action.payload;
     },
-    setSavedConnections(state, action: PayloadAction<string[]>) {
+    setSavedConnections(state, action: PayloadAction<Record<string, string>>) {
       state.savedConnections = action.payload;
     },
     setDataForConnection(state, action: PayloadAction<any>) {
