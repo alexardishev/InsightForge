@@ -23,6 +23,7 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import type { RootState, AppDispatch } from '../../app/store';
+import type { JoinRule } from './viewBuilderSlice';
 import { addJoin, removeJoin, setViewName, flattenSelections } from './viewBuilderSlice';
 import { DeleteIcon } from '@chakra-ui/icons';
 import { FiKey, FiLink2 } from 'react-icons/fi';
@@ -85,18 +86,13 @@ const JoinBuilderPage: React.FC = () => {
     const [joinDb, joinSchema, joinTableName] = joinTable.split('.');
 
     const join = {
-      type: 'INNER' as const,
-      left: {
-        db: mainDb,
-        schema: mainSchema,
-        table: mainTableName,
-        column: mainColumn,
-      },
-      right: {
-        db: joinDb,
-        schema: joinSchema,
+      inner: {
         table: joinTableName,
-        column: joinColumn,
+        schema: joinSchema,
+        source: joinDb,
+        main_table: mainTableName,
+        column_first: mainColumn,
+        column_second: joinColumn,
       },
     };
     dispatch(addJoin(join));
@@ -284,8 +280,8 @@ const JoinBuilderPage: React.FC = () => {
               <Text color="text.muted">Добавь хотя бы одно правило, если используешь более одной таблицы.</Text>
             ) : (
               <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
-                {joins.map((j: any, idx: number) => (
-                  <Card key={`${j.left.table}-${idx}`} variant="glass">
+                {joins.map((j: JoinRule, idx: number) => (
+                  <Card key={`${j.inner.table}-${idx}`} variant="glass">
                     <CardBody>
                       <HStack justify="space-between" mb={2}>
                         <HStack>
@@ -302,14 +298,14 @@ const JoinBuilderPage: React.FC = () => {
                       </HStack>
                       <VStack align="stretch" spacing={2} fontSize="sm">
                         <HStack>
-                          <Tag colorScheme="cyan">{`${j.left.db}.${j.left.schema}.${j.left.table}`}</Tag>
+                          <Tag colorScheme="cyan">{`${j.inner.source}.${j.inner.schema}.${j.inner.main_table}`}</Tag>
                           <Icon as={FiKey} />
-                          <Text>{j.left.column}</Text>
+                          <Text>{j.inner.column_first}</Text>
                         </HStack>
                         <HStack>
-                          <Tag colorScheme="purple">{`${j.right.db}.${j.right.schema}.${j.right.table}`}</Tag>
+                          <Tag colorScheme="purple">{`${j.inner.source}.${j.inner.schema}.${j.inner.table}`}</Tag>
                           <Icon as={FiKey} />
-                          <Text>{j.right.column}</Text>
+                          <Text>{j.inner.column_second}</Text>
                         </HStack>
                         <Tooltip label="Мы блокируем cartesian join, если ключ не указан" placement="top">
                           <Text color="text.muted">Ключи обязательно должны быть выбраны.</Text>
