@@ -18,7 +18,7 @@ RUN npm install \
     && npm rebuild esbuild --force
 
 # Билдим
-RUN npm run build
+RUN npm run build -- --mode production
 
 
 # ---------- runtime stage ----------

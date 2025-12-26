@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {
     Box,
     Button,
@@ -14,7 +14,12 @@ import {
 } from '@chakra-ui/react';
 // import { ChevronDownIcon } from '@chakra-ui/icons';
 import {useDispatch} from 'react-redux';
-import {setConnectionString, setDataForConnection, setSavedConnections, setConnectionsMap} from './settingsSlice';
+import {
+    setConnectionString,
+    setDataForConnection,
+    setSavedConnections,
+    setSelectedConnections,
+} from './settingsSlice';
 import {useNavigate} from 'react-router-dom';
 import {useHttp} from '../../hooks/http.hook';
 
@@ -24,24 +29,19 @@ const SettingsPage : React.FC = () => {
     const {request} = useHttp();
 
     const [selectedConnections,
-        setSelectedConnections] = useState < string[] > ([]);
+        setSelectedConnectionsState] = useState < string[] > ([]);
     const [availableConnections,
-        setAvailableConnections] = useState < string[] > ([]);
+        setAvailableConnections] = useState<Record<string, string>>({});
     const [loading,
         setLoading] = useState(false);
 
     const url = '/api';
-const [rawData, setRawData] = useState<Record<string, string>>({});
-
     const fetchConnections = async() => {
         setLoading(true);
         try {
             const rawData = await request(`${url}/get-connections`);
-            setRawData(rawData);
-            const data : string[] = Object.values(rawData);
-            setAvailableConnections(data);
-            dispatch(setSavedConnections(data));
-            dispatch(setConnectionsMap(rawData));
+            setAvailableConnections(rawData);
+            dispatch(setSavedConnections(rawData));
         } catch (e) {
             console.error('Ошибка при получении списка подключений:', e);
         } finally {
@@ -50,7 +50,7 @@ const [rawData, setRawData] = useState<Record<string, string>>({});
     };
 
     const handleToggle = (conn : string) => {
-        setSelectedConnections((prev) => prev.includes(conn)
+        setSelectedConnectionsState((prev) => prev.includes(conn)
             ? prev.filter((c) => c !== conn)
             : [
                 ...prev,
@@ -58,23 +58,37 @@ const [rawData, setRawData] = useState<Record<string, string>>({});
             ]);
     };
 
+    const chosenConnectionStrings = useMemo(
+        () =>
+            selectedConnections
+                .map((key) => ({
+                    key,
+                    value: availableConnections[key],
+                }))
+                .filter((item): item is { key: string; value: string } => Boolean(item.value)),
+        [availableConnections, selectedConnections],
+    );
+
     const handleChoose = async() => {
-        if (selectedConnections.length === 0) 
+        if (chosenConnectionStrings.length === 0)
             return;
-        
-        const conn = selectedConnections[0];
-        dispatch(setConnectionString(conn));
+
+        const firstConnection = chosenConnectionStrings[0]?.value ?? '';
+        dispatch(setConnectionString(firstConnection));
+        dispatch(setSelectedConnections(chosenConnectionStrings.map(({key}) => key)));
 
         try {
         const body = {
-            connection_strings: [{ connection_string: rawData }],
+            connection_strings: chosenConnectionStrings.map(({key, value}) => ({
+                connection_string: {
+                    [key]: value,
+                },
+            })),
             page: 1,
             page_size: 20,
         };
-        console.log(JSON.stringify(body, null, 2));
         const dbInfo = await request(`${url}/get-db`, "POST", body);
             dispatch(setDataForConnection(dbInfo));
-            console.log(dbInfo)
             navigate('/builder');
         } catch (e) {
             console.error('Ошибка при получении информации о БД:', e);
@@ -109,8 +123,8 @@ const [rawData, setRawData] = useState<Record<string, string>>({});
                                 <MenuItem><Spinner size="sm"/>
                                     Загрузка...</MenuItem>
                             )
-                            : (availableConnections.map((connStr, idx) => (
-                                <MenuItem key={idx} closeOnSelect={false}>
+                            : (Object.entries(availableConnections).map(([key, connStr]) => (
+                                <MenuItem key={key} closeOnSelect={false}>
                                     <Tooltip
                                         label={connStr}
                                         hasArrow
@@ -119,9 +133,9 @@ const [rawData, setRawData] = useState<Record<string, string>>({});
                                         closeDelay={100}>
                                         <Box w="100%">
                                             <Checkbox
-                                                isChecked={selectedConnections.includes(connStr)}
-                                                onChange={() => handleToggle(connStr)}>
-                                                {connStr.slice(0, connStr.length - 10)}
+                                                isChecked={selectedConnections.includes(key)}
+                                                onChange={() => handleToggle(key)}>
+                                                {key}
                                             </Checkbox>
                                         </Box>
                                     </Tooltip>

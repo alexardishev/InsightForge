@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   IconButton,
   useDisclosure,
@@ -14,14 +14,24 @@ import { HamburgerIcon } from '@chakra-ui/icons';
 import { NavLink } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../app/store';
+import { flattenSelections } from '../features/viewBuilder/viewBuilderSlice';
 
 const NavigationMenu: React.FC = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const settings = useSelector((state: RootState) => state.settings);
   const builder = useSelector((state: RootState) => state.viewBuilder);
 
+  const selectedColumnsCount = useMemo(
+    () =>
+      flattenSelections(builder).reduce(
+        (acc, source) => acc + source.selectedColumns.length,
+        0,
+      ),
+    [builder],
+  );
+
   const canBuilder = !!settings.dataBaseInfo;
-  const canJoins = builder.selectedColumns.length > 0;
+  const canJoins = selectedColumnsCount > 0;
   const canTransforms = canJoins;
   const canSummary = canTransforms;
 
