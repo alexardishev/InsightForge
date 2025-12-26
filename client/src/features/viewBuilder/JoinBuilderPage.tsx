@@ -87,12 +87,18 @@ const JoinBuilderPage: React.FC = () => {
 
     const join = {
       inner: {
-        table: joinTableName,
-        schema: joinSchema,
-        source: joinDb,
-        main_table: mainTableName,
-        column_first: mainColumn,
-        column_second: joinColumn,
+        left: {
+          table: mainTableName,
+          schema: mainSchema,
+          source: mainDb,
+          column: mainColumn,
+        },
+        right: {
+          table: joinTableName,
+          schema: joinSchema,
+          source: joinDb,
+          column: joinColumn,
+        },
       },
     };
     dispatch(addJoin(join));
@@ -281,7 +287,7 @@ const JoinBuilderPage: React.FC = () => {
             ) : (
               <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
                 {joins.map((j: JoinRule, idx: number) => (
-                  <Card key={`${j.inner.table}-${idx}`} variant="glass">
+                  <Card key={`${j.inner.left.table}-${j.inner.right.table}-${idx}`} variant="glass">
                     <CardBody>
                       <HStack justify="space-between" mb={2}>
                         <HStack>
@@ -298,14 +304,14 @@ const JoinBuilderPage: React.FC = () => {
                       </HStack>
                       <VStack align="stretch" spacing={2} fontSize="sm">
                         <HStack>
-                          <Tag colorScheme="cyan">{`${j.inner.source}.${j.inner.schema}.${j.inner.main_table}`}</Tag>
+                          <Tag colorScheme="cyan">{`${j.inner.left.source}.${j.inner.left.schema}.${j.inner.left.table}`}</Tag>
                           <Icon as={FiKey} />
-                          <Text>{j.inner.column_first}</Text>
+                          <Text>{j.inner.left.column}</Text>
                         </HStack>
                         <HStack>
-                          <Tag colorScheme="purple">{`${j.inner.source}.${j.inner.schema}.${j.inner.table}`}</Tag>
+                          <Tag colorScheme="purple">{`${j.inner.right.source}.${j.inner.right.schema}.${j.inner.right.table}`}</Tag>
                           <Icon as={FiKey} />
-                          <Text>{j.inner.column_second}</Text>
+                          <Text>{j.inner.right.column}</Text>
                         </HStack>
                         <Tooltip label="Мы блокируем cartesian join, если ключ не указан" placement="top">
                           <Text color="text.muted">Ключи обязательно должны быть выбраны.</Text>

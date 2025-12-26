@@ -20,17 +20,20 @@ export interface SourceSelection extends TableSelection {
   schema: string;
 }
 
-export interface JoinInner {
+export interface JoinEndpoint {
   table: string;
   schema: string;
   source: string;
-  main_table: string;
-  column_first: string;
-  column_second: string;
+  column: string;
+}
+
+export interface JoinCondition {
+  left: JoinEndpoint;
+  right: JoinEndpoint;
 }
 
 export interface JoinRule {
-  inner: JoinInner;
+  inner: JoinCondition;
 }
 
 export interface MappingJSON {
@@ -163,7 +166,12 @@ const viewBuilderSlice = createSlice({
         }
       });
 
-      state.joins = state.joins.filter((join) => join.inner && nextDbs.has(join.inner.source));
+      state.joins = state.joins.filter(
+        (join) =>
+          join.inner &&
+          nextDbs.has(join.inner.left.source) &&
+          nextDbs.has(join.inner.right.source),
+      );
       pruneTransformations(state);
     },
     setSchemasForDb(state, action: PayloadAction<{ db: string; schemas: string[] }>) {
@@ -187,9 +195,13 @@ const viewBuilderSlice = createSlice({
         });
       }
 
-      state.joins = state.joins.filter(
-        (join) => !(join.inner?.source === db && !allowed.has(join.inner.schema)),
-      );
+      state.joins = state.joins.filter((join) => {
+        const left = join.inner?.left;
+        const right = join.inner?.right;
+        const leftValid = !(left && left.source === db && !allowed.has(left.schema));
+        const rightValid = !(right && right.source === db && !allowed.has(right.schema));
+        return leftValid && rightValid;
+      });
 
       pruneTransformations(state);
     },
