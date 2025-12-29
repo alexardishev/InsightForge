@@ -6,6 +6,9 @@ type ViewJoinTable struct {
 
 type TempTable struct {
 	TempTableName string
+	Source        string
+	Schema        string
+	Table         string
 	TempColumns   []TempColumn
 }
 

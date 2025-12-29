@@ -213,8 +213,11 @@ func GenerateQueryCreateTempTablePostgres(
 					return models.Queries{}, nil, err
 				}
 				querySt := &models.Query{
-					TableName: tableName,
-					Query:     b.String(),
+					TableName:     tableName,
+					BaseTableName: tbl.Name,
+					SchemaName:    sch.Name,
+					SourceName:    source.Name,
+					Query:         b.String(),
 				}
 				queryObject = append(queryObject, *querySt)
 			}

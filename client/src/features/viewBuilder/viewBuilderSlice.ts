@@ -20,17 +20,20 @@ export interface SourceSelection extends TableSelection {
   schema: string;
 }
 
-interface JoinSide {
-  db: string;
-  schema: string;
+export interface JoinEndpoint {
   table: string;
+  schema: string;
+  source: string;
   column: string;
 }
 
+export interface JoinCondition {
+  left: JoinEndpoint;
+  right: JoinEndpoint;
+}
+
 export interface JoinRule {
-  type: 'INNER';
-  left: JoinSide;
-  right: JoinSide;
+  inner: JoinCondition;
 }
 
 export interface MappingJSON {
@@ -164,7 +167,10 @@ const viewBuilderSlice = createSlice({
       });
 
       state.joins = state.joins.filter(
-        (join) => nextDbs.has(join.left.db) && nextDbs.has(join.right.db),
+        (join) =>
+          join.inner &&
+          nextDbs.has(join.inner.left.source) &&
+          nextDbs.has(join.inner.right.source),
       );
       pruneTransformations(state);
     },
@@ -189,10 +195,13 @@ const viewBuilderSlice = createSlice({
         });
       }
 
-      state.joins = state.joins.filter(
-        (join) => !(join.left.db === db && !allowed.has(join.left.schema)) &&
-          !(join.right.db === db && !allowed.has(join.right.schema)),
-      );
+      state.joins = state.joins.filter((join) => {
+        const left = join.inner?.left;
+        const right = join.inner?.right;
+        const leftValid = !(left && left.source === db && !allowed.has(left.schema));
+        const rightValid = !(right && right.source === db && !allowed.has(right.schema));
+        return leftValid && rightValid;
+      });
 
       pruneTransformations(state);
     },

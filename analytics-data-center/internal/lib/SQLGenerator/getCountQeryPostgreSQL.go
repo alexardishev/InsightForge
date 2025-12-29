@@ -29,9 +29,11 @@ func GenerateCountQueries(view models.View, logger *slog.Logger) (queriesCreateT
 					return models.Queries{}, err
 				}
 				queryCount := models.Query{
-					TableName:  tbl.Name,
-					Query:      b.String(),
-					SourceName: source.Name,
+					TableName:     tbl.Name,
+					BaseTableName: tbl.Name,
+					SchemaName:    sch.Name,
+					Query:         b.String(),
+					SourceName:    source.Name,
 				}
 
 				queryObject = append(queryObject, queryCount)
