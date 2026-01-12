@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Box,
   VStack,
@@ -26,6 +26,7 @@ import {
 } from 'react-icons/fi';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../app/store';
+import { flattenSelections } from '../features/viewBuilder/viewBuilderSlice';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -70,8 +71,17 @@ const SidebarContent: React.FC = () => {
   const settings = useSelector((state: RootState) => state.settings);
   const builder = useSelector((state: RootState) => state.viewBuilder);
 
+  const selectedColumnsCount = useMemo(
+    () =>
+      flattenSelections(builder).reduce(
+        (acc, source) => acc + source.selectedColumns.length,
+        0,
+      ),
+    [builder],
+  );
+
   const canBuilder = !!settings.dataBaseInfo;
-  const canJoins = builder.selectedColumns.length > 0;
+  const canJoins = selectedColumnsCount > 0;
   const canTransforms = canJoins;
   const canSummary = canTransforms;
 

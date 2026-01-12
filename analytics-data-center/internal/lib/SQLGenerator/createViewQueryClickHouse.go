@@ -16,46 +16,146 @@ func CreateViewQueryClickhouse(schema models.View, viewJoin models.ViewJoinTable
 		return models.Query{}, fmt.Errorf("нет временных таблиц для формирования вью")
 	}
 
+	aliasMap := make(map[string]string)
+	for idx, tempTable := range viewJoin.TempTables {
+		aliasMap[tempTable.TempTableName] = fmt.Sprintf("t%d", idx+1)
+	}
+
+	resolveTempTable := func(endpoint models.JoinEndpoint) (models.TempTable, string, error) {
+		for _, tempTable := range viewJoin.TempTables {
+			if tempTable.Source == endpoint.Source && tempTable.Schema == endpoint.Schema && tempTable.Table == endpoint.Table {
+				alias, ok := aliasMap[tempTable.TempTableName]
+				if !ok {
+					return models.TempTable{}, "", fmt.Errorf("alias not found for temp table %s", tempTable.TempTableName)
+				}
+				return tempTable, alias, nil
+			}
+		}
+		return models.TempTable{}, "", fmt.Errorf("temp table not found for join endpoint %s.%s.%s", endpoint.Source, endpoint.Schema, endpoint.Table)
+	}
+
+	var joins []struct {
+		leftTable  models.TempTable
+		rightTable models.TempTable
+		leftAlias  string
+		rightAlias string
+		leftCol    string
+		rightCol   string
+	}
+
+	rightKeys := make(map[string]struct{})
+
+	for _, join := range schema.Joins {
+		if join.Inner == nil {
+			continue
+		}
+		left, leftAlias, err := resolveTempTable(join.Inner.Left)
+		if err != nil {
+			return models.Query{}, err
+		}
+		right, rightAlias, err := resolveTempTable(join.Inner.Right)
+		if err != nil {
+			return models.Query{}, err
+		}
+
+		joins = append(joins, struct {
+			leftTable  models.TempTable
+			rightTable models.TempTable
+			leftAlias  string
+			rightAlias string
+			leftCol    string
+			rightCol   string
+		}{
+			leftTable:  left,
+			rightTable: right,
+			leftAlias:  leftAlias,
+			rightAlias: rightAlias,
+			leftCol:    join.Inner.Left.Column,
+			rightCol:   join.Inner.Right.Column,
+		})
+		rightKeys[fmt.Sprintf("%s|%s|%s", right.Source, right.Schema, right.Table)] = struct{}{}
+	}
+
+	if len(joins) == 0 {
+		return models.Query{}, fmt.Errorf("нет настроенных джоинов для формирования вью")
+	}
+
+	var rootTable models.TempTable
+	var rootAlias string
+	for _, j := range joins {
+		key := fmt.Sprintf("%s|%s|%s", j.leftTable.Source, j.leftTable.Schema, j.leftTable.Table)
+		if _, ok := rightKeys[key]; !ok {
+			rootTable = j.leftTable
+			rootAlias = j.leftAlias
+			break
+		}
+	}
+
+	if rootAlias == "" {
+		rootTable = joins[0].leftTable
+		rootAlias = joins[0].leftAlias
+	}
+
+	known := map[string]struct{}{rootTable.TempTableName: {}}
+
+	var joinClauses []string
+	processed := make(map[int]bool)
+
+	for len(processed) < len(joins) {
+		progress := false
+		for idx, j := range joins {
+			if processed[idx] {
+				continue
+			}
+			leftKnown := false
+			rightKnown := false
+			if _, ok := known[j.leftTable.TempTableName]; ok {
+				leftKnown = true
+			}
+			if _, ok := known[j.rightTable.TempTableName]; ok {
+				rightKnown = true
+			}
+
+			if leftKnown && !rightKnown {
+				joinClauses = append(joinClauses, fmt.Sprintf("JOIN %s %s ON %s.%s = %s.%s",
+					j.rightTable.TempTableName, j.rightAlias,
+					j.leftAlias, j.leftCol,
+					j.rightAlias, j.rightCol,
+				))
+				known[j.rightTable.TempTableName] = struct{}{}
+				processed[idx] = true
+				progress = true
+				continue
+			}
+
+			if rightKnown && !leftKnown {
+				joinClauses = append(joinClauses, fmt.Sprintf("JOIN %s %s ON %s.%s = %s.%s",
+					j.leftTable.TempTableName, j.leftAlias,
+					j.rightAlias, j.rightCol,
+					j.leftAlias, j.leftCol,
+				))
+				known[j.leftTable.TempTableName] = struct{}{}
+				processed[idx] = true
+				progress = true
+			}
+		}
+
+		if !progress {
+			return models.Query{}, fmt.Errorf("невозможно связать все джоины: отсутствуют исходные таблицы")
+		}
+	}
+
 	var selectParts []string
 	for _, tempTable := range viewJoin.TempTables {
-		alias := CleanAndTrim(tempTable.TempTableName, 4)
+		if _, ok := known[tempTable.TempTableName]; !ok {
+			continue
+		}
+		alias := aliasMap[tempTable.TempTableName]
 		for _, col := range tempTable.TempColumns {
 			selectParts = append(selectParts, fmt.Sprintf("%s.%s", alias, col.ColumnName))
 		}
 	}
 	selectParts = append(selectParts, "now() AS updated_at")
-
-	mainTableName := ""
-	mainAlias := ""
-	mainTableSet := false
-
-	for _, join := range schema.Joins {
-		if join.Inner != nil && join.Inner.MainTable != "" {
-			mainTableName = fmt.Sprintf("temp_%s_%s_%s", join.Inner.Source, join.Inner.Schema, join.Inner.MainTable)
-			mainAlias = CleanAndTrim(mainTableName, 4)
-			mainTableSet = true
-			break
-		}
-	}
-	if !mainTableSet {
-		mainTableName = viewJoin.TempTables[0].TempTableName
-		mainAlias = CleanAndTrim(mainTableName, 4)
-	}
-
-	fromClause := fmt.Sprintf(" FROM %s %s", mainTableName, mainAlias)
-
-	var joinClauses []string
-	for _, join := range schema.Joins {
-		if join.Inner != nil {
-			joinTable := fmt.Sprintf("temp_%s_%s_%s", join.Inner.Source, join.Inner.Schema, join.Inner.Table)
-			joinAlias := CleanAndTrim(joinTable, 4)
-			joinClauses = append(joinClauses, fmt.Sprintf("JOIN %s %s ON %s.%s = %s.%s",
-				joinTable, joinAlias,
-				mainAlias, join.Inner.ColumnFirst,
-				joinAlias, join.Inner.ColumnSecond,
-			))
-		}
-	}
 
 	orderBy := "tuple()"
 	if len(viewJoin.TempTables) > 0 && len(viewJoin.TempTables[0].TempColumns) > 0 {
@@ -70,6 +170,7 @@ func CreateViewQueryClickhouse(schema models.View, viewJoin models.ViewJoinTable
 		schema.Name, engineClause, orderBy, strings.Join(selectParts, ", "),
 	))
 
+	fromClause := fmt.Sprintf(" FROM %s %s", rootTable.TempTableName, rootAlias)
 	finalQuery := fmt.Sprintf("%s%s %s", b.String(), fromClause, strings.Join(joinClauses, " "))
 
 	return models.Query{

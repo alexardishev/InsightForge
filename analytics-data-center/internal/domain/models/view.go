@@ -70,17 +70,18 @@ type Reference struct {
 }
 
 type Join struct {
-	Inner *JoinSide `json:"inner"`
+	Inner *JoinCondition `json:"inner"`
 	// TO DO сделать другие джоины потом
-	// Left  JoinSide `json:"left"`
-	// Right JoinSide `json:"right"`
 }
 
-type JoinSide struct {
-	Source       string `json:"source,omitempty"`
-	Schema       string `json:"schema,omitempty"`
-	Table        string `json:"table,omitempty"`
-	MainTable    string `json:"main_table,omitempty"`
-	ColumnFirst  string `json:"column_first,omitempty"`
-	ColumnSecond string `json:"column_second,omitempty"`
+type JoinCondition struct {
+	Left  JoinEndpoint `json:"left"`
+	Right JoinEndpoint `json:"right"`
+}
+
+type JoinEndpoint struct {
+	Source string `json:"source"`
+	Schema string `json:"schema"`
+	Table  string `json:"table"`
+	Column string `json:"column"`
 }

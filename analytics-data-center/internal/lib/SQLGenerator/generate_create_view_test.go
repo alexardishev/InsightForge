@@ -9,86 +9,22 @@ import (
 	"testing"
 )
 
-func TestCreateViewQuery_WithJoins(t *testing.T) {
+func TestCreateViewQuery_WithChainJoins(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
 
 	schema := models.View{
 		Name: "user_basic_info",
-		Sources: []models.Source{
-			{
-				Name: "postgres",
-				Schemas: []models.Schema{
-					{
-						Name: "public",
-						Tables: []models.Table{
-							{
-								Name: "users",
-								Columns: []models.Column{
-									{Name: "id", Type: "uuid", IsPrimaryKey: true, IsNullable: true},
-									{Name: "email", Type: "text", IsNullable: true},
-									{
-										Name:       "json_transform",
-										Type:       "jsonb",
-										IsNullable: true,
-										Transform: &models.Transform{
-											Type:         "JSON",
-											Mode:         "Mapping",
-											OutputColumn: "json_transform",
-											Mapping: &models.Mapping{
-												TypeMap: "JSON",
-												MappingJSON: []models.MappingJSON{
-													{
-														Mapping:   map[string]string{"field1_in_json": "field1_view_column"},
-														TypeField: "int",
-													},
-													{
-														Mapping:   map[string]string{"field2_in_json": "field2_view_column"},
-														TypeField: "text",
-													},
-												},
-											},
-										},
-									},
-									{
-										Name:       "status",
-										Type:       "int",
-										IsNullable: false,
-										Transform: &models.Transform{
-											Type:         "FieldTransform",
-											OutputColumn: "status_label",
-											Mapping: &models.Mapping{
-												TypeMap:                 "FieldTransform",
-												AliasNewColumnTransform: "status_label",
-												Mapping: map[string]string{
-													"1": "Создан",
-													"2": "В обработке",
-													"3": "Завершен",
-												},
-											},
-										},
-									},
-								},
-							},
-							{
-								Name: "profiles",
-								Columns: []models.Column{
-									{Name: "user_id", Type: "uuid", IsPrimaryKey: true, IsNullable: false},
-									{Name: "age", Type: "int", IsNullable: true},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
 		Joins: []*models.Join{
 			{
-				Inner: &models.JoinSide{
-					Source:       "postgres",
-					Schema:       "public",
-					Table:        "profiles",
-					ColumnFirst:  "id",
-					ColumnSecond: "user_id",
+				Inner: &models.JoinCondition{
+					Left:  models.JoinEndpoint{Source: "postgres_oltp", Schema: "public", Table: "users", Column: "id"},
+					Right: models.JoinEndpoint{Source: "postgres_copy", Schema: "public", Table: "profiles", Column: "user_id"},
+				},
+			},
+			{
+				Inner: &models.JoinCondition{
+					Left:  models.JoinEndpoint{Source: "postgres_copy", Schema: "public", Table: "profiles", Column: "profile_id"},
+					Right: models.JoinEndpoint{Source: "postgres_copy", Schema: "public", Table: "sessions", Column: "profile_id"},
 				},
 			},
 		},
@@ -97,38 +33,83 @@ func TestCreateViewQuery_WithJoins(t *testing.T) {
 	viewJoin := models.ViewJoinTable{
 		TempTables: []models.TempTable{
 			{
-				TempTableName: "temp_postgres_public_users",
-				TempColumns: []models.TempColumn{
-					{ColumnName: "id"},
-					{ColumnName: "email"},
-					{ColumnName: "json_transform"},
-					{ColumnName: "status"},
-					{ColumnName: "field1_view_column"},
-					{ColumnName: "field2_view_column"},
-					{ColumnName: "status_label"},
-				},
+				TempTableName: "temp_postgres_oltp_public_users",
+				Source:        "postgres_oltp",
+				Schema:        "public",
+				Table:         "users",
+				TempColumns:   []models.TempColumn{{ColumnName: "id"}, {ColumnName: "email"}},
 			},
 			{
-				TempTableName: "temp_postgres_public_profiles",
-				TempColumns: []models.TempColumn{
-					{ColumnName: "user_id"},
-					{ColumnName: "age"},
-				},
+				TempTableName: "temp_postgres_copy_public_profiles",
+				Source:        "postgres_copy",
+				Schema:        "public",
+				Table:         "profiles",
+				TempColumns:   []models.TempColumn{{ColumnName: "profile_id"}, {ColumnName: "user_id"}},
+			},
+			{
+				TempTableName: "temp_postgres_copy_public_sessions",
+				Source:        "postgres_copy",
+				Schema:        "public",
+				Table:         "sessions",
+				TempColumns:   []models.TempColumn{{ColumnName: "session_id"}, {ColumnName: "profile_id"}},
 			},
 		},
 	}
 
 	result, err := sqlgenerator.CreateViewQuery(schema, viewJoin, logger, "postgres")
-	t.Logf(result.Query)
 	if err != nil {
 		t.Fatalf("error generating view query: %v", err)
 	}
 
-	if !strings.Contains(result.Query, "JOIN \"temp_postgres_public_profiles\"") {
-		t.Errorf("expected JOIN clause in query, got: %s", result.Query)
+	if !strings.Contains(result.Query, "JOIN \"temp_postgres_copy_public_profiles\" \"t2\" ON \"t1\".\"id\" = \"t2\".\"user_id\"") {
+		t.Fatalf("expected chain join to profiles, got: %s", result.Query)
 	}
 
-	if !strings.Contains(result.Query, "CREATE TABLE \"user_basic_info\"") {
-		t.Errorf("expected CREATE TABLE clause in query, got: %s", result.Query)
+	if !strings.Contains(result.Query, "JOIN \"temp_postgres_copy_public_sessions\" \"t3\" ON \"t2\".\"profile_id\" = \"t3\".\"profile_id\"") {
+		t.Fatalf("expected chain join to sessions, got: %s", result.Query)
+	}
+
+	if !strings.Contains(result.Query, "FROM \"temp_postgres_oltp_public_users\" \"t1\"") {
+		t.Fatalf("expected root from users, got: %s", result.Query)
+	}
+}
+
+func TestCreateViewQuery_MissingTempTable(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
+	schema := models.View{
+		Name: "broken_view",
+		Joins: []*models.Join{
+			{Inner: &models.JoinCondition{Left: models.JoinEndpoint{Source: "db1", Schema: "public", Table: "a", Column: "id"}, Right: models.JoinEndpoint{Source: "db1", Schema: "public", Table: "b", Column: "a_id"}}},
+		},
+	}
+	viewJoin := models.ViewJoinTable{TempTables: []models.TempTable{{TempTableName: "temp_db1_public_a", Source: "db1", Schema: "public", Table: "a"}}}
+
+	_, err := sqlgenerator.CreateViewQuery(schema, viewJoin, logger, "postgres")
+	if err == nil {
+		t.Fatalf("expected error for missing temp table, got nil")
+	}
+}
+
+func TestCreateViewQuery_DisconnectedGraph(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
+	schema := models.View{
+		Name: "disconnected",
+		Joins: []*models.Join{
+			{Inner: &models.JoinCondition{Left: models.JoinEndpoint{Source: "db1", Schema: "public", Table: "a", Column: "id"}, Right: models.JoinEndpoint{Source: "db1", Schema: "public", Table: "b", Column: "a_id"}}},
+			{Inner: &models.JoinCondition{Left: models.JoinEndpoint{Source: "db1", Schema: "public", Table: "c", Column: "id"}, Right: models.JoinEndpoint{Source: "db1", Schema: "public", Table: "d", Column: "c_id"}}},
+		},
+	}
+	viewJoin := models.ViewJoinTable{
+		TempTables: []models.TempTable{
+			{TempTableName: "temp_db1_public_a", Source: "db1", Schema: "public", Table: "a"},
+			{TempTableName: "temp_db1_public_b", Source: "db1", Schema: "public", Table: "b"},
+			{TempTableName: "temp_db1_public_c", Source: "db1", Schema: "public", Table: "c"},
+			{TempTableName: "temp_db1_public_d", Source: "db1", Schema: "public", Table: "d"},
+		},
+	}
+
+	_, err := sqlgenerator.CreateViewQuery(schema, viewJoin, logger, "postgres")
+	if err == nil {
+		t.Fatalf("expected error for disconnected joins")
 	}
 }

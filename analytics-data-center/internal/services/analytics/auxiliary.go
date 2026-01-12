@@ -91,6 +91,7 @@ func (a *AnalyticsDataCenterService) getCountInsertData(ctx context.Context, vie
 			TableName:     query.TableName,
 			Count:         count,
 			DataBaseName:  query.SourceName,
+			SchemaName:    query.SchemaName,
 			TempTableName: tempTables[idx],
 		}
 		log.Info("готово", slog.String("TableName", item.TableName))
@@ -109,6 +110,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 
 	var (
 		tempTbl  []string
+		tempMeta []models.TempTable
 		wg       sync.WaitGroup
 		hasError bool
 		mu       sync.Mutex
@@ -128,6 +130,12 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 
 		log.Info("запуск вставки и подготовки данных", slog.String("Таблица", tempTableInsert.TableName))
 		tempTbl = append(tempTbl, tempTableInsert.TempTableName)
+		tempMeta = append(tempMeta, models.TempTable{
+			TempTableName: tempTableInsert.TempTableName,
+			Source:        tempTableInsert.DataBaseName,
+			Schema:        tempTableInsert.SchemaName,
+			Table:         tempTableInsert.TableName,
+		})
 
 		oltpStorage, err := a.OLTPFactory.GetOLTPStorage(ctx, tempTableInsert.DataBaseName)
 		if err != nil {
@@ -218,7 +226,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 		return false, fmt.Errorf("одна или несколько горутин завершились с ошибкой")
 	}
 
-	viewJoin, err := a.prepareViewJoin(ctx, tempTbl, "public")
+	viewJoin, err := a.prepareViewJoin(ctx, tempMeta, "public")
 	if err != nil {
 		_ = a.DeleteTempTables(ctx, tempTbl)
 		log.Error("Ошибка", slog.String("error", err.Error()))
@@ -231,7 +239,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 		log.Error("Ошибка", slog.String("error", err.Error()))
 		return false, err
 	}
-
+	log.Info("Запрос на мердж", slog.String("Запрос", query.Query))
 	a.DWHProvider.MergeTempTables(ctx, query.Query)
 	_ = a.DeleteTempTables(ctx, tempTbl)
 	return true, nil
@@ -254,7 +262,7 @@ func (a *AnalyticsDataCenterService) calculateWorkerCount(totalCount int64) int6
 	}
 }
 
-func (a *AnalyticsDataCenterService) prepareViewJoin(ctx context.Context, tempTbl []string, schemaName string) (viewJoins *models.ViewJoinTable, err error) {
+func (a *AnalyticsDataCenterService) prepareViewJoin(ctx context.Context, tempTbl []models.TempTable, schemaName string) (viewJoins *models.ViewJoinTable, err error) {
 	const op = "analytics.prepareViewJoin"
 	log := a.log.With(
 		slog.String("op", op),
@@ -272,7 +280,7 @@ func (a *AnalyticsDataCenterService) prepareViewJoin(ctx context.Context, tempTb
 			dbName := strings.Trim(u.Path, "/")
 			schemaName = dbName
 		}
-		columnsTempTables, err := a.DWHProvider.GetColumnsTables(ctx, schemaName, tempTable)
+		columnsTempTables, err := a.DWHProvider.GetColumnsTables(ctx, schemaName, tempTable.TempTableName)
 		if err != nil {
 			log.Error("Невозможно получить колонки для временных таблиц", slog.String("error", err.Error()))
 			return nil, err
@@ -285,11 +293,9 @@ func (a *AnalyticsDataCenterService) prepareViewJoin(ctx context.Context, tempTb
 			})
 		}
 
-		tempTables := &models.TempTable{
-			TempTableName: tempTable,
-			TempColumns:   columnsTemp,
-		}
-		tablesTemp = append(tablesTemp, *tempTables)
+		tempTables := tempTable
+		tempTables.TempColumns = columnsTemp
+		tablesTemp = append(tablesTemp, tempTables)
 	}
 
 	viewJoin := &models.ViewJoinTable{

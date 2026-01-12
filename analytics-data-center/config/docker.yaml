@@ -8,6 +8,9 @@ oltp_connections:
   - name: postgres_oltp
     connection_string: "postgresql://postgres:password@postgres:5432/postgres_oltp?sslmode=disable"
     connection_string_kafka: "postgresql://postgres:password@postgres:5432/postgres_oltp?sslmode=disable"
+  - name: postgres_oltp_2
+    connection_string: "postgresql://postgres:password@postgres:5432/postgres_oltp_2?sslmode=disable"
+    connection_string_kafka: "postgresql://postgres:password@postgres:5432/postgres_oltp_2?sslmode=disable"
 smtp_setting:
     host: "smtp.example.com"
     port: 587
