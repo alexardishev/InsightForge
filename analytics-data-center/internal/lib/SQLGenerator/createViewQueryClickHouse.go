@@ -76,24 +76,26 @@ func CreateViewQueryClickhouse(schema models.View, viewJoin models.ViewJoinTable
 		rightKeys[fmt.Sprintf("%s|%s|%s", right.Source, right.Schema, right.Table)] = struct{}{}
 	}
 
-	if len(joins) == 0 {
-		return models.Query{}, fmt.Errorf("нет настроенных джоинов для формирования вью")
-	}
-
 	var rootTable models.TempTable
 	var rootAlias string
-	for _, j := range joins {
-		key := fmt.Sprintf("%s|%s|%s", j.leftTable.Source, j.leftTable.Schema, j.leftTable.Table)
-		if _, ok := rightKeys[key]; !ok {
-			rootTable = j.leftTable
-			rootAlias = j.leftAlias
-			break
-		}
-	}
 
-	if rootAlias == "" {
-		rootTable = joins[0].leftTable
-		rootAlias = joins[0].leftAlias
+	if len(joins) == 0 {
+		rootTable = viewJoin.TempTables[0]
+		rootAlias = aliasMap[rootTable.TempTableName]
+	} else {
+		for _, j := range joins {
+			key := fmt.Sprintf("%s|%s|%s", j.leftTable.Source, j.leftTable.Schema, j.leftTable.Table)
+			if _, ok := rightKeys[key]; !ok {
+				rootTable = j.leftTable
+				rootAlias = j.leftAlias
+				break
+			}
+		}
+
+		if rootAlias == "" {
+			rootTable = joins[0].leftTable
+			rootAlias = joins[0].leftAlias
+		}
 	}
 
 	known := map[string]struct{}{rootTable.TempTableName: {}}
