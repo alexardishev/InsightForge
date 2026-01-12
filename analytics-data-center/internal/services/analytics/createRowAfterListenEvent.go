@@ -264,11 +264,14 @@ func (a *AnalyticsDataCenterService) checkColumnInTables(
 		actualCols := make(map[string]struct{}, len(columns))
 		for _, col := range columns {
 			colLower := strings.ToLower(col)
-			if tables, ok := columnTableMap[colLower]; ok {
-				if _, belongs := tables[targetTable]; !belongs {
-					continue
-				}
+			tables, ok := columnTableMap[colLower]
+			if !ok {
+				continue
 			}
+			if _, belongs := tables[targetTable]; !belongs {
+				continue
+			}
+
 			actualCols[colLower] = struct{}{}
 		}
 
