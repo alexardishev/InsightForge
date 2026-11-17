@@ -11,6 +11,7 @@ oltp_connections:
   - name: postgres
     connection_string: "postgresql://postgres:password@localhost:5432/postgres?sslmode=disable"
     connection_string_kafka: "postgresql://postgres:password@172.22.0.2:5432/postgres?sslmode=disable"
+    # heartbeat_table: public.insightforge_heartbeat  # для «тихой» базы-источника, см. docs/CDC_OPERATIONS.md
 smtp_setting:
     host: "smtp.rambler.ru"
     port: 587
@@ -20,6 +21,10 @@ smtp_setting:
     from_email: "**********@rambler.ru"
 token_ttl: 1h
 topic_subscription_interval: 5s
+# Наблюдатель за слотами репликации источников (WAL); disabled: true — выключить.
+wal_watch:
+    interval: 1m
+    retained_warn_mb: 5120
 kafka:
     bootstrap.servers: "localhost:9092"
     acks: "all"

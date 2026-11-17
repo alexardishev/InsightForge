@@ -8,6 +8,7 @@ oltp_connections:
   - name: postgres_oltp
     connection_string: "postgresql://postgres:password@postgres:5432/postgres_oltp?sslmode=disable"
     connection_string_kafka: "postgresql://postgres:password@postgres:5432/postgres_oltp?sslmode=disable"
+    # heartbeat_table: public.insightforge_heartbeat  # для «тихой» базы-источника, см. docs/CDC_OPERATIONS.md
   - name: postgres_oltp_2
     connection_string: "postgresql://postgres:password@postgres:5432/postgres_oltp_2?sslmode=disable"
     connection_string_kafka: "postgresql://postgres:password@postgres:5432/postgres_oltp_2?sslmode=disable"
@@ -20,6 +21,10 @@ smtp_setting:
     from_email: "noreply@example.com"
 token_ttl: 1h
 topic_subscription_interval: 5s
+# Наблюдатель за слотами репликации источников (WAL); disabled: true — выключить.
+wal_watch:
+    interval: 1m
+    retained_warn_mb: 5120
 kafka:
     bootstrap.servers: "kafka:9092"
     acks: "all"

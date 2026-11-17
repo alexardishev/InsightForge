@@ -36,12 +36,20 @@ func SlotName(source string) string        { return "slot_" + source }
 func PublicationName(source string) string { return "pub_" + source }
 func TopicPrefix(source string) string     { return "dbserver_" + source }
 
-// ConnectorOptions — настройки коннектора, общие для всех источников.
+// ConnectorOptions — настройки коннектора помимо строки подключения.
 type ConnectorOptions struct {
 	// TopicRetention — срок хранения топиков, которые создаёт Connect
 	// (kafka.debezium_topic_retention): 0 — значение брокера по умолчанию,
 	// отрицательный — бессрочно.
 	TopicRetention time.Duration
+	// HeartbeatInterval — как часто Debezium подтверждает позицию слота, даже если
+	// событий нет (heartbeat.interval.ms); 0 — без heartbeat.
+	HeartbeatInterval time.Duration
+	// HeartbeatTable — таблица heartbeat источника ("table" или "schema.table"), куда
+	// Debezium пишет на каждом heartbeat. Нужна, когда база-источник «тихая», а
+	// соседние базы сервера пишут много: без своих изменений слот не двигается и
+	// держит WAL всего сервера. Пусто — не писать. Таблицу создаёт EnsureHeartbeatTable.
+	HeartbeatTable string
 }
 
 // RegisterPostgresConnector создаёт коннектор или обновляет его конфиг:
@@ -145,6 +153,19 @@ func postgresConnectorConfig(name, pgConn string, opts ConnectorOptions) (map[st
 		"value.converter":                "org.apache.kafka.connect.json.JsonConverter",
 		"key.converter.schemas.enable":   "false",
 		"value.converter.schemas.enable": "false",
+	}
+	if opts.HeartbeatInterval > 0 {
+		connectorConfig["heartbeat.interval.ms"] = strconv.FormatInt(opts.HeartbeatInterval.Milliseconds(), 10)
+	}
+	if opts.HeartbeatTable != "" {
+		if opts.HeartbeatInterval <= 0 {
+			return nil, errors.New("heartbeat-таблица задана без heartbeat-интервала: Debezium выполняет запрос только на heartbeat")
+		}
+		quoted, err := quoteHeartbeatTable(opts.HeartbeatTable)
+		if err != nil {
+			return nil, err
+		}
+		connectorConfig["heartbeat.action.query"] = heartbeatActionQuery(quoted)
 	}
 	// Топики создаёт сам Connect с заданным сроком хранения (нужен topic.creation.enable=true
 	// у воркера — так по умолчанию). Без replication.factor и partitions Connect топики не

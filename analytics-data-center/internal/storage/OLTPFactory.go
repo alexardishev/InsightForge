@@ -4,6 +4,7 @@ import (
 	"analyticDataCenter/analytics-data-center/internal/config"
 	postgresoltp "analyticDataCenter/analytics-data-center/internal/storage/postgresOLTP"
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -41,6 +42,18 @@ func NewOLTPFactory(logger *slog.Logger, connConfigs []config.OLTPstorage) *Inst
 func (f *InstanceOLTPFactory) GetOLTPStrings(ctx context.Context) map[string]string {
 	return f.connections
 }
+
+// DB возвращает пул соединений источника — тот же, что у GetOLTPStorage.
+// Нужен для служебных запросов к серверу источника (наблюдатель за слотами WAL).
+func (f *InstanceOLTPFactory) DB(ctx context.Context, sourceName string) (*sql.DB, error) {
+	if _, err := f.GetOLTPStorage(ctx, sourceName); err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.pool[sourceName].Db, nil
+}
+
 func (f *InstanceOLTPFactory) GetOLTPStorage(ctx context.Context, sourceName string) (OLTPDB, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
