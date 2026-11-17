@@ -174,4 +174,17 @@ var (
 	MsgCDCLagSummary             = Message{RU: "Отставание CDC", EN: "CDC lag", CN: "CDC 延迟"}
 	MsgCDCLagHigh                = Message{RU: "Отставание CDC приближается к сроку хранения топика: события могут быть удалены непрочитанными", EN: "CDC lag is approaching topic retention: events may be deleted unread", CN: "CDC 延迟接近主题保留时间：事件可能在未读取前被删除"}
 	MsgCDCLagFailed              = Message{RU: "Не удалось рассчитать отставание CDC", EN: "failed to compute CDC lag", CN: "无法计算 CDC 延迟"}
+
+	// WAL watcher and Debezium heartbeat
+	MsgWALSummary           = Message{RU: "Слоты репликации", EN: "replication slots", CN: "复制槽"}
+	MsgWALSlotMissing       = Message{RU: "Слот репликации источника не найден: коннектор не создан или слот удалён", EN: "replication slot of the source not found: connector not created or slot dropped", CN: "未找到源的复制槽：连接器未创建或复制槽已删除"}
+	MsgWALSlotInactive      = Message{RU: "Слот репликации неактивен: Debezium его не читает, WAL копится", EN: "replication slot is inactive: Debezium is not reading it, WAL accumulates", CN: "复制槽未激活：Debezium 未读取，WAL 在累积"}
+	MsgWALSlotRetained      = Message{RU: "Слот репликации держит много WAL", EN: "replication slot retains too much WAL", CN: "复制槽保留的 WAL 过多"}
+	MsgWALSlotUnreserved    = Message{RU: "Слот репликации вот-вот будет потерян: удерживаемый WAL превысил max_slot_wal_keep_size", EN: "replication slot is about to be lost: retained WAL exceeds max_slot_wal_keep_size", CN: "复制槽即将丢失：保留的 WAL 超过 max_slot_wal_keep_size"}
+	MsgWALSlotLost          = Message{RU: "Слот репликации потерян: CDC по источнику остановлен, нужно восстановление (docs/CDC_OPERATIONS.md)", EN: "replication slot is lost: CDC for the source has stopped, recovery required (docs/CDC_OPERATIONS.md)", CN: "复制槽已丢失：该源的 CDC 已停止，需要恢复（docs/CDC_OPERATIONS.md）"}
+	MsgWALSlotOrphan        = Message{RU: "Слот репликации не относится к источникам из конфига: если источник удалён, удалите слот (docs/CDC_OPERATIONS.md)", EN: "replication slot does not belong to any configured source: if the source was removed, drop the slot (docs/CDC_OPERATIONS.md)", CN: "复制槽不属于任何已配置的源：如果源已移除，请删除该复制槽（docs/CDC_OPERATIONS.md）"}
+	MsgWALNoSlotLimit       = Message{RU: "У Postgres не задан max_slot_wal_keep_size: если Debezium остановится, WAL может заполнить диск", EN: "max_slot_wal_keep_size is not set: if Debezium stops, WAL may fill the disk", CN: "未设置 max_slot_wal_keep_size：如果 Debezium 停止，WAL 可能占满磁盘"}
+	MsgWALSlotLimitUnknown  = Message{RU: "Не удалось проверить лимит WAL для слотов (нужен Postgres 13+)", EN: "failed to check the slot WAL limit (Postgres 13+ required)", CN: "无法检查复制槽 WAL 限制（需要 Postgres 13+）"}
+	MsgWALCheckFailed       = Message{RU: "Не удалось проверить слоты репликации источника", EN: "failed to check replication slots of the source", CN: "无法检查源的复制槽"}
+	MsgHeartbeatTableFailed = Message{RU: "Не удалось создать heartbeat-таблицу, коннектор зарегистрирован без неё", EN: "failed to create the heartbeat table, connector registered without it", CN: "无法创建 heartbeat 表，连接器在没有它的情况下注册"}
 )

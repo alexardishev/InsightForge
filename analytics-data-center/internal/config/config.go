@@ -9,21 +9,22 @@ import (
 )
 
 type Config struct {
-	Env                       string        `yaml:"env" env-default:"local" json:"env,omitempty"`
-	StoragePath               string        `yaml:"storage_path" env-required:"true" json:"storage_path,omitempty"`
-	OLTPDataBase              string        `yaml:"oltp_db" json:"oltp_db,omitempty"`
-	OLTPStoragePath           string        `yaml:"oltp_db_path" json:"oltp_db_path,omitempty"`
-	DWHDataBase               string        `yaml:"dwh_db" json:"dwh_db,omitempty"`
-	DWHStoragePath            string        `yaml:"dwh_db_path" json:"dwh_db_path,omitempty"`
-	RenameHeuristic           bool          `yaml:"rename_heuristic" env:"ENABLE_RENAME_HEURISTIC" env-default:"true" json:"rename_heuristic,omitempty"`
-	OLTPstorages              []OLTPstorage `yaml:"oltp_connections" json:"olt_pstorages,omitempty"`
-	TokenTTL                  time.Duration `yaml:"token_ttl,omitempty" json:"token_ttl,omitempty"`
-	LogLang                   string        `yaml:"log_lang" env-default:"ru" json:"log_lang,omitempty"`
-	GRPC                      GRPCSetting   `yaml:"grpc" json:"grpc,omitempty"`
-	Kafka                     KafkaSetting  `yaml:"kafka" json:"kafka,omitempty"`
-	KafkaConnect              string        `yaml:"kafka_connect" json:"kafka_connect,omitempty"`
-	TopicSubscriptionInterval time.Duration `yaml:"topic_subscription_interval" env-default:"5s" json:"topic_subscription_interval,omitempty"`
-	SMTP                      SMTPSetting   `yaml:"smtp_setting" json:"smtp_setting,omitempty"`
+	Env                       string          `yaml:"env" env-default:"local" json:"env,omitempty"`
+	StoragePath               string          `yaml:"storage_path" env-required:"true" json:"storage_path,omitempty"`
+	OLTPDataBase              string          `yaml:"oltp_db" json:"oltp_db,omitempty"`
+	OLTPStoragePath           string          `yaml:"oltp_db_path" json:"oltp_db_path,omitempty"`
+	DWHDataBase               string          `yaml:"dwh_db" json:"dwh_db,omitempty"`
+	DWHStoragePath            string          `yaml:"dwh_db_path" json:"dwh_db_path,omitempty"`
+	RenameHeuristic           bool            `yaml:"rename_heuristic" env:"ENABLE_RENAME_HEURISTIC" env-default:"true" json:"rename_heuristic,omitempty"`
+	OLTPstorages              []OLTPstorage   `yaml:"oltp_connections" json:"olt_pstorages,omitempty"`
+	TokenTTL                  time.Duration   `yaml:"token_ttl,omitempty" json:"token_ttl,omitempty"`
+	LogLang                   string          `yaml:"log_lang" env-default:"ru" json:"log_lang,omitempty"`
+	GRPC                      GRPCSetting     `yaml:"grpc" json:"grpc,omitempty"`
+	Kafka                     KafkaSetting    `yaml:"kafka" json:"kafka,omitempty"`
+	KafkaConnect              string          `yaml:"kafka_connect" json:"kafka_connect,omitempty"`
+	TopicSubscriptionInterval time.Duration   `yaml:"topic_subscription_interval" env-default:"5s" json:"topic_subscription_interval,omitempty"`
+	WALWatch                  WALWatchSetting `yaml:"wal_watch" json:"wal_watch,omitempty"`
+	SMTP                      SMTPSetting     `yaml:"smtp_setting" json:"smtp_setting,omitempty"`
 }
 
 type SMTPSetting struct {
@@ -44,6 +45,22 @@ type OLTPstorage struct {
 	Name      string `yaml:"name"`
 	Path      string `yaml:"connection_string"`
 	PathKafka string `yaml:"connection_string_kafka"`
+	// HeartbeatTable — таблица heartbeat в источнике ("table" или "schema.table"): Debezium
+	// пишет в неё раз в 10 с, и слот репликации двигается, даже когда база «тихая», а
+	// соседние базы сервера пишут много. Пусто — без таблицы. Приложение создаёт её само
+	// под пользователем connection_string_kafka (см. docs/CDC_OPERATIONS.md).
+	HeartbeatTable string `yaml:"heartbeat_table"`
+}
+
+// WALWatchSetting — наблюдатель за слотами репликации источников.
+type WALWatchSetting struct {
+	// Disabled выключает наблюдатель. Отдельный флаг, а не interval: 0 — cleanenv
+	// подставляет значение по умолчанию вместо любого нулевого, даже заданного в YAML.
+	Disabled bool `yaml:"disabled" env:"WAL_WATCH_DISABLED"`
+	// Interval — как часто проверять слоты.
+	Interval time.Duration `yaml:"interval" env:"WAL_WATCH_INTERVAL" env-default:"1m"`
+	// RetainedWarnMB — предупреждать, если слот держит больше стольких МБ WAL.
+	RetainedWarnMB int64 `yaml:"retained_warn_mb" env:"WAL_WATCH_RETAINED_WARN_MB" env-default:"5120"`
 }
 
 type KafkaSetting struct {

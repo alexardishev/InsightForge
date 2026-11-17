@@ -35,7 +35,7 @@ func main() {
 	logg := logger.New(cfg.Env, cfg.LogLang)
 	logg.InfoMsg(logger.MsgAnalyticsServerStart)
 
-	application := app.New(logg, cfg.GRPC.Port, cfg.StoragePath, cfg.OLTPStoragePath, cfg.DWHStoragePath, cfg.OLTPDataBase, cfg.DWHDataBase, cfg.DWHStoragePath, cfg.RenameHeuristic, cfg.TokenTTL, cfg.OLTPstorages, cfg.Kafka.BootstrapServers, cfg.Kafka.GroupId, cfg.Kafka.AutoOffsetReset, cfg.Kafka.EnableAutoCommit, cfg.Kafka.SessionTimeoutMs, cfg.Kafka.ClientId, cfg.Kafka.DLQRetention, cfg.Kafka.DebeziumTopicRetention, cfg.KafkaConnect, cfg.TopicSubscriptionInterval, cfg.SMTP.Host, cfg.SMTP.Port, cfg.SMTP.UserName, cfg.SMTP.Password, cfg.SMTP.AdminEmail, cfg.SMTP.FromEmail)
+	application := app.New(logg, cfg.GRPC.Port, cfg.StoragePath, cfg.OLTPStoragePath, cfg.DWHStoragePath, cfg.OLTPDataBase, cfg.DWHDataBase, cfg.DWHStoragePath, cfg.RenameHeuristic, cfg.TokenTTL, cfg.OLTPstorages, cfg.Kafka.BootstrapServers, cfg.Kafka.GroupId, cfg.Kafka.AutoOffsetReset, cfg.Kafka.EnableAutoCommit, cfg.Kafka.SessionTimeoutMs, cfg.Kafka.ClientId, cfg.Kafka.DLQRetention, cfg.Kafka.DebeziumTopicRetention, cfg.WALWatch, cfg.KafkaConnect, cfg.TopicSubscriptionInterval, cfg.SMTP.Host, cfg.SMTP.Port, cfg.SMTP.UserName, cfg.SMTP.Password, cfg.SMTP.AdminEmail, cfg.SMTP.FromEmail)
 
 	go application.GRPCSrv.Run()
 	go func() {
@@ -79,6 +79,8 @@ func main() {
 
 	application.GRPCSrv.Stop()
 	stopKafka(logg, application)
+	// Наблюдатель за WAL ходит в базы-источники — останавливаем до закрытия их пулов.
+	application.WALWatch.Stop()
 
 	if err := application.OLTPFactory.CloseAll(); err != nil {
 		logg.Error("OLTPFactory close failed", slog.String("error", err.Error()))

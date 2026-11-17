@@ -12,6 +12,7 @@ import (
 	smtpsender "analyticDataCenter/analytics-data-center/internal/services/smtrsender"
 	tasksserivce "analyticDataCenter/analytics-data-center/internal/services/tasks"
 	"analyticDataCenter/analytics-data-center/internal/services/topicsubscription"
+	"analyticDataCenter/analytics-data-center/internal/services/walwatch"
 	"analyticDataCenter/analytics-data-center/internal/storage"
 	clickhousedwh "analyticDataCenter/analytics-data-center/internal/storage/clickhouseDWH"
 	"analyticDataCenter/analytics-data-center/internal/storage/postgres"
@@ -31,6 +32,12 @@ const (
 	DbClickhouse = "clickhouse"
 )
 
+const (
+	// debeziumHeartbeatInterval — как часто Debezium подтверждает позицию слота без событий.
+	debeziumHeartbeatInterval = 10 * time.Second
+	heartbeatTableTimeout     = 10 * time.Second
+)
+
 type App struct {
 	GRPCSrv       *grpcapp.App
 	OLTPFactory   *storage.InstanceOLTPFactory
@@ -40,13 +47,14 @@ type App struct {
 	TopicCron     *topicsubscription.Cron
 	Notifications *notifications.Worker
 	CDCErrors     <-chan error
+	WALWatch      *walwatch.Watcher
 	StopCDC       context.CancelFunc
 }
 
 func New(log *loggerpkg.Logger, grpcPort int,
 	storagePath string, connectionStringOLTP string, connectionStringDWH string, OLTPName string, DWHName string, DWHPath string,
 	renameHeuristic bool,
-	tokenTTL time.Duration, factoryOLTP []config.OLTPstorage, BootstrapServers string, GroupId string, AutoOffsetReset string, EnableAutoCommit string, SessionTimeoutMs string, ClientId string, dlqRetention time.Duration, topicRetention time.Duration, KafkaConnect string, topicSubscriptionInterval time.Duration, hostSMTP string, portSMTP int, userNameSMTP string, passwordSMTP string, adminEmailSMTP string, fromEmailSMTP string) *App {
+	tokenTTL time.Duration, factoryOLTP []config.OLTPstorage, BootstrapServers string, GroupId string, AutoOffsetReset string, EnableAutoCommit string, SessionTimeoutMs string, ClientId string, dlqRetention time.Duration, topicRetention time.Duration, walWatch config.WALWatchSetting, KafkaConnect string, topicSubscriptionInterval time.Duration, hostSMTP string, portSMTP int, userNameSMTP string, passwordSMTP string, adminEmailSMTP string, fromEmailSMTP string) *App {
 	// TO DO переделать на cfg
 	statusEnum := []string{"In progress", "Execution error", "Completed"}
 	// var storageOLTP storage.OLTPDB
@@ -78,7 +86,19 @@ func New(log *loggerpkg.Logger, grpcPort int,
 	var registeredConnectors []config.OLTPstorage
 
 	for _, conn := range factoryOLTP {
-		err := debezium.RegisterPostgresConnector(KafkaConnect, conn.Name, conn.PathKafka, debezium.ConnectorOptions{TopicRetention: topicRetention})
+		opts := debezium.ConnectorOptions{TopicRetention: topicRetention, HeartbeatInterval: debeziumHeartbeatInterval}
+		if conn.HeartbeatTable != "" {
+			ctx, cancel := context.WithTimeout(context.Background(), heartbeatTableTimeout)
+			err := debezium.EnsureHeartbeatTable(ctx, conn.PathKafka, conn.HeartbeatTable)
+			cancel()
+			if err != nil {
+				// Без таблицы коннектор всё равно нужен: heartbeat.interval.ms работает и без неё.
+				log.ErrorMsg(loggerpkg.MsgHeartbeatTableFailed, slog.String("name", conn.Name), slog.String("table", conn.HeartbeatTable), slog.String("error", err.Error()))
+			} else {
+				opts.HeartbeatTable = conn.HeartbeatTable
+			}
+		}
+		err := debezium.RegisterPostgresConnector(KafkaConnect, conn.Name, conn.PathKafka, opts)
 		if err != nil {
 			log.Error("Debezium не смог зарегистрировать коннектор", slog.String("name", conn.Name), slog.String("error", err.Error()))
 			continue
@@ -123,6 +143,7 @@ func New(log *loggerpkg.Logger, grpcPort int,
 	cdcCtx, stopCDC := context.WithCancel(context.Background())
 	cdcErrors := cdcListener.Start(cdcCtx)
 	grpcServer := grpcapp.New(log, grpcPort, analyticsService)
+	walWatcher := startWALWatch(log, walWatch, factoryOLTP, oltpFactory)
 	return &App{
 		GRPCSrv:       grpcServer,
 		OLTPFactory:   oltpFactory,
@@ -132,6 +153,29 @@ func New(log *loggerpkg.Logger, grpcPort int,
 		TopicCron:     topicCron,
 		Notifications: notificationWorker,
 		CDCErrors:     cdcErrors,
+		WALWatch:      walWatcher,
 		StopCDC:       stopCDC,
 	}
+}
+
+// startWALWatch запускает наблюдатель за слотами репликации источников. Выключенный
+// (wal_watch.disabled) — nil: Stop на nil безопасен.
+func startWALWatch(log *loggerpkg.Logger, cfg config.WALWatchSetting, sources []config.OLTPstorage, factory *storage.InstanceOLTPFactory) *walwatch.Watcher {
+	if cfg.Disabled || cfg.Interval <= 0 {
+		return nil
+	}
+	names := make([]string, 0, len(sources))
+	for _, s := range sources {
+		names = append(names, s.Name)
+	}
+	open := func(ctx context.Context, source string) (walwatch.SourceDB, error) {
+		db, err := factory.DB(ctx, source)
+		if err != nil {
+			return nil, err
+		}
+		return walwatch.NewPostgresSource(db), nil
+	}
+	w := walwatch.New(log, names, open, cfg.Interval, cfg.RetainedWarnMB*1024*1024)
+	w.Start()
+	return w
 }
