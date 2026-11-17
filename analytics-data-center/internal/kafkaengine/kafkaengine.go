@@ -2,10 +2,12 @@ package kafkaengine
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
-	"strings"
+	"sort"
+	"strconv"
 	"sync"
-	"time"
+	"sync/atomic"
 
 	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 
@@ -20,15 +22,29 @@ func NewKafkaConsumer(
 	SessionTimeoutMs string,
 	ClientId string,
 	topics []string,
+	rebalanceCb kafka.RebalanceCb,
 	log *loggerpkg.Logger,
 ) (*kafka.Consumer, error) {
+	autoCommit, err := strconv.ParseBool(EnableAutoCommit)
+	if err != nil {
+		return nil, fmt.Errorf("invalid enable.auto.commit: %w", err)
+	}
+	if autoCommit {
+		return nil, fmt.Errorf("CDC commits offsets manually after the DWH write: set enable.auto.commit=false")
+	}
+	if rebalanceCb == nil {
+		rebalanceCb = RebalanceCallback
+	}
+
 	c, err := kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers":  BootstrapServers,
-		"group.id":           GroupId,
-		"auto.offset.reset":  AutoOffsetReset,
-		"enable.auto.commit": EnableAutoCommit,
-		"session.timeout.ms": SessionTimeoutMs,
-		"client.id":          ClientId,
+		"bootstrap.servers": BootstrapServers,
+		"group.id":          GroupId,
+		"auto.offset.reset": AutoOffsetReset,
+		// Offset коммитит только cdc.Listener (CommitMessage) после записи в DWH.
+		"enable.auto.commit":       false,
+		"enable.auto.offset.store": false,
+		"session.timeout.ms":       SessionTimeoutMs,
+		"client.id":                ClientId,
 	})
 	if err != nil {
 		log.ErrorMsg(loggerpkg.MsgKafkaConsumerCreateError, slog.String("error", err.Error()))
@@ -39,45 +55,27 @@ func NewKafkaConsumer(
 		log.WarnMsg(loggerpkg.MsgKafkaNoPatternTopics)
 	} else {
 		log.Info("Kafka consumer subscribing to topics", slog.Any("topics", topics))
-		err = c.SubscribeTopics(topics, RebalanceCallback)
+		err = c.SubscribeTopics(topics, rebalanceCb)
 		if err != nil {
 			log.ErrorMsg(loggerpkg.MsgKafkaSubscribeError, slog.String("error", err.Error()))
 			return nil, err
 		}
 	}
 
+	// Ждать назначения партиций здесь бессмысленно: rebalance-callback, который их
+	// назначает, librdkafka вызывает только внутри Poll. Назначенные партиции
+	// логирует Engine.rebalance.
 	log.InfoMsg(loggerpkg.MsgKafkaConsumerCreated)
-
-	// Ожидание assign'а
-	time.Sleep(5 * time.Second)
-
-	partitions, err := c.Assignment()
-	if err != nil {
-		log.ErrorMsg(loggerpkg.MsgKafkaAssignError, slog.String("error", err.Error()))
-	} else if len(partitions) == 0 {
-		log.WarnMsg(loggerpkg.MsgKafkaPartitionsNotAssigned)
-	} else {
-		for _, p := range partitions {
-			log.InfoMsg(loggerpkg.MsgKafkaPartitionAssigned,
-				slog.String("topic", *p.Topic),
-				slog.Any("partition", p.Partition))
-		}
-	}
-
 	return c, nil
 }
 
+// RebalanceCallback принимает все назначенные партиции. Отбрасывать их нельзя:
+// координатор группы считает партицию нашей, и её не будет читать никто.
+// Ненужные топики отсекаются раньше — подписка идёт только на таблицы вьюх (ListTopics).
 func RebalanceCallback(c *kafka.Consumer, ev kafka.Event) error {
 	switch e := ev.(type) {
 	case kafka.AssignedPartitions:
-		var filtered []kafka.TopicPartition
-		for _, tp := range e.Partitions {
-			if strings.Contains(*tp.Topic, "temp") {
-				continue
-			}
-			filtered = append(filtered, tp)
-		}
-		return c.Assign(filtered)
+		return c.Assign(e.Partitions)
 	case kafka.RevokedPartitions:
 		return c.Unassign()
 	default:
@@ -95,6 +93,8 @@ type Engine struct {
 	topicCh    chan string
 	subscribed map[string]struct{}
 	mu         sync.Mutex
+	// onRevoked вызывается из rebalance-callback, то есть внутри Poll.
+	onRevoked atomic.Pointer[func([]kafka.TopicPartition)]
 }
 
 func NewEngine(
@@ -117,17 +117,16 @@ func NewEngine(
 		}
 	}
 
-	c, err := NewKafkaConsumer(BootstrapServers, GroupId, AutoOffsetReset, EnableAutoCommit, SessionTimeoutMs, ClientId, topics, log)
-	if err != nil {
-		return nil, err
-	}
-
 	eng := &Engine{
-		consumer:   c,
 		log:        log,
 		topicCh:    make(chan string, 100),
 		subscribed: make(map[string]struct{}),
 	}
+	c, err := NewKafkaConsumer(BootstrapServers, GroupId, AutoOffsetReset, EnableAutoCommit, SessionTimeoutMs, ClientId, topics, eng.rebalance, log)
+	if err != nil {
+		return nil, err
+	}
+	eng.consumer = c
 	for _, t := range topics {
 		eng.subscribed[t] = struct{}{}
 	}
@@ -139,7 +138,47 @@ func NewEngine(
 // Вернет эземпляр консьюмера
 func (e *Engine) Consumer() *kafka.Consumer { return e.consumer }
 
-// Событие в очередь и в дальше в воркер
+// OnPartitionsRevoked регистрирует обработчик отзыва партиций (cdc.Listener.PartitionsRevoked).
+// Обработчик вызывается из rebalance-callback внутри Poll, в горутине, которая вызывает Poll.
+func (e *Engine) OnPartitionsRevoked(handler func([]kafka.TopicPartition)) {
+	e.onRevoked.Store(&handler)
+}
+
+func (e *Engine) rebalance(c *kafka.Consumer, ev kafka.Event) error {
+	e.logRebalance(ev)
+	e.notifyRevoked(ev)
+	return RebalanceCallback(c, ev)
+}
+
+func (e *Engine) logRebalance(ev kafka.Event) {
+	var (
+		msg        loggerpkg.Message
+		partitions []kafka.TopicPartition
+	)
+	switch ev := ev.(type) {
+	case kafka.AssignedPartitions:
+		msg, partitions = loggerpkg.MsgKafkaPartitionAssigned, ev.Partitions
+	case kafka.RevokedPartitions:
+		msg, partitions = loggerpkg.MsgKafkaPartitionRevoked, ev.Partitions
+	default:
+		return
+	}
+	for _, tp := range partitions {
+		e.log.InfoMsg(msg, slog.String("topic", *tp.Topic), slog.Any("partition", tp.Partition))
+	}
+}
+
+func (e *Engine) notifyRevoked(ev kafka.Event) {
+	revoked, ok := ev.(kafka.RevokedPartitions)
+	if !ok {
+		return
+	}
+	if handler := e.onRevoked.Load(); handler != nil {
+		(*handler)(revoked.Partitions)
+	}
+}
+
+// Событие в очередь и дальше в воркер
 func (e *Engine) EnqueueTopic(topic string) {
 	select {
 	case e.topicCh <- topic:
@@ -150,19 +189,30 @@ func (e *Engine) EnqueueTopic(topic string) {
 
 func (e *Engine) subscriptionWorker() {
 	for topic := range e.topicCh {
-		e.mu.Lock()
-		if _, ok := e.subscribed[topic]; !ok {
-			e.subscribed[topic] = struct{}{}
-			var topics []string
-			for t := range e.subscribed {
-				topics = append(topics, t)
-			}
-			if err := e.consumer.SubscribeTopics(topics, RebalanceCallback); err != nil {
-				e.log.ErrorMsg(loggerpkg.MsgKafkaSubscribeError, slog.String("error", err.Error()))
-			}
-		}
-		e.mu.Unlock()
+		e.subscribe(topic)
 	}
+}
+
+// subscribe добавляет топик к подписке. В subscribed топик попадает только после
+// успешного SubscribeTopics: при ошибке cron через topic_subscription_interval
+// снова поставит его в очередь, и попытка повторится.
+func (e *Engine) subscribe(topic string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if _, ok := e.subscribed[topic]; ok {
+		return
+	}
+	topics := make([]string, 0, len(e.subscribed)+1)
+	for t := range e.subscribed {
+		topics = append(topics, t)
+	}
+	topics = append(topics, topic)
+	sort.Strings(topics)
+	if err := e.consumer.SubscribeTopics(topics, e.rebalance); err != nil {
+		e.log.ErrorMsg(loggerpkg.MsgKafkaSubscribeError, slog.String("topic", topic), slog.String("error", err.Error()))
+		return
+	}
+	e.subscribed[topic] = struct{}{}
 }
 
 func (e *Engine) EnsureKafkaConnectTopics(bootstrapServers string, log *loggerpkg.Logger) error {

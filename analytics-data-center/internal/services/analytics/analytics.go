@@ -64,7 +64,6 @@ type AnalyticsDataCenterService struct {
 	OLTPDbName              string
 	RenameHeuristicEnabled  bool
 	jobQueue                chan TaskETL
-	eventQueue              chan models.CDCEvent
 	SMTPClient              smtpsender.SMTP
 	topicNotifier           TopicNotifier
 	notifier                notifications.Notifier
@@ -103,11 +102,9 @@ func New(
 		OLTPDbName:              OLTPDbName,
 		RenameHeuristicEnabled:  renameHeuristic,
 		jobQueue:                make(chan TaskETL, 100),
-		eventQueue:              make(chan models.CDCEvent, 100),
 		SMTPClient:              SMTPClient,
 	}
 	go service.etlWorker()
-	go service.eventWorker()
 	return service
 }
 

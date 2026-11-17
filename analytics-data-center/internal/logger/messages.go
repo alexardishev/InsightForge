@@ -51,6 +51,23 @@ var (
 		CN: "Kafka错误",
 	}
 
+	// CDC listener messages
+	MsgCDCHandlerFailed        = Message{RU: "Не удалось обработать CDC-событие, будет повтор", EN: "CDC event processing failed, will retry", CN: "CDC事件处理失败，将重试"}
+	MsgCDCRetryScheduled       = Message{RU: "Партиция поставлена на паузу до повтора", EN: "partition paused until retry", CN: "分区已暂停，等待重试"}
+	MsgCDCResumeFailed         = Message{RU: "Не удалось снять паузу с партиции", EN: "failed to resume partition", CN: "恢复分区失败"}
+	MsgCDCPermanentError       = Message{RU: "Постоянная ошибка CDC-события, отправляю в DLQ", EN: "permanent CDC event error, sending to DLQ", CN: "CDC事件永久错误，发送到DLQ"}
+	MsgCDCSentToDLQ            = Message{RU: "CDC-событие отправлено в DLQ, offset закоммичен", EN: "CDC event sent to DLQ, offset committed", CN: "CDC事件已发送到DLQ"}
+	MsgCDCDLQSendFailed        = Message{RU: "Не удалось отправить событие в DLQ, будет повтор", EN: "failed to send event to DLQ, will retry", CN: "发送到DLQ失败，将重试"}
+	MsgCDCTombstoneSkipped     = Message{RU: "Пустое сообщение (tombstone) пропущено", EN: "tombstone message skipped", CN: "已跳过空消息(tombstone)"}
+	MsgCDCStopped              = Message{RU: "CDC остановлен с ошибкой, завершаю приложение", EN: "CDC stopped with error, shutting down", CN: "CDC出错停止，正在关闭应用"}
+	MsgCDCShutdownTimeout      = Message{RU: "CDC не остановился за отведённое время", EN: "CDC did not stop in time", CN: "CDC未能按时停止"}
+	MsgKafkaInitFailed         = Message{RU: "Не удалось инициализировать Kafka", EN: "Kafka initialization failed", CN: "Kafka初始化失败"}
+	MsgKafkaCloseFailed        = Message{RU: "Ошибка при закрытии Kafka", EN: "Kafka close failed", CN: "关闭Kafka失败"}
+	MsgKafkaDLQEventError      = Message{RU: "Ошибка продюсера DLQ", EN: "DLQ producer error", CN: "DLQ生产者错误"}
+	MsgKafkaDLQTopicFailed     = Message{RU: "Не удалось создать DLQ-топик", EN: "failed to create DLQ topic", CN: "创建DLQ主题失败"}
+	MsgKafkaDLQRetentionSet    = Message{RU: "Срок хранения DLQ-топика приведён к конфигу", EN: "DLQ topic retention set from config", CN: "已按配置设置DLQ主题保留时间"}
+	MsgKafkaDLQRetentionFailed = Message{RU: "Не удалось изменить срок хранения DLQ-топика", EN: "failed to set DLQ topic retention", CN: "设置DLQ主题保留时间失败"}
+
 	// Tasks service messages
 	MsgCreateTaskStart    = Message{RU: "Создание задачи", EN: "Create task start", CN: "开始创建任务"}
 	MsgCreateTaskFailed   = Message{RU: "не удалось создать задачу", EN: "failed to create task", CN: "创建任务失败"}
@@ -148,4 +165,5 @@ var (
 	MsgKafkaAssignError           = Message{RU: "Неудачная попытка назначений", EN: "assignment error", CN: "分配错误"}
 	MsgKafkaPartitionsNotAssigned = Message{RU: "Разделы не назначены", EN: "partitions not assigned", CN: "分区未分配"}
 	MsgKafkaPartitionAssigned     = Message{RU: "Назначен раздел", EN: "partition assigned", CN: "分配分区"}
+	MsgKafkaPartitionRevoked      = Message{RU: "Раздел отозван", EN: "partition revoked", CN: "分区已撤销"}
 )

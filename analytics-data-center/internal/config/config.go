@@ -54,6 +54,9 @@ type KafkaSetting struct {
 	AutoOffsetReset  string `yaml:"auto.offset.reset"`
 	SessionTimeoutMs string `yaml:"session.timeout.ms"`
 	GroupId          string `yaml:"group.id"`
+	// DLQRetention — срок хранения сообщений в DLQ-топиках <topic>.dlq.
+	// 0 — значение брокера по умолчанию, отрицательное — бессрочно.
+	DLQRetention time.Duration `yaml:"dlq_retention" env:"KAFKA_DLQ_RETENTION" env-default:"0"`
 }
 
 func MustLoad() *Config {
