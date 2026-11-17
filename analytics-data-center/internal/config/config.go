@@ -57,6 +57,10 @@ type KafkaSetting struct {
 	// DLQRetention — срок хранения сообщений в DLQ-топиках <topic>.dlq.
 	// 0 — значение брокера по умолчанию, отрицательное — бессрочно.
 	DLQRetention time.Duration `yaml:"dlq_retention" env:"KAFKA_DLQ_RETENTION" env-default:"0"`
+	// DebeziumTopicRetention — срок хранения топиков Debezium. Если CDC отстанет больше,
+	// Kafka удалит события непрочитанными; предупреждение в логе — после половины срока.
+	// 0 — значение брокера по умолчанию, отрицательное — бессрочно.
+	DebeziumTopicRetention time.Duration `yaml:"debezium_topic_retention" env:"KAFKA_DEBEZIUM_TOPIC_RETENTION" env-default:"0"`
 }
 
 func MustLoad() *Config {

@@ -30,6 +30,9 @@ kafka:
     group.id: "cdc-consumer-group"
     # Сколько хранить сообщения в DLQ (<topic>.dlq): 0 — по умолчанию брокера, -1s — бессрочно.
     dlq_retention: 720h
+    # Сколько хранить события Debezium: если CDC отстанет больше, события удалятся непрочитанными.
+    # 0 — по умолчанию брокера, -1s — бессрочно.
+    debezium_topic_retention: 336h
 kafka_connect: "http://kafka-connect:8083"
 grpc:
   port: 13890

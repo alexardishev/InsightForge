@@ -49,10 +49,20 @@ type Listener struct {
 	InitialRetryDelay time.Duration
 	MaxRetryDelay     time.Duration
 
+	// LagReportInterval — как часто писать в лог отставание (0 — не писать).
+	LagReportInterval time.Duration
+	// LagWarnAge — предупреждать, если партиция отстаёт дольше этого (0 — не
+	// предупреждать). Приложение задаёт половину срока хранения топиков Debezium.
+	LagWarnAge time.Duration
+
 	// retries ворота партиций, на которых обработка упала. Доступ только из
 	// горутины Run: rebalance-callback, вызывающий PartitionsRevoked, librdkafka
 	// исполняет внутри Poll, то есть в той же горутине.
 	retries map[partitionKey]*partitionRetry
+	// lastEvent — время события, полученного последним, по партициям (для лога
+	// отставания). Доступ только из горутины Run, как и у retries.
+	lastEvent     map[partitionKey]time.Time
+	nextLagReport time.Time
 }
 
 type partitionKey struct {
@@ -80,7 +90,9 @@ func NewListener(consumer KafkaConsumer, dlq DeadLetterQueue, log *loggerpkg.Log
 		Handler:           handler,
 		InitialRetryDelay: DefaultInitialRetryDelay,
 		MaxRetryDelay:     DefaultMaxRetryDelay,
+		LagReportInterval: DefaultLagReportInterval,
 		retries:           make(map[partitionKey]*partitionRetry),
+		lastEvent:         make(map[partitionKey]time.Time),
 	}
 }
 
@@ -105,7 +117,9 @@ func (l *Listener) PartitionsRevoked(partitions []kafka.TopicPartition) {
 		if tp.Topic == nil {
 			continue
 		}
-		delete(l.retries, partitionKey{topic: *tp.Topic, partition: tp.Partition})
+		key := partitionKey{topic: *tp.Topic, partition: tp.Partition}
+		delete(l.retries, key)
+		delete(l.lastEvent, key)
 	}
 }
 
@@ -113,11 +127,13 @@ func (l *Listener) PartitionsRevoked(partitions []kafka.TopicPartition) {
 // ctx.Err() при остановке или фатальной ошибке, после которой продолжать
 // нельзя (например, не удалось вернуть партицию на упавшее сообщение).
 func (l *Listener) Run(ctx context.Context) error {
+	l.nextLagReport = time.Now().Add(l.LagReportInterval)
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		l.resumeDue(time.Now())
+		l.maybeReportLag(time.Now())
 		ev := l.Consumer.Poll(l.pollTimeoutMs(time.Now()))
 		if err := ctx.Err(); err != nil {
 			// Сообщение, если оно пришло, не обработано и не закоммичено — придёт снова.
@@ -156,6 +172,7 @@ func (l *Listener) handleMessage(ctx context.Context, msg *kafka.Message) error 
 	}
 
 	log.InfoMsg(loggerpkg.MsgCDCMessageReceived)
+	l.lastEvent[key] = eventTime(msg)
 	err := l.process(ctx, msg, log)
 	if err == nil {
 		delete(l.retries, key)

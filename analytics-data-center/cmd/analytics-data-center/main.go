@@ -35,7 +35,7 @@ func main() {
 	logg := logger.New(cfg.Env, cfg.LogLang)
 	logg.InfoMsg(logger.MsgAnalyticsServerStart)
 
-	application := app.New(logg, cfg.GRPC.Port, cfg.StoragePath, cfg.OLTPStoragePath, cfg.DWHStoragePath, cfg.OLTPDataBase, cfg.DWHDataBase, cfg.DWHStoragePath, cfg.RenameHeuristic, cfg.TokenTTL, cfg.OLTPstorages, cfg.Kafka.BootstrapServers, cfg.Kafka.GroupId, cfg.Kafka.AutoOffsetReset, cfg.Kafka.EnableAutoCommit, cfg.Kafka.SessionTimeoutMs, cfg.Kafka.ClientId, cfg.Kafka.DLQRetention, cfg.KafkaConnect, cfg.TopicSubscriptionInterval, cfg.SMTP.Host, cfg.SMTP.Port, cfg.SMTP.UserName, cfg.SMTP.Password, cfg.SMTP.AdminEmail, cfg.SMTP.FromEmail)
+	application := app.New(logg, cfg.GRPC.Port, cfg.StoragePath, cfg.OLTPStoragePath, cfg.DWHStoragePath, cfg.OLTPDataBase, cfg.DWHDataBase, cfg.DWHStoragePath, cfg.RenameHeuristic, cfg.TokenTTL, cfg.OLTPstorages, cfg.Kafka.BootstrapServers, cfg.Kafka.GroupId, cfg.Kafka.AutoOffsetReset, cfg.Kafka.EnableAutoCommit, cfg.Kafka.SessionTimeoutMs, cfg.Kafka.ClientId, cfg.Kafka.DLQRetention, cfg.Kafka.DebeziumTopicRetention, cfg.KafkaConnect, cfg.TopicSubscriptionInterval, cfg.SMTP.Host, cfg.SMTP.Port, cfg.SMTP.UserName, cfg.SMTP.Password, cfg.SMTP.AdminEmail, cfg.SMTP.FromEmail)
 
 	go application.GRPCSrv.Run()
 	go func() {
@@ -88,13 +88,13 @@ func main() {
 }
 
 // stopKafka останавливает подписку на новые топики, дожидается отправки DLQ
-// и закрывает consumer. Вызывать только после остановки cdc.Listener.
+// и закрывает Kafka (admin-клиент, затем consumer). Вызывать только после остановки cdc.Listener.
 func stopKafka(log *logger.Logger, application *app.App) {
 	if application.TopicCron != nil {
 		application.TopicCron.Stop()
 	}
 	application.DLQ.Close()
-	if err := application.Kafka.Close(); err != nil {
+	if err := application.KafkaEngine.Close(); err != nil {
 		log.ErrorMsg(logger.MsgKafkaCloseFailed, slog.String("error", err.Error()))
 	}
 }

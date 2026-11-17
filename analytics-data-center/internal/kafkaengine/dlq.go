@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"analyticDataCenter/analytics-data-center/internal/lib/retention"
 	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
@@ -25,17 +26,7 @@ const (
 	DLQHeaderError     = "dlq.error"
 )
 
-const (
-	dlqFlushTimeoutMs = 5000
-	retentionMsConfig = "retention.ms"
-)
-
-// topicAdmin — часть *kafka.AdminClient, нужная DLQ; интерфейс позволяет тестировать ensureTopic.
-type topicAdmin interface {
-	CreateTopics(ctx context.Context, topics []kafka.TopicSpecification, options ...kafka.CreateTopicsAdminOption) ([]kafka.TopicResult, error)
-	IncrementalAlterConfigs(ctx context.Context, resources []kafka.ConfigResource, options ...kafka.AlterConfigsAdminOption) ([]kafka.ConfigResourceResult, error)
-	Close()
-}
+const dlqFlushTimeoutMs = 5000
 
 // DLQProducer пишет необрабатываемые CDC-сообщения в <topic>.dlq.
 // Реализует cdc.DeadLetterQueue.
@@ -120,13 +111,13 @@ func (d *DLQProducer) ensureTopic(ctx context.Context, topic string) error {
 	if _, ok := d.topics[topic]; ok {
 		return nil
 	}
-	retention, setRetention := retentionMs(d.retention)
+	retentionValue, setRetention := retention.Ms(d.retention)
 	spec := kafka.TopicSpecification{
 		Topic:         topic,
 		NumPartitions: 1, // ReplicationFactor 0 — значение брокера по умолчанию
 	}
 	if setRetention {
-		spec.Config = map[string]string{retentionMsConfig: retention}
+		spec.Config = map[string]string{retention.ConfigKey: retentionValue}
 	}
 	results, err := d.admin.CreateTopics(ctx, []kafka.TopicSpecification{spec})
 	if err != nil {
@@ -145,53 +136,14 @@ func (d *DLQProducer) ensureTopic(ctx context.Context, topic string) error {
 		}
 	}
 	if exists && setRetention {
-		if err := d.setRetention(ctx, topic, retention); err != nil {
-			return err
+		if err := setTopicRetention(ctx, d.admin, topic, retentionValue); err != nil {
+			d.log.ErrorMsg(loggerpkg.MsgKafkaDLQRetentionFailed, slog.String("topic", topic), slog.String("error", err.Error()))
+			return fmt.Errorf("set retention of DLQ topic %s: %w", topic, err)
 		}
+		d.log.InfoMsg(loggerpkg.MsgKafkaDLQRetentionSet, slog.String("topic", topic), slog.String(retention.ConfigKey, retentionValue))
 	}
 	d.topics[topic] = struct{}{}
 	return nil
-}
-
-// setRetention меняет только retention.ms: IncrementalAlterConfigs, в отличие от
-// AlterConfigs, не сбрасывает остальные настройки топика к значениям по умолчанию.
-func (d *DLQProducer) setRetention(ctx context.Context, topic, retention string) error {
-	results, err := d.admin.IncrementalAlterConfigs(ctx, []kafka.ConfigResource{{
-		Type: kafka.ResourceTopic,
-		Name: topic,
-		Config: []kafka.ConfigEntry{{
-			Name: retentionMsConfig, Value: retention, IncrementalOperation: kafka.AlterConfigOpTypeSet,
-		}},
-	}})
-	if err == nil {
-		for _, res := range results {
-			if res.Error.Code() != kafka.ErrNoError {
-				err = res.Error
-				break
-			}
-		}
-	}
-	if err != nil {
-		d.log.ErrorMsg(loggerpkg.MsgKafkaDLQRetentionFailed, slog.String("topic", topic), slog.String("error", err.Error()))
-		return fmt.Errorf("set retention of DLQ topic %s: %w", topic, err)
-	}
-	d.log.InfoMsg(loggerpkg.MsgKafkaDLQRetentionSet, slog.String("topic", topic), slog.String(retentionMsConfig, retention))
-	return nil
-}
-
-// retentionMs переводит kafka.dlq_retention в значение retention.ms.
-// false — оставить значение брокера по умолчанию.
-func retentionMs(retention time.Duration) (string, bool) {
-	switch {
-	case retention == 0:
-		return "", false
-	case retention < 0:
-		return "-1", true // бессрочно
-	case retention < time.Millisecond:
-		return "1", true // 0 у Kafka значит «удалять сразу», а не «по умолчанию»
-	default:
-		return strconv.FormatInt(retention.Milliseconds(), 10), true
-	}
 }
 
 // logEvents логирует ошибки продюсера (отчёты о доставке приходят в канал delivery Send).
