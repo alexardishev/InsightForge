@@ -4,6 +4,7 @@ import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
 	sqlgenerator "analyticDataCenter/analytics-data-center/internal/lib/SQLGenerator"
 	renameheuristics "analyticDataCenter/analytics-data-center/internal/lib/renameheuristics"
+	"analyticDataCenter/analytics-data-center/internal/services/cdc"
 	"analyticDataCenter/analytics-data-center/internal/storage"
 	"context"
 	"encoding/json"
@@ -50,7 +51,8 @@ func (a *AnalyticsDataCenterService) createRowAfterListenEventInDWH(ctx context.
 		if err != nil {
 			if errors.Is(err, storage.ErrSchemaNotFound) {
 				log.Warn("view not found", slog.String("error", err.Error()))
-				return fmt.Errorf("%s: %s", op, ErrInvalidSchemID)
+				// Вьюха удалена: повтор не поможет, событие уходит в DLQ.
+				return cdc.Permanent(fmt.Errorf("%s: %w", op, ErrInvalidSchemID))
 			}
 			log.Warn("ошибка получения схемы", slog.String("error", err.Error()))
 			return fmt.Errorf("%s: %s", op, err)

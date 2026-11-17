@@ -28,6 +28,8 @@ kafka:
     auto.offset.reset: "earliest"
     session.timeout.ms: "6000"
     group.id: "cdc-consumer-group"
+    # Сколько хранить сообщения в DLQ (<topic>.dlq): 0 — по умолчанию брокера, -1s — бессрочно.
+    dlq_retention: 720h
 kafka_connect: "http://kafka-connect:8083"
 grpc:
   port: 13890

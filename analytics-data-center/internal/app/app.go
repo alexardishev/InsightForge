@@ -16,6 +16,7 @@ import (
 	clickhousedwh "analyticDataCenter/analytics-data-center/internal/storage/clickhouseDWH"
 	"analyticDataCenter/analytics-data-center/internal/storage/postgres"
 	postgresdwh "analyticDataCenter/analytics-data-center/internal/storage/postgresDWH"
+	"context"
 	"log/slog"
 
 	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
@@ -35,15 +36,18 @@ type App struct {
 	GRPCSrv       *grpcapp.App
 	OLTPFactory   *storage.InstanceOLTPFactory
 	Kafka         *kafka.Consumer
+	DLQ           *kafkaengine.DLQProducer
 	Router        http.Handler
 	TopicCron     *topicsubscription.Cron
 	Notifications *notifications.Worker
+	CDCErrors     <-chan error
+	StopCDC       context.CancelFunc
 }
 
 func New(log *loggerpkg.Logger, grpcPort int,
 	storagePath string, connectionStringOLTP string, connectionStringDWH string, OLTPName string, DWHName string, DWHPath string,
 	renameHeuristic bool,
-	tokenTTL time.Duration, factoryOLTP []config.OLTPstorage, BootstrapServers string, GroupId string, AutoOffsetReset string, EnableAutoCommit string, SessionTimeoutMs string, ClientId string, KafkaConnect string, topicSubscriptionInterval time.Duration, hostSMTP string, portSMTP int, userNameSMTP string, passwordSMTP string, adminEmailSMTP string, fromEmailSMTP string) *App {
+	tokenTTL time.Duration, factoryOLTP []config.OLTPstorage, BootstrapServers string, GroupId string, AutoOffsetReset string, EnableAutoCommit string, SessionTimeoutMs string, ClientId string, dlqRetention time.Duration, KafkaConnect string, topicSubscriptionInterval time.Duration, hostSMTP string, portSMTP int, userNameSMTP string, passwordSMTP string, adminEmailSMTP string, fromEmailSMTP string) *App {
 	// TO DO переделать на cfg
 	statusEnum := []string{"In progress", "Execution error", "Completed"}
 	// var storageOLTP storage.OLTPDB
@@ -96,23 +100,35 @@ func New(log *loggerpkg.Logger, grpcPort int,
 
 	kafkaEngine, err := kafkaengine.NewEngine(BootstrapServers, GroupId, AutoOffsetReset, EnableAutoCommit, SessionTimeoutMs, ClientId, storage.DbSys, log)
 	if err != nil {
+		log.ErrorMsg(loggerpkg.MsgKafkaInitFailed, slog.String("error", err.Error()))
 		panic("Не удалось подключиться к Kafka")
+	}
+	dlq, err := kafkaengine.NewDLQProducer(BootstrapServers, ClientId, dlqRetention, log)
+	if err != nil {
+		log.ErrorMsg(loggerpkg.MsgKafkaInitFailed, slog.String("error", err.Error()))
+		panic("Не удалось создать продюсер DLQ")
 	}
 	analyticsService.SetTopicNotifier(kafkaEngine)
 	topicCron := topicsubscription.NewCron(log, storage.DbSys, kafkaEngine, topicSubscriptionInterval)
 	topicCron.Start()
 	kafkaConsumer := kafkaEngine.Consumer()
-	cdcListener := cdc.NewListener(kafkaConsumer, log, func(data []byte) {
-		cdc.Dispatch(data, log, analyticsService)
+	cdcListener := cdc.NewListener(kafkaConsumer, dlq, log, func(ctx context.Context, data []byte) error {
+		return cdc.Dispatch(ctx, data, log, analyticsService)
 	})
-	cdcListener.Start()
+	// Регистрируем до Start: rebalance-callback срабатывает только внутри Poll listener-а.
+	kafkaEngine.OnPartitionsRevoked(cdcListener.PartitionsRevoked)
+	cdcCtx, stopCDC := context.WithCancel(context.Background())
+	cdcErrors := cdcListener.Start(cdcCtx)
 	grpcServer := grpcapp.New(log, grpcPort, analyticsService)
 	return &App{
 		GRPCSrv:       grpcServer,
 		OLTPFactory:   oltpFactory,
 		Kafka:         kafkaConsumer,
+		DLQ:           dlq,
 		Router:        r,
 		TopicCron:     topicCron,
 		Notifications: notificationWorker,
+		CDCErrors:     cdcErrors,
+		StopCDC:       stopCDC,
 	}
 }

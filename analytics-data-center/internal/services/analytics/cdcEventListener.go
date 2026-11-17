@@ -7,20 +7,11 @@ import (
 	"log/slog"
 )
 
-func (a *AnalyticsDataCenterService) eventWorker() {
-	for event := range a.eventQueue {
-		log := a.log.With(
-			slog.String("component", "EventWorker"),
-		)
-		log.InfoMsg(loggerpkg.MsgEventWorkerReceived)
-		ctx := context.Background()
-		err := a.handlerCDCFunc(ctx, event)
-		if err != nil {
-			log.ErrorMsg(loggerpkg.MsgEventWorkerError, slog.String("error", err.Error()))
-		}
-	}
-}
-func (a *AnalyticsDataCenterService) EventPreprocessing(evt models.CDCEvent) {
+// EventPreprocessing синхронно применяет CDC-событие к DWH. Возврат nil означает,
+// что запись во все вьюхи завершена и cdc.Listener может коммитить offset.
+// ctx отменяется при остановке приложения — незавершённая запись откатывается,
+// offset не коммитится, и после рестарта событие будет обработано заново.
+func (a *AnalyticsDataCenterService) EventPreprocessing(ctx context.Context, evt models.CDCEvent) error {
 	const op = "EventPreprocessing"
 	log := a.log.With(
 		slog.String("op", op),
@@ -28,7 +19,7 @@ func (a *AnalyticsDataCenterService) EventPreprocessing(evt models.CDCEvent) {
 	)
 
 	log.InfoMsg(loggerpkg.MsgForwardCDCEvent)
-	a.eventQueue <- evt
+	return a.handlerCDCFunc(ctx, evt)
 }
 
 func (a *AnalyticsDataCenterService) handlerCDCFunc(ctx context.Context, evt models.CDCEvent) error {
