@@ -164,9 +164,9 @@ func startWALWatch(log *loggerpkg.Logger, cfg config.WALWatchSetting, sources []
 	if cfg.Disabled || cfg.Interval <= 0 {
 		return nil
 	}
-	names := make([]string, 0, len(sources))
+	list := make([]walwatch.Source, 0, len(sources))
 	for _, s := range sources {
-		names = append(names, s.Name)
+		list = append(list, walwatch.Source{Name: s.Name, Server: walwatch.ServerFromConnString(s.Path)})
 	}
 	open := func(ctx context.Context, source string) (walwatch.SourceDB, error) {
 		db, err := factory.DB(ctx, source)
@@ -175,7 +175,7 @@ func startWALWatch(log *loggerpkg.Logger, cfg config.WALWatchSetting, sources []
 		}
 		return walwatch.NewPostgresSource(db), nil
 	}
-	w := walwatch.New(log, names, open, cfg.Interval, cfg.RetainedWarnMB*1024*1024)
+	w := walwatch.New(log, list, open, cfg.Interval, cfg.RetainedWarnMB*1024*1024)
 	w.Start()
 	return w
 }

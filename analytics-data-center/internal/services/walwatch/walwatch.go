@@ -9,6 +9,8 @@ package walwatch
 import (
 	"context"
 	"log/slog"
+	"net"
+	"net/url"
 	"sort"
 	"sync"
 	"time"
@@ -18,9 +20,35 @@ import (
 )
 
 const (
-	checkTimeout = 30 * time.Second
-	bytesInMB    = 1024 * 1024
+	// sourceCheckTimeout — сколько ждать ответа одного источника. Таймаут у каждого
+	// источника свой: завис один сервер — остальные всё равно проверяются.
+	sourceCheckTimeout = 10 * time.Second
+	bytesInMB          = 1024 * 1024
 )
+
+// Source — источник из конфига и сервер Postgres, на котором он находится.
+type Source struct {
+	Name string
+	// Server — «host:port» сервера (ServerFromConnString). Имена слотов уникальны только
+	// в пределах сервера, поэтому слоты разных серверов оцениваются отдельно. Пусто —
+	// сервер неизвестен, источник считается отдельным сервером.
+	Server string
+}
+
+// ServerFromConnString — «host:port» сервера Postgres из строки подключения вида
+// postgresql://...; пусто, если строку не удалось разобрать. Один сервер, записанный
+// под разными адресами, даст повторные предупреждения, но не пропущенные.
+func ServerFromConnString(conn string) string {
+	u, err := url.Parse(conn)
+	if err != nil || u.Hostname() == "" || (u.Scheme != "postgres" && u.Scheme != "postgresql") {
+		return ""
+	}
+	port := u.Port()
+	if port == "" {
+		port = "5432"
+	}
+	return net.JoinHostPort(u.Hostname(), port)
+}
 
 // Slot — логический слот репликации.
 type Slot struct {
@@ -46,11 +74,12 @@ type SourceDB interface {
 type Opener func(ctx context.Context, source string) (SourceDB, error)
 
 type Watcher struct {
-	log       *loggerpkg.Logger
-	sources   []string
-	open      Opener
-	interval  time.Duration
-	warnBytes int64
+	log           *loggerpkg.Logger
+	sources       []Source
+	open          Opener
+	interval      time.Duration
+	warnBytes     int64
+	sourceTimeout time.Duration
 
 	// limitChecked — источники, у которых уже проверен max_slot_wal_keep_size.
 	// Доступ только из Check, а Check выполняется в одной горутине.
@@ -64,20 +93,20 @@ type Watcher struct {
 	mu        sync.Mutex
 }
 
-// New: sources — имена источников из конфига; warnBytes — порог предупреждения
-// об удерживаемом WAL.
-func New(log *loggerpkg.Logger, sources []string, open Opener, interval time.Duration, warnBytes int64) *Watcher {
+// New: warnBytes — порог предупреждения об удерживаемом WAL.
+func New(log *loggerpkg.Logger, sources []Source, open Opener, interval time.Duration, warnBytes int64) *Watcher {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Watcher{
-		log:          log,
-		sources:      sources,
-		open:         open,
-		interval:     interval,
-		warnBytes:    warnBytes,
-		limitChecked: make(map[string]bool),
-		ctx:          ctx,
-		cancel:       cancel,
-		stopped:      make(chan struct{}),
+		log:           log,
+		sources:       sources,
+		open:          open,
+		interval:      interval,
+		warnBytes:     warnBytes,
+		sourceTimeout: sourceCheckTimeout,
+		limitChecked:  make(map[string]bool),
+		ctx:           ctx,
+		cancel:        cancel,
+		stopped:       make(chan struct{}),
 	}
 }
 
@@ -111,9 +140,8 @@ func (w *Watcher) run() {
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 	for {
-		ctx, cancel := context.WithTimeout(w.ctx, checkTimeout)
-		w.Check(ctx)
-		cancel()
+		// Общий контекст нужен только для остановки; время ограничено у каждого источника.
+		w.Check(w.ctx)
 		select {
 		case <-ticker.C:
 		case <-w.ctx.Done():
@@ -124,43 +152,55 @@ func (w *Watcher) run() {
 
 // Check проверяет слоты всех источников и пишет итог в лог.
 func (w *Watcher) Check(ctx context.Context) {
-	slots := make(map[string]Slot)
-	queried := make(map[string]bool)
-	for _, source := range w.sources {
-		db, err := w.open(ctx, source)
-		if err != nil {
-			w.log.WarnMsg(loggerpkg.MsgWALCheckFailed, slog.String("source", source), slog.String("error", err.Error()))
-			continue
-		}
-		w.checkSlotLimit(ctx, source, db)
-		list, err := db.Slots(ctx)
-		if err != nil {
-			w.log.WarnMsg(loggerpkg.MsgWALCheckFailed, slog.String("source", source), slog.String("error", err.Error()))
-			continue
-		}
-		queried[source] = true
-		// Источники одного сервера видят одни и те же слоты — объединяем по имени.
-		for _, s := range list {
-			slots[s.Name] = s
+	observed := make(map[string]map[string]Slot)
+	for _, src := range w.sources {
+		if slots, ok := w.checkSource(ctx, src); ok {
+			observed[src.Name] = slots
 		}
 	}
-	for _, f := range evaluate(w.sources, queried, slots, w.warnBytes) {
+	for _, f := range evaluate(w.sources, observed, w.warnBytes) {
 		w.report(f)
 	}
-	if len(queried) > 0 {
-		w.logSummary(slots)
+	if len(observed) > 0 {
+		w.logSummary(observed)
 	}
+}
+
+// checkSource опрашивает один источник со своим таймаутом. ok=false — ответа нет,
+// и об источнике в этой проверке ничего не известно.
+func (w *Watcher) checkSource(ctx context.Context, src Source) (map[string]Slot, bool) {
+	ctx, cancel := context.WithTimeout(ctx, w.sourceTimeout)
+	defer cancel()
+	db, err := w.open(ctx, src.Name)
+	if err != nil {
+		w.log.WarnMsg(loggerpkg.MsgWALCheckFailed, slog.String("source", src.Name), slog.String("error", err.Error()))
+		return nil, false
+	}
+	w.checkSlotLimit(ctx, src.Name, db)
+	list, err := db.Slots(ctx)
+	if err != nil {
+		w.log.WarnMsg(loggerpkg.MsgWALCheckFailed, slog.String("source", src.Name), slog.String("error", err.Error()))
+		return nil, false
+	}
+	slots := make(map[string]Slot, len(list))
+	for _, s := range list {
+		slots[s.Name] = s
+	}
+	return slots, true
 }
 
 // checkSlotLimit предупреждает, если у сервера источника нет лимита WAL для слотов.
 // Проверяется один раз на источник: на Postgres до 13 настройки нет, и ошибка
-// повторялась бы на каждой проверке.
+// повторялась бы на каждой проверке. Таймаут — не ответ сервера: тогда повторим.
 func (w *Watcher) checkSlotLimit(ctx context.Context, source string, db SourceDB) {
 	if w.limitChecked[source] {
 		return
 	}
-	w.limitChecked[source] = true
 	value, err := db.MaxSlotWALKeepSize(ctx)
+	if err != nil && ctx.Err() != nil {
+		return
+	}
+	w.limitChecked[source] = true
 	switch {
 	case err != nil:
 		w.log.WarnMsg(loggerpkg.MsgWALSlotLimitUnknown, slog.String("source", source), slog.String("error", err.Error()))
@@ -177,60 +217,95 @@ const (
 	findingUnreserved                        // слот вот-вот будет потерян
 	findingInactive                          // Debezium не читает слот
 	findingRetained                          // слот держит WAL больше порога
-	findingOrphan                            // слот без источника в конфиге
+	findingOrphan                            // слот без источника этого сервера в конфиге
 )
 
 type finding struct {
 	kind   findingKind
 	source string // пусто у брошенного слота
+	server string
 	slot   Slot
 }
 
-// evaluate решает, о чём предупредить. Отсутствие слота сообщается только для
-// источника, который удалось опросить: при ошибке запроса слот мог просто не прочитаться.
-func evaluate(sources []string, queried map[string]bool, slots map[string]Slot, warnBytes int64) []finding {
+// serverSlots — слоты одного сервера, собранные из ответов его источников.
+type serverSlots struct {
+	server string
+	slots  map[string]Slot
+	own    map[string]bool // слоты источников этого сервера
+}
+
+// evaluate решает, о чём предупредить. observed — слоты сервера каждого источника,
+// который удалось опросить.
+//
+// Имя слота уникально только в пределах сервера, поэтому свой слот источника ищется
+// только в ответе его сервера, а брошенные слоты — по каждому серверу отдельно:
+// одноимённый слот другого сервера не скрывает потерянный или отсутствующий.
+func evaluate(sources []Source, observed map[string]map[string]Slot, warnBytes int64) []finding {
 	var out []finding
-	configured := make(map[string]bool, len(sources))
-	for _, source := range sources {
-		name := debezium.SlotName(source)
-		configured[name] = true
-		slot, ok := slots[name]
+	servers := make(map[string]*serverSlots)
+	for _, src := range sources {
+		slots, ok := observed[src.Name]
 		if !ok {
-			if queried[source] {
-				out = append(out, finding{kind: findingMissing, source: source, slot: Slot{Name: name}})
-			}
-			continue
+			continue // ответа нет — об источнике ничего не известно, «не найден» не сообщаем
 		}
-		out = append(out, slotFindings(source, slot, warnBytes)...)
+		name := debezium.SlotName(src.Name)
+		if slot, found := slots[name]; found {
+			out = append(out, slotFindings(src, slot, warnBytes)...)
+		} else {
+			out = append(out, finding{kind: findingMissing, source: src.Name, server: src.Server, slot: Slot{Name: name}})
+		}
+
+		// Источники одного сервера видят одни и те же слоты — объединяем их ответы.
+		key := src.Server
+		if key == "" {
+			key = "source:" + src.Name
+		}
+		srv, ok := servers[key]
+		if !ok {
+			srv = &serverSlots{server: src.Server, slots: make(map[string]Slot), own: make(map[string]bool)}
+			servers[key] = srv
+		}
+		for n, s := range slots {
+			srv.slots[n] = s
+		}
+		srv.own[name] = true
 	}
 
-	var orphans []string
-	for name := range slots {
-		if !configured[name] {
-			orphans = append(orphans, name)
-		}
+	keys := make([]string, 0, len(servers))
+	for key := range servers {
+		keys = append(keys, key)
 	}
-	sort.Strings(orphans)
-	for _, name := range orphans {
-		out = append(out, finding{kind: findingOrphan, slot: slots[name]})
+	sort.Strings(keys)
+	for _, key := range keys {
+		srv := servers[key]
+		var orphans []string
+		for name := range srv.slots {
+			if !srv.own[name] {
+				orphans = append(orphans, name)
+			}
+		}
+		sort.Strings(orphans)
+		for _, name := range orphans {
+			out = append(out, finding{kind: findingOrphan, server: srv.server, slot: srv.slots[name]})
+		}
 	}
 	return out
 }
 
-func slotFindings(source string, s Slot, warnBytes int64) []finding {
+func slotFindings(src Source, s Slot, warnBytes int64) []finding {
 	if s.WALStatus == "lost" {
 		// Потерянный слот неактивен и WAL не держит — остальные проверки бессмысленны.
-		return []finding{{kind: findingLost, source: source, slot: s}}
+		return []finding{{kind: findingLost, source: src.Name, server: src.Server, slot: s}}
 	}
 	var out []finding
 	if s.WALStatus == "unreserved" {
-		out = append(out, finding{kind: findingUnreserved, source: source, slot: s})
+		out = append(out, finding{kind: findingUnreserved, source: src.Name, server: src.Server, slot: s})
 	}
 	if !s.Active {
-		out = append(out, finding{kind: findingInactive, source: source, slot: s})
+		out = append(out, finding{kind: findingInactive, source: src.Name, server: src.Server, slot: s})
 	}
 	if s.RetainedBytes > warnBytes {
-		out = append(out, finding{kind: findingRetained, source: source, slot: s})
+		out = append(out, finding{kind: findingRetained, source: src.Name, server: src.Server, slot: s})
 	}
 	return out
 }
@@ -239,6 +314,9 @@ func (w *Watcher) report(f finding) {
 	attrs := []any{slog.String("slot", f.slot.Name)}
 	if f.source != "" {
 		attrs = append(attrs, slog.String("source", f.source))
+	}
+	if f.server != "" {
+		attrs = append(attrs, slog.String("server", f.server))
 	}
 	if f.slot.RetainedBytes >= 0 && f.kind != findingMissing {
 		attrs = append(attrs, slog.Int64("retained_mb", f.slot.RetainedBytes/bytesInMB))
@@ -259,13 +337,28 @@ func (w *Watcher) report(f finding) {
 	}
 }
 
-func (w *Watcher) logSummary(slots map[string]Slot) {
+// logSummary — сколько слотов на опрошенных серверах и максимум удерживаемого WAL.
+func (w *Watcher) logSummary(observed map[string]map[string]Slot) {
+	unique := make(map[string]Slot)
+	for _, src := range w.sources {
+		slots, ok := observed[src.Name]
+		if !ok {
+			continue
+		}
+		key := src.Server
+		if key == "" {
+			key = "source:" + src.Name
+		}
+		for name, s := range slots {
+			unique[key+"/"+name] = s
+		}
+	}
 	var maxRetained int64
-	for _, s := range slots {
+	for _, s := range unique {
 		maxRetained = max(maxRetained, s.RetainedBytes)
 	}
 	w.log.InfoMsg(loggerpkg.MsgWALSummary,
-		slog.Int("slots", len(slots)),
+		slog.Int("slots", len(unique)),
 		slog.Int64("max_retained_mb", maxRetained/bytesInMB),
 	)
 }
