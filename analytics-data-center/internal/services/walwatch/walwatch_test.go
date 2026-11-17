@@ -353,3 +353,45 @@ func TestStopIsSafeWithoutStartAndOnNil(t *testing.T) {
 	var disabled *Watcher // наблюдатель выключен в конфиге
 	disabled.Stop()
 }
+
+func TestEvaluateUnavailableSourceStillOwnsItsSlot(t *testing.T) {
+	// db1 и db2 на одном сервере; db1 не ответил, а ответ db2 содержит все слоты сервера.
+	sources := []Source{{Name: "db1", Server: "a:5432"}, {Name: "db2", Server: "a:5432"}}
+	got := evaluate(sources, map[string]map[string]Slot{
+		"db2": slotsOf(
+			Slot{Name: "slot_db1", Active: true, WALStatus: "reserved"},
+			Slot{Name: "slot_db2", Active: true, WALStatus: "reserved"},
+		),
+	}, 100*mb)
+
+	require.Empty(t, got, "slot_db1 belongs to a configured source: it is not orphaned just because db1 did not answer")
+}
+
+func TestCheckUnavailableSourceSlotIsNotReportedAsOrphan(t *testing.T) {
+	w, out := newTestWatcher(map[string]*fakeSource{
+		"db2": {keepSize: "10GB", slots: []Slot{
+			{Name: "slot_db1", Active: true, WALStatus: "reserved"},
+			{Name: "slot_db2", Active: true, WALStatus: "reserved"},
+		}},
+	}, "db1", "db2") // db1 недоступен, оба источника на одном сервере
+
+	w.Check(context.Background())
+
+	logs := out.String()
+	require.Contains(t, logs, loggerpkg.MsgWALCheckFailed.RU)
+	require.NotContains(t, logs, loggerpkg.MsgWALSlotOrphan.RU)
+	require.NotContains(t, logs, loggerpkg.MsgWALSlotMissing.RU)
+}
+
+func TestEvaluateSourceWithUnknownServerOwnsItsSlotEverywhere(t *testing.T) {
+	// Сервер db1 неизвестен (строка подключения не URL): его слот в ответе db2 — не брошенный.
+	sources := []Source{{Name: "db1"}, {Name: "db2", Server: "a:5432"}}
+	got := evaluate(sources, map[string]map[string]Slot{
+		"db2": slotsOf(
+			Slot{Name: "slot_db1", Active: true, WALStatus: "reserved"},
+			Slot{Name: "slot_db2", Active: true, WALStatus: "reserved"},
+		),
+	}, 100*mb)
+
+	require.Empty(t, got)
+}

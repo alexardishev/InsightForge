@@ -243,6 +243,28 @@ type serverSlots struct {
 func evaluate(sources []Source, observed map[string]map[string]Slot, warnBytes int64) []finding {
 	var out []finding
 	servers := make(map[string]*serverSlots)
+	// Чей слот — решает конфиг, а не успех запроса: слот источника, который сейчас не
+	// ответил, виден в ответе соседа по серверу и не должен выглядеть брошенным.
+	for _, src := range sources {
+		key := serverKey(src)
+		srv, ok := servers[key]
+		if !ok {
+			srv = &serverSlots{server: src.Server, slots: make(map[string]Slot), own: make(map[string]bool)}
+			servers[key] = srv
+		}
+		srv.own[debezium.SlotName(src.Name)] = true
+	}
+	// Сервер источника неизвестен (строка подключения не URL) — он может оказаться любым
+	// из опрошенных, поэтому его слот нигде не считается брошенным.
+	for _, src := range sources {
+		if src.Server != "" {
+			continue
+		}
+		for _, srv := range servers {
+			srv.own[debezium.SlotName(src.Name)] = true
+		}
+	}
+
 	for _, src := range sources {
 		slots, ok := observed[src.Name]
 		if !ok {
@@ -254,21 +276,11 @@ func evaluate(sources []Source, observed map[string]map[string]Slot, warnBytes i
 		} else {
 			out = append(out, finding{kind: findingMissing, source: src.Name, server: src.Server, slot: Slot{Name: name}})
 		}
-
 		// Источники одного сервера видят одни и те же слоты — объединяем их ответы.
-		key := src.Server
-		if key == "" {
-			key = "source:" + src.Name
-		}
-		srv, ok := servers[key]
-		if !ok {
-			srv = &serverSlots{server: src.Server, slots: make(map[string]Slot), own: make(map[string]bool)}
-			servers[key] = srv
-		}
+		srv := servers[serverKey(src)]
 		for n, s := range slots {
 			srv.slots[n] = s
 		}
-		srv.own[name] = true
 	}
 
 	keys := make([]string, 0, len(servers))
@@ -290,6 +302,14 @@ func evaluate(sources []Source, observed map[string]map[string]Slot, warnBytes i
 		}
 	}
 	return out
+}
+
+// serverKey группирует источники по серверу; источник с неизвестным сервером — отдельная группа.
+func serverKey(src Source) string {
+	if src.Server == "" {
+		return "source:" + src.Name
+	}
+	return src.Server
 }
 
 func slotFindings(src Source, s Slot, warnBytes int64) []finding {
@@ -345,12 +365,8 @@ func (w *Watcher) logSummary(observed map[string]map[string]Slot) {
 		if !ok {
 			continue
 		}
-		key := src.Server
-		if key == "" {
-			key = "source:" + src.Name
-		}
 		for name, s := range slots {
-			unique[key+"/"+name] = s
+			unique[serverKey(src)+"/"+name] = s
 		}
 	}
 	var maxRetained int64
