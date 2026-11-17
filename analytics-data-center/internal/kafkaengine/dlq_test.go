@@ -14,9 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeTopicAdmin записывает запросы к admin-API. exists — топики, которые уже есть в кластере.
+// fakeTopicAdmin записывает запросы к admin-API. exists — топики, которые уже есть в кластере;
+// missing — топики, которых нет: IncrementalAlterConfigs отвечает по ним UNKNOWN_TOPIC_OR_PART.
 type fakeTopicAdmin struct {
 	exists   map[string]bool
+	missing  map[string]bool
 	created  []kafka.TopicSpecification
 	altered  []kafka.ConfigResource
 	alterErr error
@@ -42,7 +44,11 @@ func (a *fakeTopicAdmin) IncrementalAlterConfigs(_ context.Context, resources []
 	}
 	var results []kafka.ConfigResourceResult
 	for _, r := range resources {
-		results = append(results, kafka.ConfigResourceResult{Type: r.Type, Name: r.Name})
+		res := kafka.ConfigResourceResult{Type: r.Type, Name: r.Name}
+		if a.missing[r.Name] {
+			res.Error = kafka.NewError(kafka.ErrUnknownTopicOrPart, "unknown topic", false)
+		}
+		results = append(results, res)
 	}
 	return results, nil
 }
@@ -69,23 +75,6 @@ func TestDLQSendRejectsMessageWithoutTopic(t *testing.T) {
 	d := newTestDLQ(&fakeTopicAdmin{}, 0)
 	for _, msg := range []*kafka.Message{nil, {}} {
 		require.Error(t, d.Send(context.Background(), msg, errors.New("bad")))
-	}
-}
-
-func TestRetentionMs(t *testing.T) {
-	for _, tc := range []struct {
-		retention time.Duration
-		value     string
-		set       bool
-	}{
-		{0, "", false},                        // значение брокера по умолчанию
-		{720 * time.Hour, "2592000000", true}, // 30 дней
-		{-time.Second, "-1", true},            // бессрочно
-		{500 * time.Microsecond, "1", true},   // меньше миллисекунды не округляем до 0
-	} {
-		value, set := retentionMs(tc.retention)
-		require.Equal(t, tc.set, set, tc.retention)
-		require.Equal(t, tc.value, value, tc.retention)
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"analyticDataCenter/analytics-data-center/internal/lib/retention"
 	"analyticDataCenter/analytics-data-center/internal/logger"
 )
 
@@ -35,14 +36,22 @@ func SlotName(source string) string        { return "slot_" + source }
 func PublicationName(source string) string { return "pub_" + source }
 func TopicPrefix(source string) string     { return "dbserver_" + source }
 
+// ConnectorOptions — настройки коннектора, общие для всех источников.
+type ConnectorOptions struct {
+	// TopicRetention — срок хранения топиков, которые создаёт Connect
+	// (kafka.debezium_topic_retention): 0 — значение брокера по умолчанию,
+	// отрицательный — бессрочно.
+	TopicRetention time.Duration
+}
+
 // RegisterPostgresConnector создаёт коннектор или обновляет его конфиг:
 // PUT /connectors/<name>/config работает в обоих случаях. POST /connectors для
 // уже существующего коннектора отвечает 409, и новые настройки до него не доходили.
 // Если конфиг не изменился, PUT не отправляется: обновление конфига перезапускает
 // коннектор, и CDC вставал бы на каждом старте приложения.
-func RegisterPostgresConnector(connectURL string, name string, pgConn string) error {
+func RegisterPostgresConnector(connectURL string, name string, pgConn string, opts ConnectorOptions) error {
 	connector := ConnectorName(name)
-	connectorConfig, err := postgresConnectorConfig(name, pgConn)
+	connectorConfig, err := postgresConnectorConfig(name, pgConn, opts)
 	if err != nil {
 		return err
 	}
@@ -100,7 +109,7 @@ func currentConnectorConfig(endpoint string) (map[string]string, bool, error) {
 // Значения — строки: REST API Connect принимает конфиг как map<string, string>.
 // Ключ name совпадает с тем, что Connect возвращает в GET конфига, поэтому
 // неизменённый конфиг сравнивается как равный.
-func postgresConnectorConfig(name, pgConn string) (map[string]string, error) {
+func postgresConnectorConfig(name, pgConn string, opts ConnectorOptions) (map[string]string, error) {
 	u, err := url.Parse(pgConn)
 	if err != nil {
 		return nil, fmt.Errorf("ошибка парсинга url: %w", err)
@@ -115,7 +124,7 @@ func postgresConnectorConfig(name, pgConn string) (map[string]string, error) {
 	}
 	password, _ := u.User.Password()
 
-	return map[string]string{
+	connectorConfig := map[string]string{
 		"name":                           ConnectorName(name),
 		"connector.class":                "io.debezium.connector.postgresql.PostgresConnector",
 		"plugin.name":                    "pgoutput",
@@ -136,7 +145,16 @@ func postgresConnectorConfig(name, pgConn string) (map[string]string, error) {
 		"value.converter":                "org.apache.kafka.connect.json.JsonConverter",
 		"key.converter.schemas.enable":   "false",
 		"value.converter.schemas.enable": "false",
-	}, nil
+	}
+	// Топики создаёт сам Connect с заданным сроком хранения (нужен topic.creation.enable=true
+	// у воркера — так по умолчанию). Без replication.factor и partitions Connect топики не
+	// создаёт, и их создавал брокер через auto-create со сроком хранения по умолчанию.
+	if value, set := retention.Ms(opts.TopicRetention); set {
+		connectorConfig["topic.creation.default.replication.factor"] = "-1" // значение брокера
+		connectorConfig["topic.creation.default.partitions"] = "-1"         // значение брокера
+		connectorConfig["topic.creation.default."+retention.ConfigKey] = value
+	}
+	return connectorConfig, nil
 }
 
 // WaitConnectorsReady ждёт, пока каждый коннектор перейдёт в RUNNING, но не дольше

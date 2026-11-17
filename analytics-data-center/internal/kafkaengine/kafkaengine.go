@@ -8,7 +8,9 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
+	"analyticDataCenter/analytics-data-center/internal/lib/retention"
 	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
@@ -87,6 +89,9 @@ type TopicLister interface {
 	ListTopics(ctx context.Context) ([]string, error)
 }
 
+// adminRequestTimeout — сколько ждать ответа admin-API Kafka.
+const adminRequestTimeout = 10 * time.Second
+
 type Engine struct {
 	consumer   *kafka.Consumer
 	log        *loggerpkg.Logger
@@ -95,6 +100,14 @@ type Engine struct {
 	mu         sync.Mutex
 	// onRevoked вызывается из rebalance-callback, то есть внутри Poll.
 	onRevoked atomic.Pointer[func([]kafka.TopicPartition)]
+
+	// admin создан из consumer-а и закрывается раньше него (Close).
+	admin topicAdmin
+	// topicRetention — срок хранения топиков Debezium (kafka.debezium_topic_retention).
+	topicRetention time.Duration
+	// retentionAligned — топики, срок хранения которых уже приведён к конфигу.
+	// Доступ только из subscriptionWorker.
+	retentionAligned map[string]struct{}
 }
 
 func NewEngine(
@@ -104,6 +117,7 @@ func NewEngine(
 	EnableAutoCommit string,
 	SessionTimeoutMs string,
 	ClientId string,
+	topicRetention time.Duration,
 	lister TopicLister,
 	log *loggerpkg.Logger,
 ) (*Engine, error) {
@@ -118,15 +132,23 @@ func NewEngine(
 	}
 
 	eng := &Engine{
-		log:        log,
-		topicCh:    make(chan string, 100),
-		subscribed: make(map[string]struct{}),
+		log:              log,
+		topicCh:          make(chan string, 100),
+		subscribed:       make(map[string]struct{}),
+		topicRetention:   topicRetention,
+		retentionAligned: make(map[string]struct{}),
 	}
 	c, err := NewKafkaConsumer(BootstrapServers, GroupId, AutoOffsetReset, EnableAutoCommit, SessionTimeoutMs, ClientId, topics, eng.rebalance, log)
 	if err != nil {
 		return nil, err
 	}
+	admin, err := kafka.NewAdminClientFromConsumer(c)
+	if err != nil {
+		c.Close()
+		return nil, fmt.Errorf("create Kafka admin client: %w", err)
+	}
 	eng.consumer = c
+	eng.admin = admin
 	for _, t := range topics {
 		eng.subscribed[t] = struct{}{}
 	}
@@ -137,6 +159,16 @@ func NewEngine(
 
 // Вернет эземпляр консьюмера
 func (e *Engine) Consumer() *kafka.Consumer { return e.consumer }
+
+// Close закрывает admin-клиент, затем consumer (admin создан из consumer-а).
+// Вызывать только после остановки cdc.Listener: закрывать consumer, пока listener
+// внутри Poll, нельзя.
+func (e *Engine) Close() error {
+	if e.admin != nil {
+		e.admin.Close()
+	}
+	return e.consumer.Close()
+}
 
 // OnPartitionsRevoked регистрирует обработчик отзыва партиций (cdc.Listener.PartitionsRevoked).
 // Обработчик вызывается из rebalance-callback внутри Poll, в горутине, которая вызывает Poll.
@@ -190,7 +222,36 @@ func (e *Engine) EnqueueTopic(topic string) {
 func (e *Engine) subscriptionWorker() {
 	for topic := range e.topicCh {
 		e.subscribe(topic)
+		e.alignRetention(topic)
 	}
+}
+
+// alignRetention приводит срок хранения уже существующего топика к конфигу (меняет
+// только retention.ms), один раз на топик за время работы процесса. Новые топики
+// создаёт Connect сразу с нужным сроком (topic.creation.* в конфиге коннектора),
+// поэтому отсутствующий топик пропускается без повторов. При другой ошибке попытка
+// повторится, когда cron снова поставит топик в очередь.
+func (e *Engine) alignRetention(topic string) {
+	value, set := retention.Ms(e.topicRetention)
+	if !set || e.admin == nil {
+		return
+	}
+	if _, ok := e.retentionAligned[topic]; ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), adminRequestTimeout)
+	defer cancel()
+	err := setTopicRetention(ctx, e.admin, topic, value)
+	switch {
+	case err == nil:
+		e.log.InfoMsg(loggerpkg.MsgKafkaTopicRetentionSet, slog.String("topic", topic), slog.String(retention.ConfigKey, value))
+	case isUnknownTopic(err):
+		e.log.InfoMsg(loggerpkg.MsgKafkaTopicNotCreatedYet, slog.String("topic", topic))
+	default:
+		e.log.WarnMsg(loggerpkg.MsgKafkaTopicRetentionFailed, slog.String("topic", topic), slog.String("error", err.Error()))
+		return
+	}
+	e.retentionAligned[topic] = struct{}{}
 }
 
 // subscribe добавляет топик к подписке. В subscribed топик попадает только после

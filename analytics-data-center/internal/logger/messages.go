@@ -166,4 +166,12 @@ var (
 	MsgKafkaPartitionsNotAssigned = Message{RU: "Разделы не назначены", EN: "partitions not assigned", CN: "分区未分配"}
 	MsgKafkaPartitionAssigned     = Message{RU: "Назначен раздел", EN: "partition assigned", CN: "分配分区"}
 	MsgKafkaPartitionRevoked      = Message{RU: "Раздел отозван", EN: "partition revoked", CN: "分区已撤销"}
+
+	// Debezium topic retention and consumer lag
+	MsgKafkaTopicRetentionSet    = Message{RU: "Срок хранения топика приведён к конфигу", EN: "topic retention set from config", CN: "已按配置设置主题保留时间"}
+	MsgKafkaTopicRetentionFailed = Message{RU: "Не удалось изменить срок хранения топика, повтор позже", EN: "failed to set topic retention, will retry", CN: "设置主题保留时间失败，稍后重试"}
+	MsgKafkaTopicNotCreatedYet   = Message{RU: "Топика ещё нет: Connect создаст его со сроком хранения из конфига", EN: "topic does not exist yet: Connect will create it with the configured retention", CN: "主题尚不存在：Connect 将按配置的保留时间创建"}
+	MsgCDCLagSummary             = Message{RU: "Отставание CDC", EN: "CDC lag", CN: "CDC 延迟"}
+	MsgCDCLagHigh                = Message{RU: "Отставание CDC приближается к сроку хранения топика: события могут быть удалены непрочитанными", EN: "CDC lag is approaching topic retention: events may be deleted unread", CN: "CDC 延迟接近主题保留时间：事件可能在未读取前被删除"}
+	MsgCDCLagFailed              = Message{RU: "Не удалось рассчитать отставание CDC", EN: "failed to compute CDC lag", CN: "无法计算 CDC 延迟"}
 )

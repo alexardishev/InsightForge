@@ -90,7 +90,7 @@ const testConn = "postgresql://debezium:secret@pg:5432/shop"
 func TestRegisterPostgresConnectorCreatesConnectorWithPut(t *testing.T) {
 	connect := newFakeConnect(t, http.StatusCreated)
 
-	require.NoError(t, RegisterPostgresConnector(connect.URL, "db1", testConn))
+	require.NoError(t, RegisterPostgresConnector(connect.URL, "db1", testConn, ConnectorOptions{}))
 
 	puts := connect.puts()
 	require.Len(t, puts, 1)
@@ -107,18 +107,18 @@ func TestRegisterPostgresConnectorCreatesConnectorWithPut(t *testing.T) {
 
 func TestRegisterPostgresConnectorSkipsUnchangedConfig(t *testing.T) {
 	connect := newFakeConnect(t, http.StatusOK)
-	require.NoError(t, RegisterPostgresConnector(connect.URL, "db1", testConn))
+	require.NoError(t, RegisterPostgresConnector(connect.URL, "db1", testConn, ConnectorOptions{}))
 
-	require.NoError(t, RegisterPostgresConnector(connect.URL, "db1", testConn))
+	require.NoError(t, RegisterPostgresConnector(connect.URL, "db1", testConn, ConnectorOptions{}))
 
 	require.Len(t, connect.puts(), 1, "an unchanged config is not re-sent: Connect would restart the connector on every app start")
 }
 
 func TestRegisterPostgresConnectorUpdatesChangedConfig(t *testing.T) {
 	connect := newFakeConnect(t, http.StatusOK)
-	require.NoError(t, RegisterPostgresConnector(connect.URL, "db1", testConn))
+	require.NoError(t, RegisterPostgresConnector(connect.URL, "db1", testConn, ConnectorOptions{}))
 
-	require.NoError(t, RegisterPostgresConnector(connect.URL, "db1", "postgresql://debezium:rotated@pg:5432/shop"))
+	require.NoError(t, RegisterPostgresConnector(connect.URL, "db1", "postgresql://debezium:rotated@pg:5432/shop", ConnectorOptions{}))
 
 	puts := connect.puts()
 	require.Len(t, puts, 2)
@@ -128,7 +128,7 @@ func TestRegisterPostgresConnectorUpdatesChangedConfig(t *testing.T) {
 func TestRegisterPostgresConnectorReportsHTTPError(t *testing.T) {
 	for _, status := range []int{http.StatusBadRequest, http.StatusConflict, http.StatusInternalServerError} {
 		connect := newFakeConnect(t, status)
-		require.Error(t, RegisterPostgresConnector(connect.URL, "db1", testConn), status)
+		require.Error(t, RegisterPostgresConnector(connect.URL, "db1", testConn, ConnectorOptions{}), status)
 	}
 }
 
@@ -139,7 +139,7 @@ func TestRegisterPostgresConnectorRejectsInvalidConnectionString(t *testing.T) {
 		"postgresql://debezium:secret@pg:5432/", // пустое имя базы
 		"postgresql://debezium:secret@pg/shop",  // нет порта
 	} {
-		require.Error(t, RegisterPostgresConnector(connect.URL, "db1", conn), conn)
+		require.Error(t, RegisterPostgresConnector(connect.URL, "db1", conn, ConnectorOptions{}), conn)
 	}
 	require.Empty(t, connect.requests, "an invalid connection string must not reach Connect")
 }
@@ -171,4 +171,35 @@ func TestConnectorNames(t *testing.T) {
 	require.Equal(t, "slot_db1", SlotName("db1"))
 	require.Equal(t, "pub_db1", PublicationName("db1"))
 	require.Equal(t, "dbserver_db1", TopicPrefix("db1"))
+}
+
+func TestConnectorConfigCreatesTopicsWithRetention(t *testing.T) {
+	cfg, err := postgresConnectorConfig("db1", testConn, ConnectorOptions{TopicRetention: 336 * time.Hour})
+	require.NoError(t, err)
+
+	// Без replication.factor и partitions Connect топики не создаёт — их создаёт брокер
+	// через auto-create со сроком хранения по умолчанию.
+	require.Equal(t, "-1", cfg["topic.creation.default.replication.factor"])
+	require.Equal(t, "-1", cfg["topic.creation.default.partitions"])
+	require.Equal(t, "1209600000", cfg["topic.creation.default.retention.ms"])
+}
+
+func TestConnectorConfigWithoutRetentionLeavesTopicsToBroker(t *testing.T) {
+	cfg, err := postgresConnectorConfig("db1", testConn, ConnectorOptions{})
+	require.NoError(t, err)
+
+	for key := range cfg {
+		require.False(t, strings.HasPrefix(key, "topic.creation."), key)
+	}
+}
+
+func TestRegisterPostgresConnectorAppliesChangedRetention(t *testing.T) {
+	connect := newFakeConnect(t, http.StatusOK)
+	require.NoError(t, RegisterPostgresConnector(connect.URL, "db1", testConn, ConnectorOptions{}))
+
+	require.NoError(t, RegisterPostgresConnector(connect.URL, "db1", testConn, ConnectorOptions{TopicRetention: 336 * time.Hour}))
+
+	puts := connect.puts()
+	require.Len(t, puts, 2, "a changed retention must reach the already registered connector")
+	require.Equal(t, "1209600000", puts[1].body["topic.creation.default.retention.ms"])
 }
