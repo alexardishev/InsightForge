@@ -5,6 +5,8 @@ import (
 	"analyticDataCenter/analytics-data-center/internal/lib/duplicate"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 )
 
@@ -60,7 +62,9 @@ func GenerateQueryCreateTempTableClickhouse(
 					if clmn.Transform.Type == transformTypeJSON {
 						mapping := clmn.Transform.Mapping.MappingJSON
 						for _, colmnMappingRow := range mapping {
-							for _, value := range colmnMappingRow.Mapping {
+							// Порядок колонок не должен зависеть от случайного обхода map.
+							for _, jsonField := range slices.Sorted(maps.Keys(colmnMappingRow.Mapping)) {
+								value := colmnMappingRow.Mapping[jsonField]
 								colName := value
 								typeClm := colmnMappingRow.TypeField
 								column := &models.Column{
