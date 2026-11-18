@@ -2,8 +2,8 @@ package routes
 
 import (
 	"analyticDataCenter/analytics-data-center/internal/api/handlers"
-	dbhandlers "analyticDataCenter/analytics-data-center/internal/api/handlers/db_handlers.go"
-	taskshandlers "analyticDataCenter/analytics-data-center/internal/api/handlers/tasks_handlers.go"
+	"analyticDataCenter/analytics-data-center/internal/api/handlers/dbhandlers"
+	"analyticDataCenter/analytics-data-center/internal/api/handlers/taskshandlers"
 	"analyticDataCenter/analytics-data-center/internal/api/middleware"
 	"analyticDataCenter/analytics-data-center/internal/notifications"
 	serviceanalytics "analyticDataCenter/analytics-data-center/internal/services/analytics"

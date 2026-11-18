@@ -28,7 +28,7 @@ We welcome all improvements, from typo fixes to major new features. Please follo
 ## Pull Requests
 
 - Reference related issues (if any) in your PR description.
-- Ensure all tests pass before submitting a PR.
+- Ensure all tests pass before submitting a PR: `make build lint test-race` (CI runs the same checks plus `make fmt-check` on every pull request).
 - Be prepared for code review — we may ask for changes or clarifications.
 - Stay open to discussion and suggestions!
 

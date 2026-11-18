@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 )
 
@@ -55,7 +57,9 @@ func GenerateSelectInsertDataQueryPostgres(
 					// JSON трансформация (Postgres)
 					if column.Transform != nil && column.Transform.Type == transformTypeJSON && column.Transform.Mapping != nil {
 						for _, mapping := range column.Transform.Mapping.MappingJSON {
-							for jsonField, outputColumn := range mapping.Mapping {
+							// Порядок ключей map случаен — сортируем, чтобы SQL был одинаковым при каждом запуске.
+							for _, jsonField := range slices.Sorted(maps.Keys(mapping.Mapping)) {
+								outputColumn := mapping.Mapping[jsonField]
 								extracted := fmt.Sprintf("%s->>'%s' AS %s", column.Name, jsonField, outputColumn)
 								columns = append(columns, extracted)
 							}
@@ -69,7 +73,8 @@ func GenerateSelectInsertDataQueryPostgres(
 						mapping := column.Transform.Mapping
 						var a strings.Builder
 						a.WriteString("CASE ")
-						for key, value := range mapping.Mapping {
+						for _, key := range slices.Sorted(maps.Keys(mapping.Mapping)) {
+							value := mapping.Mapping[key]
 							safeKey := strings.ReplaceAll(key, "'", "''")
 							safeValue := strings.ReplaceAll(value, "'", "''")
 							a.WriteString(fmt.Sprintf("WHEN %s = '%s' THEN '%s' ", column.Name, safeKey, safeValue))
