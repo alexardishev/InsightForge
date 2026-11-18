@@ -45,11 +45,12 @@ func TestDeleteTempTables(t *testing.T) {
 }
 
 func TestDeleteTempTablesError(t *testing.T) {
-	dwh := &mockDWH{deleteErrors: map[string]error{"t2": fmt.Errorf("fail")}}
+	deleteErr := fmt.Errorf("fail")
+	dwh := &mockDWH{deleteErrors: map[string]error{"t1": deleteErr}}
 	svc := &AnalyticsDataCenterService{log: getTestLogger(), DWHProvider: dwh}
 
 	err := svc.DeleteTempTables(context.Background(), []string{"t1", "t2"})
 
-	require.Error(t, err)
-	require.Equal(t, []string{"t1"}, dwh.deleteCalls[:1])
+	require.ErrorIs(t, err, deleteErr)
+	require.Equal(t, []string{"t1", "t2"}, dwh.deleteCalls)
 }

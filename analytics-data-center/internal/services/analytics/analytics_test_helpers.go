@@ -26,6 +26,7 @@ type mockDWH struct {
 	mergeErr     error
 	indexCalls   []string
 	indexErr     error
+	onReplica    func(context.Context, string) error
 	renameCalls  []string
 	renameErr    error
 	dropCalls    []string
@@ -75,7 +76,12 @@ func (m *mockDWH) MergeTempTables(_ context.Context, _ string) error {
 	m.mergeCalls++
 	return m.mergeErr
 }
-func (m *mockDWH) ReplicaIdentityFull(context.Context, string) error { return nil }
+func (m *mockDWH) ReplicaIdentityFull(ctx context.Context, table string) error {
+	if m.onReplica != nil {
+		return m.onReplica(ctx, table)
+	}
+	return nil
+}
 func (m *mockDWH) InsertOrUpdateTransactional(context.Context, string, map[string]interface{}, []string) error {
 	return nil
 }

@@ -2,6 +2,7 @@ package serviceanalytics
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
@@ -14,7 +15,7 @@ func TestPrepareAndInsertData(t *testing.T) {
 	oltp := &mockOLTP{selectResult: []map[string]interface{}{{"id": 1, "name": "A"}}}
 	factory := &mockFactory{store: map[string]storage.OLTPDB{"db1": oltp}}
 	dwh := &mockDWH{columns: map[string][]string{"tmp_users": {"id", "name"}}}
-	view := &models.View{
+	view := models.View{
 		Name: "v",
 		Sources: []models.Source{{
 			Name: "db1",
@@ -33,11 +34,17 @@ func TestPrepareAndInsertData(t *testing.T) {
 	svc := &AnalyticsDataCenterService{log: getTestLogger(), OLTPFactory: factory, DWHProvider: dwh, DWHDbName: DbPostgres, OLTPDbName: DbPostgres}
 	data := []models.CountInsertData{{TableName: "users", Count: 1, DataBaseName: "db1", TempTableName: "tmp_users"}}
 
-	ok, err := svc.prepareAndInsertData(context.Background(), &data, view)
+	t.Run("merge succeeds", func(t *testing.T) {
+		err := svc.prepareAndInsertData(context.Background(), data, view)
+		require.NoError(t, err)
+		require.NotEmpty(t, dwh.insertCalls)
+		require.Equal(t, 1, dwh.mergeCalls)
+	})
 
-	require.True(t, ok)
-	require.NoError(t, err)
-	require.NotEmpty(t, dwh.insertCalls)
-	require.Equal(t, 1, dwh.mergeCalls)
-	require.Equal(t, []string{"tmp_users"}, dwh.deleteCalls)
+	t.Run("merge fails", func(t *testing.T) {
+		mergeErr := errors.New("merge failed")
+		dwh.mergeErr = mergeErr
+		err := svc.prepareAndInsertData(context.Background(), data, view)
+		require.ErrorIs(t, err, mergeErr)
+	})
 }
