@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	loggerpkg "analyticDataCenter/analytics-data-center/internal/logger"
@@ -19,7 +20,9 @@ import (
 )
 
 var (
-	ErrInvalidSchemID = errors.New("invalid schemaID")
+	ErrInvalidSchemID    = errors.New("invalid schemaID")
+	ErrETLQueueFull      = errors.New("очередь ETL заполнена")
+	ErrETLViewInProgress = errors.New("ETL для этой витрины уже выполняется или находится в очереди")
 )
 
 const (
@@ -34,6 +37,11 @@ const (
 )
 
 const (
+	etlWorkerCount = 2
+	etlQueueSize   = 100
+)
+
+const (
 	ErrorCreateTemplateTable = "Не удалось создать временные таблицы"
 	ErrorCountInsertData     = "Не удалось посчитать количество вставляемых данных"
 	ErrorReplicaFullData     = "Не удалось включить полную репликацию таблицы"
@@ -42,7 +50,7 @@ const (
 
 type TaskETL struct {
 	ViewID int64
-	TaskID string
+	TaskID uuid.UUID
 }
 
 // TopicNotifier allows to send information about new topics to subscribe.
@@ -63,6 +71,9 @@ type AnalyticsDataCenterService struct {
 	OLTPDbName              string
 	RenameHeuristicEnabled  bool
 	jobQueue                chan TaskETL
+	queueSlots              chan struct{}
+	activeViewsMu           sync.Mutex
+	activeViews             map[int64]struct{}
 	SMTPClient              smtpsender.SMTP
 	topicNotifier           TopicNotifier
 	notifier                notifications.Notifier
@@ -100,10 +111,13 @@ func New(
 		DWHDbPath:               DWHDbPath,
 		OLTPDbName:              OLTPDbName,
 		RenameHeuristicEnabled:  renameHeuristic,
-		jobQueue:                make(chan TaskETL, 100),
+		jobQueue:                make(chan TaskETL, etlQueueSize),
+		queueSlots:              make(chan struct{}, etlQueueSize),
 		SMTPClient:              SMTPClient,
 	}
-	go service.etlWorker()
+	for range etlWorkerCount {
+		go service.etlWorker()
+	}
 	return service
 }
 
@@ -117,11 +131,25 @@ func (a *AnalyticsDataCenterService) SetNotifier(notifier notifications.Notifier
 	a.notifier = notifier
 }
 
-func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView int64) (taskID string, err error) {
-	taskID = uuid.NewString()
+func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView int64) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	// Сначала резервируем место, чтобы задача в системной БД всегда попала в очередь.
+	select {
+	case a.queueSlots <- struct{}{}:
+	default:
+		return "", ErrETLQueueFull
+	}
+	if !a.reserveView(idView) {
+		<-a.queueSlots
+		return "", ErrETLViewInProgress
+	}
 
-	err = a.TaskService.CreateTask(ctx, taskID, Progress)
-	if err != nil {
+	taskID := uuid.New()
+	if err := a.TaskService.CreateTask(ctx, taskID.String(), Progress); err != nil {
+		a.releaseView(idView)
+		<-a.queueSlots
 		return "", err
 	}
 
@@ -129,8 +157,26 @@ func (a *AnalyticsDataCenterService) StartETLProcess(ctx context.Context, idView
 		TaskID: taskID,
 		ViewID: idView,
 	}
-	return taskID, nil
+	return taskID.String(), nil
+}
 
+func (a *AnalyticsDataCenterService) reserveView(idView int64) bool {
+	a.activeViewsMu.Lock()
+	defer a.activeViewsMu.Unlock()
+	if _, exists := a.activeViews[idView]; exists {
+		return false
+	}
+	if a.activeViews == nil {
+		a.activeViews = make(map[int64]struct{})
+	}
+	a.activeViews[idView] = struct{}{}
+	return true
+}
+
+func (a *AnalyticsDataCenterService) releaseView(idView int64) {
+	a.activeViewsMu.Lock()
+	defer a.activeViewsMu.Unlock()
+	delete(a.activeViews, idView)
 }
 
 func (a *AnalyticsDataCenterService) ListViews(ctx context.Context) ([]models.SchemaInfo, error) {
@@ -143,45 +189,56 @@ func (a *AnalyticsDataCenterService) ListViews(ctx context.Context) ([]models.Sc
 
 func (a *AnalyticsDataCenterService) etlWorker() {
 	for job := range a.jobQueue {
-		log := a.log.With(
-			slog.String("task", job.TaskID),
-			slog.String("component", "ETLWorker"),
-		)
-		log.InfoMsg(loggerpkg.MsgETLWorkerStart)
-
-		ctx := context.Background()
-		status, comment := Completed, CompletedTask
-		if err := a.runETL(ctx, job.ViewID); err != nil {
-			log.Error("задача ETL завершилась с ошибкой", slog.String("error", err.Error()))
-			status, comment = Error, err.Error()
-		}
-		if err := a.TaskService.ChangeStatusTask(ctx, job.TaskID, status, comment); err != nil {
-			log.ErrorMsg(loggerpkg.MsgChangeStatusFailed, slog.String("status", status), slog.String("error", err.Error()))
-			continue
-		}
-		a.notifyTaskStatus(job.TaskID, status, comment)
+		<-a.queueSlots
+		a.processETLJob(job)
 	}
 }
 
-func (a *AnalyticsDataCenterService) runETL(ctx context.Context, idView int64) error {
+func (a *AnalyticsDataCenterService) processETLJob(job TaskETL) {
+	taskID := job.TaskID.String()
+	log := a.log.With(
+		slog.String("task", taskID),
+		slog.String("component", "ETLWorker"),
+	)
+	log.InfoMsg(loggerpkg.MsgETLWorkerStart)
+
+	ctx := context.Background()
+	status, comment := Completed, CompletedTask
+	warning, err := a.runETL(ctx, job)
+	if err != nil {
+		log.Error("задача ETL завершилась с ошибкой", slog.String("error", err.Error()))
+		status, comment = Error, err.Error()
+	} else if warning != "" {
+		comment += ". Требуется ручная очистка. " + warning
+	}
+	statusErr := a.TaskService.ChangeStatusTask(ctx, taskID, status, comment)
+	a.releaseView(job.ViewID)
+	if statusErr != nil {
+		log.ErrorMsg(loggerpkg.MsgChangeStatusFailed, slog.String("status", status), slog.String("error", statusErr.Error()))
+		return
+	}
+	a.notifyTaskStatus(taskID, status, comment)
+}
+
+func (a *AnalyticsDataCenterService) runETL(ctx context.Context, job TaskETL) (warning string, err error) {
 	const op = "analytics.StartETLProcess"
 	log := a.log.With(
 		slog.String("op", op),
-		slog.Int64("idSchema", idView),
+		slog.Int64("idSchema", job.ViewID),
 	)
 	log.InfoMsg(loggerpkg.MsgETLStart)
-	viewSchema, err := a.SchemaProvider.GetView(ctx, idView)
+	viewSchema, err := a.SchemaProvider.GetView(ctx, job.ViewID)
 	if err != nil {
 		log.Warn("не удалось получить схему витрины", slog.String("error", err.Error()))
 		if errors.Is(err, storage.ErrSchemaNotFound) {
-			return fmt.Errorf("%s: %w", op, ErrInvalidSchemID)
+			return "", fmt.Errorf("%s: %w", op, ErrInvalidSchemID)
 		}
-		return fmt.Errorf("%s: %w", op, err)
+		return "", fmt.Errorf("%s: %w", op, err)
 	}
-	queries, duplicates, err := sqlgenerator.GenerateQueryCreateTempTable(&viewSchema, log.Logger, a.DWHDbName)
+	queries, duplicates, err := sqlgenerator.GenerateQueryCreateTempTable(&viewSchema, log.Logger, a.DWHDbName, job.TaskID)
 	if err != nil {
 		log.ErrorMsg(loggerpkg.MsgGenerateQueriesFailed, slog.String("error", err.Error()))
-		return fmt.Errorf("%s: %w", ErrorCreateTemplateTable, err)
+		return "", fmt.Errorf("%s: %w", ErrorCreateTemplateTable, err)
 	}
 
 	if len(duplicates) > 0 {
@@ -194,33 +251,41 @@ func (a *AnalyticsDataCenterService) runETL(ctx context.Context, idView int64) e
 	}
 	if err := a.createTempTables(ctx, queries); err != nil {
 		log.ErrorMsg(loggerpkg.MsgCreateTempTablesFailed, slog.String("error", err.Error()))
-		return fmt.Errorf("%s: %w", ErrorCreateTemplateTable, err)
+		return "", fmt.Errorf("%s: %w", ErrorCreateTemplateTable, err)
 	}
-	defer a.DeleteTempTables(ctx, tempTables)
+	defer func() {
+		if cleanupErr := a.DeleteTempTables(ctx, tempTables); cleanupErr != nil {
+			if err != nil {
+				err = errors.Join(err, cleanupErr)
+			} else {
+				warning = cleanupErr.Error()
+			}
+		}
+	}()
 
 	countInsertData, err := a.getCountInsertData(ctx, viewSchema, tempTables)
 	if err != nil {
 		log.ErrorMsg(loggerpkg.MsgCountRowsFailed, slog.String("error", err.Error()))
-		return fmt.Errorf("%s: %w", ErrorCountInsertData, err)
+		return "", fmt.Errorf("%s: %w", ErrorCountInsertData, err)
 	}
 	if err := a.prepareAndInsertData(ctx, countInsertData, viewSchema); err != nil {
-		return fmt.Errorf("не удалось загрузить данные в DWH: %w", err)
+		return "", fmt.Errorf("не удалось загрузить данные в DWH: %w", err)
 	}
 
 	if err := a.transferIndixesAndConstraint(ctx, &viewSchema, a.DWHDbName); err != nil {
 		log.ErrorMsg(loggerpkg.MsgTransferIndexesFailed, slog.String("error", err.Error()))
-		return fmt.Errorf("не удалось перенести индексы: %w", err)
+		return "", fmt.Errorf("не удалось перенести индексы: %w", err)
 	}
 	if a.DWHDbName == DbPostgres {
 		if err := a.DWHProvider.ReplicaIdentityFull(ctx, strings.ToLower(viewSchema.Name)); err != nil {
 			log.ErrorMsg(loggerpkg.MsgEnableReplicationFailed, slog.String("error", err.Error()))
-			return fmt.Errorf("%s: %w", ErrorReplicaFullData, err)
+			return "", fmt.Errorf("%s: %w", ErrorReplicaFullData, err)
 		}
 		log.InfoMsg(loggerpkg.MsgReplicationEnabled)
 	}
 
 	log.InfoMsg(loggerpkg.MsgTableRecordCount, slog.Any("count", countInsertData))
-	return nil
+	return "", nil
 }
 
 func (a *AnalyticsDataCenterService) notifyTaskStatus(taskID, status, message string) {

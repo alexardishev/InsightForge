@@ -8,6 +8,8 @@ import (
 	"maps"
 	"slices"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 // Маппинг типов для ClickHouse
@@ -37,6 +39,7 @@ func MapTypeToClickhouse(pgType string) string {
 func GenerateQueryCreateTempTableClickhouse(
 	schema *models.View,
 	logger *slog.Logger,
+	taskID uuid.UUID,
 ) (models.Queries, []string, error) {
 	const op = "sqlgenerator.GenerateQueryCreateTempTableClickhouse"
 	logger = logger.With(slog.String("op", op))
@@ -49,7 +52,7 @@ func GenerateQueryCreateTempTableClickhouse(
 			for _, tbl := range sch.Tables {
 				logger.Info("Table", slog.String("Table", tbl.Name))
 				var b strings.Builder
-				tableName := fmt.Sprintf("temp_%s_%s_%s", source.Name, sch.Name, tbl.Name)
+				tableName := tempTableName(taskID, len(queryObject)+1)
 				_, err := b.WriteString(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n", tableName))
 				if err != nil {
 					logger.Error("ошибка", slog.String("error", err.Error()))

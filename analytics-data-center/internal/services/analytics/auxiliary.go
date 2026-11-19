@@ -22,40 +22,21 @@ type IndexTransfers struct {
 	IndexTransfers []IndexTransfer
 }
 
-func (a *AnalyticsDataCenterService) createTempTables(ctx context.Context, quries models.Queries) error {
+func (a *AnalyticsDataCenterService) createTempTables(ctx context.Context, queries models.Queries) error {
 	const op = "analytics.createTempTables"
-	var errorCreate error
 	log := a.log.With(
 		slog.String("op", op),
 	)
 
-	for _, query := range quries.Queries {
-		err := a.DWHProvider.CreateTempTable(ctx, query.Query, query.TableName)
-		if err != nil {
-			errorCreate = err
+	attemptedTables := make([]string, 0, len(queries.Queries))
+	for _, query := range queries.Queries {
+		attemptedTables = append(attemptedTables, query.TableName)
+		if err := a.DWHProvider.CreateTempTable(ctx, query.Query, query.TableName); err != nil {
 			log.Error("не удалось создать временные таблицы", slog.String("error", err.Error()))
-			break
-
+			return errors.Join(err, a.DeleteTempTables(ctx, attemptedTables))
 		}
-
 	}
-	if errorCreate != nil {
-		for _, tableQuery := range quries.Queries {
-			err := a.DWHProvider.DeleteTempTable(ctx, tableQuery.TableName)
-			if err != nil {
-				//TO DO сделать worker , который раз в какое-то время запускается и чистит темп таблицы на такие случаи.
-				log.Error("не удалось удалить временную таблицу",
-					slog.String("table", tableQuery.TableName),
-					slog.String("error", err.Error()),
-				)
-			}
-		}
-		return errorCreate
-
-	}
-
 	return nil
-
 }
 
 func (a *AnalyticsDataCenterService) getCountInsertData(ctx context.Context, viewSchema models.View, tempTables []string) ([]models.CountInsertData, error) {
@@ -314,7 +295,7 @@ func (a *AnalyticsDataCenterService) DeleteTempTables(ctx context.Context, tempT
 	for _, temp := range tempTbl {
 		if err := a.DWHProvider.DeleteTempTable(ctx, temp); err != nil {
 			log.Error("Невозможно удалить таблицу", slog.String("table", temp), slog.String("error", err.Error()))
-			deleteErrors = append(deleteErrors, err)
+			deleteErrors = append(deleteErrors, fmt.Errorf("не удалось удалить временную таблицу %s: %w", temp, err))
 		}
 	}
 	return errors.Join(deleteErrors...)

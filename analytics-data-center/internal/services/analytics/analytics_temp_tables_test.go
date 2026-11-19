@@ -2,7 +2,7 @@ package serviceanalytics
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
@@ -23,13 +23,20 @@ func TestCreateTempTablesSuccess(t *testing.T) {
 }
 
 func TestCreateTempTablesErrorCleanup(t *testing.T) {
-	dwh := &mockDWH{createErrors: map[string]error{"t2": fmt.Errorf("fail")}}
+	createErr := errors.New("create failed")
+	deleteErr := errors.New("cleanup failed")
+	dwh := &mockDWH{
+		createErrors: map[string]error{"t2": createErr},
+		deleteErrors: map[string]error{"t1": deleteErr},
+	}
 	svc := &AnalyticsDataCenterService{log: getTestLogger(), DWHProvider: dwh}
-	queries := models.Queries{Queries: []models.Query{{TableName: "t1"}, {TableName: "t2"}}}
+	queries := models.Queries{Queries: []models.Query{{TableName: "t1"}, {TableName: "t2"}, {TableName: "t3"}}}
 
 	err := svc.createTempTables(context.Background(), queries)
 
-	require.Error(t, err)
+	require.ErrorIs(t, err, createErr)
+	require.ErrorIs(t, err, deleteErr)
+	require.ErrorContains(t, err, "t1")
 	require.Equal(t, []string{"t1", "t2"}, dwh.createCalls)
 	require.Equal(t, []string{"t1", "t2"}, dwh.deleteCalls)
 }
@@ -45,7 +52,7 @@ func TestDeleteTempTables(t *testing.T) {
 }
 
 func TestDeleteTempTablesError(t *testing.T) {
-	deleteErr := fmt.Errorf("fail")
+	deleteErr := errors.New("fail")
 	dwh := &mockDWH{deleteErrors: map[string]error{"t1": deleteErr}}
 	svc := &AnalyticsDataCenterService{log: getTestLogger(), DWHProvider: dwh}
 

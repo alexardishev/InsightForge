@@ -8,6 +8,7 @@ import (
 	"analyticDataCenter/analytics-data-center/internal/domain/models"
 	sqlgenerator "analyticDataCenter/analytics-data-center/internal/lib/SQLGenerator"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -61,13 +62,33 @@ func TestCreateTempTableQueryIsDeterministic(t *testing.T) {
 	for _, db := range []string{sqlgenerator.DbPostgres, sqlgenerator.DbClickhouse} {
 		t.Run(db, func(t *testing.T) {
 			view := transformView()
-			first, _, err := sqlgenerator.GenerateQueryCreateTempTable(&view, discardLogger(), db)
+			taskID := uuid.New()
+			first, _, err := sqlgenerator.GenerateQueryCreateTempTable(&view, discardLogger(), db, taskID)
 			require.NoError(t, err)
 			for i := 0; i < 30; i++ {
 				view := transformView()
-				q, _, err := sqlgenerator.GenerateQueryCreateTempTable(&view, discardLogger(), db)
+				q, _, err := sqlgenerator.GenerateQueryCreateTempTable(&view, discardLogger(), db, taskID)
 				require.NoError(t, err)
 				require.Equal(t, first, q, "column order of the temp table must not depend on map iteration")
+			}
+		})
+	}
+}
+
+func TestCreateTempTableQueryUsesDistinctNamesForETLJobs(t *testing.T) {
+	for _, db := range []string{sqlgenerator.DbPostgres, sqlgenerator.DbClickhouse} {
+		t.Run(db, func(t *testing.T) {
+			view := transformView()
+			first, _, err := sqlgenerator.GenerateQueryCreateTempTable(&view, discardLogger(), db, uuid.New())
+			require.NoError(t, err)
+			second, _, err := sqlgenerator.GenerateQueryCreateTempTable(&view, discardLogger(), db, uuid.New())
+			require.NoError(t, err)
+			require.Len(t, first.Queries, 1)
+			require.Len(t, second.Queries, 1)
+			require.NotEqual(t, first.Queries[0].TableName, second.Queries[0].TableName)
+			for _, table := range []models.Query{first.Queries[0], second.Queries[0]} {
+				require.Regexp(t, `^temp_[0-9a-f]{32}_1$`, table.TableName)
+				require.Contains(t, table.Query, table.TableName)
 			}
 		})
 	}

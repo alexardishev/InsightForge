@@ -15,22 +15,23 @@ func getTestLogger() *loggerpkg.Logger {
 }
 
 type mockDWH struct {
-	createCalls  []string
-	deleteCalls  []string
-	columns      map[string][]string
-	createErrors map[string]error
-	deleteErrors map[string]error
-	insertCalls  []string
-	insertErr    error
-	mergeCalls   int
-	mergeErr     error
-	indexCalls   []string
-	indexErr     error
-	onReplica    func(context.Context, string) error
-	renameCalls  []string
-	renameErr    error
-	dropCalls    []string
-	dropErr      error
+	createCalls    []string
+	deleteCalls    []string
+	columns        map[string][]string
+	defaultColumns []string
+	createErrors   map[string]error
+	deleteErrors   map[string]error
+	insertCalls    []string
+	insertErr      error
+	mergeCalls     int
+	mergeErr       error
+	indexCalls     []string
+	indexErr       error
+	onReplica      func(context.Context, string) error
+	renameCalls    []string
+	renameErr      error
+	dropCalls      []string
+	dropErr        error
 }
 
 func (m *mockDWH) CreateTempTable(_ context.Context, _ string, name string) error {
@@ -69,6 +70,9 @@ func (m *mockDWH) DropColumn(_ context.Context, query string) error {
 func (m *mockDWH) GetColumnsTables(_ context.Context, _ string, table string) ([]string, error) {
 	if cols, ok := m.columns[table]; ok {
 		return cols, nil
+	}
+	if m.defaultColumns != nil {
+		return m.defaultColumns, nil
 	}
 	return nil, fmt.Errorf("no columns")
 }
