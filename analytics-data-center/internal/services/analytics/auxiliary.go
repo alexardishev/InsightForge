@@ -5,6 +5,7 @@ import (
 	sqlgenerator "analyticDataCenter/analytics-data-center/internal/lib/SQLGenerator"
 	"analyticDataCenter/analytics-data-center/internal/storage"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -21,40 +22,21 @@ type IndexTransfers struct {
 	IndexTransfers []IndexTransfer
 }
 
-func (a *AnalyticsDataCenterService) createTempTables(ctx context.Context, quries models.Queries) error {
+func (a *AnalyticsDataCenterService) createTempTables(ctx context.Context, queries models.Queries) error {
 	const op = "analytics.createTempTables"
-	var errorCreate error
 	log := a.log.With(
 		slog.String("op", op),
 	)
 
-	for _, query := range quries.Queries {
-		err := a.DWHProvider.CreateTempTable(ctx, query.Query, query.TableName)
-		if err != nil {
-			errorCreate = err
+	attemptedTables := make([]string, 0, len(queries.Queries))
+	for _, query := range queries.Queries {
+		attemptedTables = append(attemptedTables, query.TableName)
+		if err := a.DWHProvider.CreateTempTable(ctx, query.Query, query.TableName); err != nil {
 			log.Error("не удалось создать временные таблицы", slog.String("error", err.Error()))
-			break
-
+			return errors.Join(err, a.DeleteTempTables(ctx, attemptedTables))
 		}
-
 	}
-	if errorCreate != nil {
-		for _, tableQuery := range quries.Queries {
-			err := a.DWHProvider.DeleteTempTable(ctx, tableQuery.TableName)
-			if err != nil {
-				//TO DO сделать worker , который раз в какое-то время запускается и чистит темп таблицы на такие случаи.
-				log.Error("не удалось удалить временную таблицу",
-					slog.String("table", tableQuery.TableName),
-					slog.String("error", err.Error()),
-				)
-			}
-		}
-		return errorCreate
-
-	}
-
 	return nil
-
 }
 
 func (a *AnalyticsDataCenterService) getCountInsertData(ctx context.Context, viewSchema models.View, tempTables []string) ([]models.CountInsertData, error) {
@@ -104,12 +86,11 @@ func (a *AnalyticsDataCenterService) getCountInsertData(ctx context.Context, vie
 
 	return sliceCountInsertData, nil
 }
-func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, countData *[]models.CountInsertData, viewSchema *models.View) (bool, error) {
+func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, countData []models.CountInsertData, viewSchema models.View) error {
 	const op = "analytics.prepareDataForInsert"
 	log := a.log.With(slog.String("op", op))
 
 	var (
-		tempTbl  []string
 		tempMeta []models.TempTable
 		wg       sync.WaitGroup
 		hasError bool
@@ -123,13 +104,12 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 	// размер чанка (универсально для Postgres/ClickHouse)
 	const chunkLimit int64 = 500_000
 
-	for _, tempTableInsert := range *countData {
+	for _, tempTableInsert := range countData {
 		if tempTableInsert.Count <= 0 {
 			continue
 		}
 
 		log.Info("запуск вставки и подготовки данных", slog.String("Таблица", tempTableInsert.TableName))
-		tempTbl = append(tempTbl, tempTableInsert.TempTableName)
 		tempMeta = append(tempMeta, models.TempTable{
 			TempTableName: tempTableInsert.TempTableName,
 			Source:        tempTableInsert.DataBaseName,
@@ -140,7 +120,9 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 		oltpStorage, err := a.OLTPFactory.GetOLTPStorage(ctx, tempTableInsert.DataBaseName)
 		if err != nil {
 			log.Error("Невозможно подключиться к OLTP хранилищу", slog.String("error", err.Error()))
-			return false, err
+			// runETL удалит временные таблицы сразу после возврата.
+			wg.Wait()
+			return err
 		}
 
 		tableName := tempTableInsert.TableName
@@ -172,7 +154,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 					slog.Int64("limit", limit),
 				)
 
-				query, err := sqlgenerator.GenerateSelectInsertDataQuery(*viewSchema, start, start+limit, tableName, log.Logger, a.OLTPDbName)
+				query, err := sqlgenerator.GenerateSelectInsertDataQuery(viewSchema, start, start+limit, tableName, log.Logger, a.OLTPDbName)
 				if err != nil {
 					log.Error("ошибка генерации SQL", slog.String("error", err.Error()))
 					mu.Lock()
@@ -192,7 +174,7 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 
 				log.Info("получены данные", slog.Int("rows", len(insertData)))
 
-				queryInsert, err := sqlgenerator.GenerateInsertDataQuery(*viewSchema, insertData, tempTableName, log.Logger, a.DWHDbName)
+				queryInsert, err := sqlgenerator.GenerateInsertDataQuery(viewSchema, insertData, tempTableName, log.Logger, a.DWHDbName)
 				if err != nil {
 					log.Error("ошибка при генерации INSERT запроса", slog.String("error", err.Error()))
 					mu.Lock()
@@ -222,27 +204,26 @@ func (a *AnalyticsDataCenterService) prepareAndInsertData(ctx context.Context, c
 	wg.Wait()
 
 	if hasError {
-		_ = a.DeleteTempTables(ctx, tempTbl)
-		return false, fmt.Errorf("одна или несколько горутин завершились с ошибкой")
+		return errors.New("одна или несколько горутин завершились с ошибкой")
 	}
 
 	viewJoin, err := a.prepareViewJoin(ctx, tempMeta, "public")
 	if err != nil {
-		_ = a.DeleteTempTables(ctx, tempTbl)
 		log.Error("Ошибка", slog.String("error", err.Error()))
-		return false, err
+		return err
 	}
 
-	query, err := sqlgenerator.CreateViewQuery(*viewSchema, *viewJoin, log.Logger, a.DWHDbName)
+	query, err := sqlgenerator.CreateViewQuery(viewSchema, *viewJoin, log.Logger, a.DWHDbName)
 	if err != nil {
-		_ = a.DeleteTempTables(ctx, tempTbl)
 		log.Error("Ошибка", slog.String("error", err.Error()))
-		return false, err
+		return err
 	}
 	log.Info("Запрос на мердж", slog.String("Запрос", query.Query))
-	a.DWHProvider.MergeTempTables(ctx, query.Query)
-	_ = a.DeleteTempTables(ctx, tempTbl)
-	return true, nil
+	if err := a.DWHProvider.MergeTempTables(ctx, query.Query); err != nil {
+		return fmt.Errorf("не удалось собрать витрину из временных таблиц: %w", err)
+	}
+
+	return nil
 }
 
 func (a *AnalyticsDataCenterService) calculateWorkerCount(totalCount int64) int64 {
@@ -310,15 +291,14 @@ func (a *AnalyticsDataCenterService) DeleteTempTables(ctx context.Context, tempT
 	log := a.log.With(
 		slog.String("op", op),
 	)
+	var deleteErrors []error
 	for _, temp := range tempTbl {
-		err := a.DWHProvider.DeleteTempTable(ctx, temp)
-		if err != nil {
-			log.Error("Невозможно удалить таблицу", slog.String("error", err.Error()))
-			return err
+		if err := a.DWHProvider.DeleteTempTable(ctx, temp); err != nil {
+			log.Error("Невозможно удалить таблицу", slog.String("table", temp), slog.String("error", err.Error()))
+			deleteErrors = append(deleteErrors, fmt.Errorf("не удалось удалить временную таблицу %s: %w", temp, err))
 		}
 	}
-	return nil
-
+	return errors.Join(deleteErrors...)
 }
 
 func (a *AnalyticsDataCenterService) transferIndixesAndConstraint(ctx context.Context, viewSchema *models.View, dbName string) error {

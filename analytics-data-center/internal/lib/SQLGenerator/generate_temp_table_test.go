@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestGenerateQueryCreateTempTablePostgres(t *testing.T) {
@@ -81,7 +83,7 @@ func TestGenerateQueryCreateTempTablePostgres(t *testing.T) {
 		},
 	}
 
-	queries, duplicates, err := sqlgenerator.GenerateQueryCreateTempTablePostgres(view, logger, "postgres")
+	queries, duplicates, err := sqlgenerator.GenerateQueryCreateTempTablePostgres(view, logger, uuid.New())
 	t.Log(duplicates)
 	if err != nil {
 		t.Fatalf("ошибка генерации: %v", err)

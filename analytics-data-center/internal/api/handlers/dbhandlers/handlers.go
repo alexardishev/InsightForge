@@ -159,6 +159,14 @@ func (d *DBHandlers) StartETL(w http.ResponseWriter, r *http.Request) {
 
 	taskID, err := d.serviceAnalytics.StartETLProcess(ctx, schemaID)
 	if err != nil {
+		if errors.Is(err, serviceanalytics.ErrETLViewInProgress) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		if errors.Is(err, serviceanalytics.ErrETLQueueFull) {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
 		log.Error("ошибка запуска ETL", slog.String("error", err.Error()))
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return

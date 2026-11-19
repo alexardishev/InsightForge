@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 )
 
@@ -122,7 +123,7 @@ func MapTypeToPostgres(typ string) string {
 func GenerateQueryCreateTempTablePostgres(
 	schema *models.View,
 	logger *slog.Logger,
-	_ string,
+	taskID uuid.UUID,
 ) (models.Queries, []string, error) {
 	const op = "sqlgenerator.GenerateQueryCreateTempTablePostgres"
 	logger = logger.With(slog.String("op", op))
@@ -135,7 +136,7 @@ func GenerateQueryCreateTempTablePostgres(
 			for _, tbl := range sch.Tables {
 				logger.Info("Table", slog.String("Table", tbl.Name))
 				var b strings.Builder
-				tableName := fmt.Sprintf("temp_%s_%s_%s", source.Name, sch.Name, tbl.Name)
+				tableName := tempTableName(taskID, len(queryObject)+1)
 				quotedTable := pq.QuoteIdentifier(tableName)
 				_, err := b.WriteString(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n", quotedTable))
 				if err != nil {

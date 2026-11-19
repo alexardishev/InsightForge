@@ -15,21 +15,23 @@ func getTestLogger() *loggerpkg.Logger {
 }
 
 type mockDWH struct {
-	createCalls  []string
-	deleteCalls  []string
-	columns      map[string][]string
-	createErrors map[string]error
-	deleteErrors map[string]error
-	insertCalls  []string
-	insertErr    error
-	mergeCalls   int
-	mergeErr     error
-	indexCalls   []string
-	indexErr     error
-	renameCalls  []string
-	renameErr    error
-	dropCalls    []string
-	dropErr      error
+	createCalls    []string
+	deleteCalls    []string
+	columns        map[string][]string
+	defaultColumns []string
+	createErrors   map[string]error
+	deleteErrors   map[string]error
+	insertCalls    []string
+	insertErr      error
+	mergeCalls     int
+	mergeErr       error
+	indexCalls     []string
+	indexErr       error
+	onReplica      func(context.Context, string) error
+	renameCalls    []string
+	renameErr      error
+	dropCalls      []string
+	dropErr        error
 }
 
 func (m *mockDWH) CreateTempTable(_ context.Context, _ string, name string) error {
@@ -69,13 +71,21 @@ func (m *mockDWH) GetColumnsTables(_ context.Context, _ string, table string) ([
 	if cols, ok := m.columns[table]; ok {
 		return cols, nil
 	}
+	if m.defaultColumns != nil {
+		return m.defaultColumns, nil
+	}
 	return nil, fmt.Errorf("no columns")
 }
 func (m *mockDWH) MergeTempTables(_ context.Context, _ string) error {
 	m.mergeCalls++
 	return m.mergeErr
 }
-func (m *mockDWH) ReplicaIdentityFull(context.Context, string) error { return nil }
+func (m *mockDWH) ReplicaIdentityFull(ctx context.Context, table string) error {
+	if m.onReplica != nil {
+		return m.onReplica(ctx, table)
+	}
+	return nil
+}
 func (m *mockDWH) InsertOrUpdateTransactional(context.Context, string, map[string]interface{}, []string) error {
 	return nil
 }

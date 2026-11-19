@@ -2,7 +2,9 @@ package analyticsdatacenter
 
 import (
 	"analyticDataCenter/analytics-data-center/internal/lib/validate"
+	serviceanalytics "analyticDataCenter/analytics-data-center/internal/services/analytics"
 	"context"
+	"errors"
 
 	analyticsv1 "github.com/alexardishev/proto_auth/gen/go/analytics"
 	"google.golang.org/grpc"
@@ -39,6 +41,12 @@ func (s *serverAPI) StartETLProcess(ctx context.Context, req *analyticsv1.StartE
 
 	taskID, err := s.analyticsDataCenter.StartETLProcess(ctx, req.GetShemaID())
 	if err != nil {
+		if errors.Is(err, serviceanalytics.ErrETLViewInProgress) {
+			return nil, status.Error(codes.AlreadyExists, err.Error())
+		}
+		if errors.Is(err, serviceanalytics.ErrETLQueueFull) {
+			return nil, status.Error(codes.ResourceExhausted, err.Error())
+		}
 		return nil, status.Error(codes.Internal, "процесс не удалось запустить!")
 	}
 	return &analyticsv1.StartETLProcessResponse{
